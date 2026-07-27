@@ -1,0 +1,473 @@
+"""Signal-Engine: fuehrt Bewertung, Richtungsentscheidung und Risiko zusammen.
+
+Die Engine ist deterministisch und ohne I/O. Sie wird von der Live-Analyse und
+vom Backtest identisch verwendet.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from app.core.enums import (
+    Confidence,
+    MarketPhase,
+    ScoreCategory,
+    SignalDirection,
+)
+from app.core.time import timeframe_to_timedelta, utc_now
+from app.indicators.engine import IndicatorSet
+from app.signals.multi_timeframe import (
+    aggregate_category,
+    assess_timeframes,
+    describe_timeframe_trends,
+    determine_market_phase,
+    multi_timeframe_agreement,
+)
+from app.signals.risk import RiskConfig, RiskManager
+from app.signals.scoring import score_risk_reward
+from app.signals.types import ScoreComponent, SignalResult, TimeframeAssessment
+from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
+
+#: Schwellen der Richtungsentscheidung auf dem 0..100-Score.
+STRONG_LONG_SCORE = 80.0
+LONG_SCORE = 65.0
+SHORT_SCORE = 35.0
+STRONG_SHORT_SCORE = 20.0
+
+#: Zusaetzlich erforderliche Timeframe-Uebereinstimmung fuer STRONG-Signale.
+STRONG_AGREEMENT = 0.6
+
+#: Mindest-Datenqualitaet, unter der grundsaetzlich NO_TRADE gilt.
+MIN_DATA_QUALITY = 60.0
+
+#: Schwellen der Konfidenzeinstufung.
+HIGH_CONFIDENCE_DEVIATION = 25.0
+MEDIUM_CONFIDENCE_DEVIATION = 12.0
+HIGH_CONFIDENCE_DATA_QUALITY = 85.0
+MEDIUM_CONFIDENCE_DATA_QUALITY = 70.0
+
+
+@dataclass(frozen=True)
+class SignalEngineConfig:
+    """Konfiguration der Signal-Engine."""
+
+    weights: StrategyWeights = DEFAULT_WEIGHTS
+    primary_timeframe: str = "1h"
+    confirmation_timeframe: str = "4h"
+    min_risk_reward_ratio: float = 2.0
+    max_atr_percent: float = 12.0
+    expiry_multiplier: int = 4
+    enable_sentiment: bool = False
+    strategy_version_label: str = "default:1"
+
+
+class SignalEngine:
+    """Erzeugt aus Indikatorsaetzen ein vollstaendiges, begruendetes Signal."""
+
+    def __init__(
+        self,
+        config: SignalEngineConfig | None = None,
+        risk_manager: RiskManager | None = None,
+    ) -> None:
+        self._config = config or SignalEngineConfig()
+        # Ohne Sentiment-Daten wird das Gewicht umverteilt, damit die Summe 1.0 bleibt.
+        self._weights = (
+            self._config.weights
+            if self._config.enable_sentiment
+            else self._config.weights.without_sentiment()
+        )
+        self._risk_manager = risk_manager or RiskManager(
+            RiskConfig(min_risk_reward_ratio=self._config.min_risk_reward_ratio)
+        )
+
+    @property
+    def weights(self) -> StrategyWeights:
+        return self._weights
+
+    def generate(
+        self,
+        symbol: str,
+        indicator_sets: dict[str, IndicatorSet],
+        *,
+        data_quality: float = 100.0,
+        sentiment_score: float | None = None,
+        now: datetime | None = None,
+    ) -> SignalResult:
+        """Signal fuer ein Symbol erzeugen.
+
+        Args:
+            symbol: Handelspaar, z. B. ``BTCUSDT``.
+            indicator_sets: Indikatorsatz je Timeframe.
+            data_quality: 0..100, aus Historienlaenge und Datenluecken.
+            sentiment_score: Optionaler Wert in [-100, +100]. ``None`` bedeutet
+                „keine Daten" — es wird dann kein Wert erfunden.
+            now: Referenzzeit, im Backtest der Zeitpunkt der Kerze.
+        """
+        if not indicator_sets:
+            raise ValueError("Es wurde kein Indikatorsatz uebergeben")
+
+        created_at = now or utc_now()
+        primary_timeframe = self._resolve_primary_timeframe(indicator_sets)
+        assessments = assess_timeframes(indicator_sets)
+
+        components = self._build_components(assessments, sentiment_score)
+        preliminary_score = self._weighted_score(components)
+        agreement = self._agreement_value(components)
+
+        direction = self._determine_direction(preliminary_score, agreement)
+        primary_indicators = assessments[primary_timeframe].indicators
+
+        risk = self._risk_manager.calculate(
+            direction,
+            primary_indicators,
+            confirmation_timeframe=self._config.confirmation_timeframe,
+        )
+
+        # Das R:R kann erst nach der Risikoberechnung bewertet werden und wird
+        # daher nachtraeglich in den Score eingerechnet.
+        rr_component = self._risk_reward_component(risk)
+        components = [c for c in components if c.category != ScoreCategory.RISK_REWARD]
+        components.append(rr_component)
+
+        score = self._weighted_score(components)
+        direction = self._determine_direction(score, agreement)
+
+        no_trade_reason = self._check_no_trade(direction, primary_indicators, risk, data_quality)
+        if no_trade_reason is not None:
+            direction = SignalDirection.NO_TRADE
+
+        confidence = self._determine_confidence(score, agreement, data_quality)
+        market_phase = determine_market_phase(assessments, primary_timeframe)
+        reasons, counter_arguments = self._build_arguments(direction, components, assessments, risk)
+
+        expires_at = created_at + self._expiry_duration(primary_timeframe)
+        indicators_used = sorted(
+            {name for a in assessments.values() for name in a.indicators.indicators_used()}
+        )
+
+        result = SignalResult(
+            symbol=symbol.upper(),
+            created_at=created_at,
+            expires_at=expires_at,
+            direction=direction,
+            score=round(score, 2),
+            confidence=confidence,
+            market_phase=market_phase,
+            primary_timeframe=primary_timeframe,
+            analyzed_timeframes=sorted(indicator_sets, key=_timeframe_sort_key),
+            reference_price=primary_indicators.close_price,
+            data_quality=round(data_quality, 2),
+            components=components,
+            assessments=assessments,
+            risk=risk,
+            reasons=reasons,
+            counter_arguments=counter_arguments,
+            indicators_used=indicators_used,
+            no_trade_reason=no_trade_reason,
+        )
+        result.fingerprint = self._fingerprint(result)
+        return result
+
+    # --- Score-Aufbau -----------------------------------------------------
+
+    def _build_components(
+        self,
+        assessments: dict[str, TimeframeAssessment],
+        sentiment_score: float | None,
+    ) -> list[ScoreComponent]:
+        weights = self._weights.as_dict()
+        agreement_raw, agreement_detail = multi_timeframe_agreement(assessments)
+
+        components = [
+            ScoreComponent(
+                category=ScoreCategory.TREND,
+                raw_score=aggregate_category(assessments, "trend_score"),
+                weight=weights[ScoreCategory.TREND],
+                detail=self._detail_for(assessments, 0),
+            ),
+            ScoreComponent(
+                category=ScoreCategory.MOMENTUM,
+                raw_score=aggregate_category(assessments, "momentum_score"),
+                weight=weights[ScoreCategory.MOMENTUM],
+                detail=self._detail_for(assessments, 1),
+            ),
+            ScoreComponent(
+                category=ScoreCategory.VOLUME,
+                raw_score=aggregate_category(assessments, "volume_score"),
+                weight=weights[ScoreCategory.VOLUME],
+                detail=self._detail_for(assessments, 2),
+            ),
+            ScoreComponent(
+                category=ScoreCategory.VOLATILITY,
+                raw_score=aggregate_category(assessments, "volatility_score"),
+                weight=weights[ScoreCategory.VOLATILITY],
+                detail=self._detail_for(assessments, 3),
+            ),
+            ScoreComponent(
+                category=ScoreCategory.MARKET_STRUCTURE,
+                raw_score=aggregate_category(assessments, "structure_score"),
+                weight=weights[ScoreCategory.MARKET_STRUCTURE],
+                detail=self._detail_for(assessments, 4),
+            ),
+            ScoreComponent(
+                category=ScoreCategory.MULTI_TIMEFRAME,
+                raw_score=agreement_raw,
+                weight=weights[ScoreCategory.MULTI_TIMEFRAME],
+                detail=agreement_detail,
+            ),
+        ]
+
+        sentiment_weight = weights[ScoreCategory.SENTIMENT]
+        if sentiment_weight > 0:
+            if sentiment_score is None:
+                # Keine Daten: neutral bewerten, aber transparent benennen.
+                components.append(
+                    ScoreComponent(
+                        category=ScoreCategory.SENTIMENT,
+                        raw_score=0.0,
+                        weight=sentiment_weight,
+                        detail="Keine Sentiment-Daten verfuegbar (neutral bewertet)",
+                    )
+                )
+            else:
+                components.append(
+                    ScoreComponent(
+                        category=ScoreCategory.SENTIMENT,
+                        raw_score=max(-100.0, min(100.0, sentiment_score)),
+                        weight=sentiment_weight,
+                        detail=f"Sentiment-Rohwert {sentiment_score:+.1f}",
+                    )
+                )
+
+        # Platzhalter mit Rohwert 0; wird nach der Risikoberechnung ersetzt.
+        components.append(
+            ScoreComponent(
+                category=ScoreCategory.RISK_REWARD,
+                raw_score=0.0,
+                weight=weights[ScoreCategory.RISK_REWARD],
+                detail="Noch nicht bewertet",
+            )
+        )
+        return components
+
+    def _risk_reward_component(self, risk: object | None) -> ScoreComponent:
+        weight = self._weights.as_dict()[ScoreCategory.RISK_REWARD]
+        if risk is None:
+            return ScoreComponent(
+                category=ScoreCategory.RISK_REWARD,
+                raw_score=0.0,
+                weight=weight,
+                detail="Kein Chance-Risiko-Verhaeltnis berechnet (kein handelbares Setup)",
+            )
+        ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
+        raw, detail = score_risk_reward(ratio, self._config.min_risk_reward_ratio)
+        return ScoreComponent(
+            category=ScoreCategory.RISK_REWARD, raw_score=raw, weight=weight, detail=detail
+        )
+
+    @staticmethod
+    def _weighted_score(components: list[ScoreComponent]) -> float:
+        """Gewichtete Summe der Rohwerte auf 0..100 abbilden. 50 ist neutral."""
+        raw_total = sum(component.weighted_score for component in components)
+        return max(0.0, min(100.0, (raw_total + 100.0) / 2.0))
+
+    @staticmethod
+    def _agreement_value(components: list[ScoreComponent]) -> float:
+        component = next(
+            (c for c in components if c.category == ScoreCategory.MULTI_TIMEFRAME), None
+        )
+        return component.raw_score / 100.0 if component else 0.0
+
+    # --- Entscheidungen ---------------------------------------------------
+
+    @staticmethod
+    def _determine_direction(score: float, agreement: float) -> SignalDirection:
+        if score >= STRONG_LONG_SCORE and agreement >= STRONG_AGREEMENT:
+            return SignalDirection.STRONG_LONG
+        if score >= LONG_SCORE:
+            return SignalDirection.LONG
+        if score <= STRONG_SHORT_SCORE and agreement <= -STRONG_AGREEMENT:
+            return SignalDirection.STRONG_SHORT
+        if score <= SHORT_SCORE:
+            return SignalDirection.SHORT
+        return SignalDirection.NEUTRAL
+
+    def _check_no_trade(
+        self,
+        direction: SignalDirection,
+        indicators: IndicatorSet,
+        risk: object | None,
+        data_quality: float,
+    ) -> str | None:
+        """Harte Ausschlusskriterien. Sie ueberschreiben jede Richtung."""
+        if not direction.is_actionable:
+            return None
+
+        if data_quality < MIN_DATA_QUALITY:
+            return (
+                f"Datenqualitaet {data_quality:.0f} liegt unter dem Minimum "
+                f"von {MIN_DATA_QUALITY:.0f}"
+            )
+
+        if (
+            indicators.atr_percent is not None
+            and indicators.atr_percent > self._config.max_atr_percent
+        ):
+            return (
+                f"Volatilitaet zu hoch (ATR {indicators.atr_percent:.2f}% "
+                f"ueber dem Grenzwert von {self._config.max_atr_percent:.2f}%)"
+            )
+
+        if risk is None:
+            return "Keine belastbaren Risikoparameter berechenbar"
+
+        ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
+        if ratio < self._config.min_risk_reward_ratio:
+            return (
+                f"Chance-Risiko-Verhaeltnis {ratio:.2f} unter dem Minimum "
+                f"von {self._config.min_risk_reward_ratio:.2f}"
+            )
+
+        return None
+
+    @staticmethod
+    def _determine_confidence(score: float, agreement: float, data_quality: float) -> Confidence:
+        """Konfidenz bewusst getrennt vom Score.
+
+        Ein hoher Score bei widerspruechlichen Timeframes ist weniger belastbar
+        als ein mittlerer Score bei klarer Uebereinstimmung.
+        """
+        deviation = abs(score - 50.0)
+        if (
+            deviation >= HIGH_CONFIDENCE_DEVIATION
+            and abs(agreement) >= STRONG_AGREEMENT
+            and data_quality >= HIGH_CONFIDENCE_DATA_QUALITY
+        ):
+            return Confidence.HIGH
+        if (
+            deviation >= MEDIUM_CONFIDENCE_DEVIATION
+            and data_quality >= MEDIUM_CONFIDENCE_DATA_QUALITY
+        ):
+            return Confidence.MEDIUM
+        return Confidence.LOW
+
+    # --- Begruendungen ----------------------------------------------------
+
+    def _build_arguments(
+        self,
+        direction: SignalDirection,
+        components: list[ScoreComponent],
+        assessments: dict[str, TimeframeAssessment],
+        risk: object | None,
+    ) -> tuple[list[str], list[str]]:
+        """Bestaetigungen und Gegenargumente aus den Score-Komponenten ableiten.
+
+        Die Zuordnung folgt dem Vorzeichen relativ zur Signalrichtung: was fuer
+        die Richtung spricht, wird zur Bestaetigung, alles andere zum Gegenargument.
+        """
+        sign = 1.0 if direction.is_long else (-1.0 if direction.is_short else 0.0)
+        reasons: list[str] = []
+        counters: list[str] = []
+
+        for component in components:
+            if not component.detail or component.detail == "Noch nicht bewertet":
+                continue
+            aligned = component.raw_score * sign
+            if sign == 0.0:
+                # Neutrales Signal: alles als Beobachtung fuehren.
+                reasons.append(component.detail)
+            elif aligned > 5.0:
+                reasons.append(component.detail)
+            elif aligned < -5.0:
+                counters.append(component.detail)
+
+        for assessment in assessments.values():
+            structure = assessment.indicators.structure
+            if structure.failed_breakout_up and direction.is_long:
+                counters.append(f"{assessment.timeframe}: Fehlausbruch nach oben")
+            if structure.failed_breakout_down and direction.is_short:
+                counters.append(f"{assessment.timeframe}: Fehlausbruch nach unten")
+            if structure.bearish_divergence and direction.is_long:
+                counters.append(f"{assessment.timeframe}: baerische Divergenz")
+            if structure.bullish_divergence and direction.is_short:
+                counters.append(f"{assessment.timeframe}: bullische Divergenz")
+
+        if risk is not None:
+            for warning in getattr(risk, "warnings", []):
+                counters.append(str(warning))
+
+        trends = describe_timeframe_trends(assessments)
+        if trends:
+            reasons.insert(0, "Trendlage: " + ", ".join(trends))
+
+        return _unique(reasons), _unique(counters)
+
+    # --- Hilfsfunktionen --------------------------------------------------
+
+    def _resolve_primary_timeframe(self, indicator_sets: dict[str, IndicatorSet]) -> str:
+        """Konfigurierten Setup-Timeframe verwenden, sonst den naechstbesten."""
+        if self._config.primary_timeframe in indicator_sets:
+            return self._config.primary_timeframe
+        for candidate in ("1h", "4h", "15m", "1d"):
+            if candidate in indicator_sets:
+                return candidate
+        return next(iter(indicator_sets))
+
+    def _expiry_duration(self, timeframe: str) -> timedelta:
+        try:
+            return timeframe_to_timedelta(timeframe) * self._config.expiry_multiplier
+        except ValueError:
+            return timedelta(hours=4)
+
+    @staticmethod
+    def _detail_for(assessments: dict[str, TimeframeAssessment], note_index: int) -> str:
+        """Begruendungstext des Setup-Timeframes bevorzugen, sonst den ersten."""
+        preferred = assessments.get("1h") or next(iter(assessments.values()), None)
+        if preferred is None or note_index >= len(preferred.notes):
+            return ""
+        return preferred.notes[note_index]
+
+    def _fingerprint(self, result: SignalResult) -> str:
+        """Stabiler Fingerprint zur Duplikaterkennung.
+
+        Score wird auf 5er-Schritte und der Entry-Mittelpunkt auf sechs
+        signifikante Stellen gerundet, damit minimale Schwankungen nicht als
+        neues Signal gelten.
+        """
+        entry_mid = result.risk.entry_mid if result.risk else result.reference_price
+        parts = [
+            result.symbol,
+            result.primary_timeframe,
+            result.direction.value,
+            str(int(result.score // 5)),
+            f"{entry_mid:.6g}",
+            self._config.strategy_version_label,
+        ]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _unique(values: list[str]) -> list[str]:
+    """Reihenfolge erhalten, Duplikate entfernen."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def _timeframe_sort_key(timeframe: str) -> int:
+    from app.core.time import TIMEFRAME_MINUTES
+
+    return TIMEFRAME_MINUTES.get(timeframe, 9999)
+
+
+__all__ = [
+    "MIN_DATA_QUALITY",
+    "MarketPhase",
+    "SignalEngine",
+    "SignalEngineConfig",
+]

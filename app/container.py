@@ -1,0 +1,109 @@
+"""Aufbau und Abbau der Anwendungsabhaengigkeiten.
+
+Bewusst als schlanke Fabrik statt DI-Framework: die Abhaengigkeiten sind
+ueberschaubar, und ein explizites Aufbaudiagramm ist leichter zu pruefen als
+eine implizite Auflösung zur Laufzeit.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
+from app.database.redis_client import close_redis, get_redis
+from app.database.session import dispose_engine
+from app.llm.factory import create_llm_service
+from app.llm.service import LLMService
+from app.market_data.base import MarketDataProvider
+from app.market_data.factory import create_market_data_provider
+from app.monitoring.health import HealthService
+from app.sentiment.service import SentimentService
+from app.services.analysis_service import AnalysisService
+from app.services.backtest_service import BacktestService
+from app.services.scan_service import ScanService
+from app.signals.dedup import SignalDeduplicator
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class ApplicationContainer:
+    """Alle langlebigen Objekte der Anwendung."""
+
+    settings: Settings
+    provider: MarketDataProvider
+    llm_service: LLMService
+    sentiment_service: SentimentService
+    analysis_service: AnalysisService
+    backtest_service: BacktestService
+    deduplicator: SignalDeduplicator
+    health_service: HealthService
+    scan_service: ScanService | None = None
+
+    async def aclose(self) -> None:
+        """Alle Ressourcen freigeben. Einzelne Fehler stoppen den Abbau nicht."""
+        for name, closer in (
+            ("market_data_provider", self.provider.close),
+            ("sentiment_service", self.sentiment_service.close),
+            ("redis", close_redis),
+            ("database", dispose_engine),
+        ):
+            try:
+                await closer()
+            except Exception as exc:
+                logger.warning("shutdown_step_failed", component=name, error=str(exc))
+
+
+def build_container(settings: Settings | None = None) -> ApplicationContainer:
+    """Container aufbauen. Redis-Ausfaelle werden erst beim Zugriff sichtbar."""
+    cfg = settings or get_settings()
+
+    redis_client = get_redis(cfg)
+    provider = create_market_data_provider(cfg, redis_client=redis_client)
+    llm_service = create_llm_service(cfg)
+    sentiment_service = SentimentService(settings=cfg)
+
+    analysis_service = AnalysisService(
+        provider,
+        settings=cfg,
+        llm_service=llm_service,
+        sentiment_service=sentiment_service,
+    )
+    backtest_service = BacktestService(provider, settings=cfg)
+
+    deduplicator = SignalDeduplicator(
+        cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
+    )
+
+    health_service = HealthService(
+        cfg,
+        market_data_check=provider.health_check,
+        llm_check=_llm_health_check(llm_service),
+    )
+
+    logger.info(
+        "container_built",
+        provider=provider.name,
+        llm_enabled=llm_service.is_enabled,
+        sentiment_enabled=cfg.enable_sentiment,
+    )
+
+    return ApplicationContainer(
+        settings=cfg,
+        provider=provider,
+        llm_service=llm_service,
+        sentiment_service=sentiment_service,
+        analysis_service=analysis_service,
+        backtest_service=backtest_service,
+        deduplicator=deduplicator,
+        health_service=health_service,
+    )
+
+
+def _llm_health_check(llm_service: LLMService):  # type: ignore[no-untyped-def]
+    """Healthcheck des LLM-Providers, sofern einer konfiguriert ist."""
+    provider = getattr(llm_service, "_provider", None)
+    if provider is None:
+        return None
+    return provider.health_check

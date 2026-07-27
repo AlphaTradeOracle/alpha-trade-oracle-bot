@@ -1,0 +1,109 @@
+name: alpha-trade-oracle
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alpha-trade-oracle-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alpha_trade_oracle}
+      POSTGRES_USER: ${POSTGRES_USER:-alpha_trade_oracle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      # Beschleunigt Vergleiche und macht Sortierungen reproduzierbar.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_EXPOSED_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alpha_trade_oracle} -d ${POSTGRES_DB:-alpha_trade_oracle}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: alpha-trade-oracle-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_EXPOSED_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Fuehrt die Migrationen aus und beendet sich. App und Worker warten darauf,
+  # damit sie nie gegen ein leeres Schema starten.
+  migrate:
+    build:
+      context: .
+      target: runtime
+    container_name: alpha-trade-oracle-migrate
+    restart: "no"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runtime
+    container_name: alpha-trade-oracle-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${APP_EXPOSED_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Telegram-Polling und geplante Scans. Getrennt von der API, damit ein
+  # API-Neustart keine laufenden Scans abbricht und kein doppeltes Polling
+  # entsteht.
+  worker:
+    build:
+      context: .
+      target: runtime
+    container_name: alpha-trade-oracle-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.cli", "worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+    name: alpha-trade-oracle-postgres-data
+  redis_data:
+    name: alpha-trade-oracle-redis-data
