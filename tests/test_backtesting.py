@@ -31,6 +31,14 @@ def make_config(**overrides: object) -> BacktestConfig:
         "fee_percent": 0.1,
         "slippage_percent": 0.05,
         "initial_capital": 10_000.0,
+        # Synthetische Fixtures: Live-Filter lockern, damit Trades entstehen.
+        "min_score": 55.0,
+        "require_strong_signals": False,
+        "block_range_market": False,
+        "cooldown_minutes": 0,
+        "min_adx": 0.0,
+        "rsi_long_max": 100.0,
+        "rsi_short_min": 0.0,
     }
     defaults.update(overrides)
     return BacktestConfig(**defaults)  # type: ignore[arg-type]
@@ -60,28 +68,28 @@ class TestSimulation:
         assert outcome.equity_curve
 
     def test_produces_trades_in_a_trending_market(self, uptrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(uptrend_df)
+        outcome = BacktestEngine(make_config()).run(uptrend_df)
         assert outcome.trades, "Ein klarer Aufwaertstrend sollte Trades erzeugen"
 
     def test_all_trades_are_closed_at_the_end(self, uptrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(uptrend_df)
+        outcome = BacktestEngine(make_config()).run(uptrend_df)
         assert all(trade.is_closed for trade in outcome.trades)
 
     def test_only_one_open_trade_at_a_time(self, uptrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(uptrend_df)
+        outcome = BacktestEngine(make_config()).run(uptrend_df)
         trades = sorted(outcome.trades, key=lambda t: t.entry_at)
         for earlier, later in pairwise(trades):
             assert earlier.exit_at is not None
             assert earlier.exit_at <= later.entry_at
 
     def test_exit_reasons_are_valid(self, uptrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(uptrend_df)
+        outcome = BacktestEngine(make_config()).run(uptrend_df)
         for trade in outcome.trades:
             assert trade.exit_reason in set(ExitReason)
 
     def test_every_trade_has_a_positive_holding_period(self, uptrend_df: pd.DataFrame) -> None:
         """Trades mit Haltedauer null waeren ein Artefakt des Datenendes."""
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(uptrend_df)
+        outcome = BacktestEngine(make_config()).run(uptrend_df)
         assert outcome.trades
         for trade in outcome.trades:
             assert trade.entry_at in uptrend_df.index
@@ -90,7 +98,7 @@ class TestSimulation:
             assert trade.holding_minutes > 0
 
     def test_supports_short_trades(self, downtrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0)).run(downtrend_df)
+        outcome = BacktestEngine(make_config()).run(downtrend_df)
         directions = {trade.direction for trade in outcome.trades}
         assert directions
         assert all(d in set(SignalDirection) for d in directions)
@@ -98,29 +106,27 @@ class TestSimulation:
 
 class TestCostsAndSlippage:
     def test_fees_are_charged_on_both_sides(self, uptrend_df: pd.DataFrame) -> None:
-        outcome = BacktestEngine(make_config(min_score=55.0, fee_percent=0.1)).run(uptrend_df)
+        outcome = BacktestEngine(make_config(fee_percent=0.1)).run(uptrend_df)
         assert outcome.trades
         for trade in outcome.trades:
             assert trade.fees > 0
             assert trade.net_pnl == pytest.approx(trade.gross_pnl - trade.fees)
 
     def test_higher_fees_reduce_net_result(self, uptrend_df: pd.DataFrame) -> None:
-        cheap = BacktestEngine(make_config(min_score=55.0, fee_percent=0.0)).run(uptrend_df)
-        pricey = BacktestEngine(make_config(min_score=55.0, fee_percent=0.5)).run(uptrend_df)
+        cheap = BacktestEngine(make_config(fee_percent=0.0)).run(uptrend_df)
+        pricey = BacktestEngine(make_config(fee_percent=0.5)).run(uptrend_df)
         assert sum(t.net_pnl for t in pricey.trades) < sum(t.net_pnl for t in cheap.trades)
 
     def test_zero_fee_and_slippage_yields_zero_fees(self, uptrend_df: pd.DataFrame) -> None:
         outcome = BacktestEngine(
-            make_config(min_score=55.0, fee_percent=0.0, slippage_percent=0.0)
+            make_config(fee_percent=0.0, slippage_percent=0.0)
         ).run(uptrend_df)
         assert all(trade.fees == pytest.approx(0.0) for trade in outcome.trades)
 
     def test_slippage_worsens_entry_for_long(self, uptrend_df: pd.DataFrame) -> None:
         """Slippage wird immer zum Nachteil der Position angesetzt."""
-        without = BacktestEngine(make_config(min_score=55.0, slippage_percent=0.0)).run(uptrend_df)
-        with_slip = BacktestEngine(make_config(min_score=55.0, slippage_percent=0.5)).run(
-            uptrend_df
-        )
+        without = BacktestEngine(make_config(slippage_percent=0.0)).run(uptrend_df)
+        with_slip = BacktestEngine(make_config(slippage_percent=0.5)).run(uptrend_df)
         longs_without = [t for t in without.trades if t.direction.is_long]
         longs_with = [t for t in with_slip.trades if t.direction.is_long]
         if not longs_without or not longs_with:
@@ -137,7 +143,7 @@ class TestLookAheadFreedom:
         die Trades, die vor dem Schnittpunkt eroeffnet wurden.
         """
         cutoff = 320
-        config = make_config(min_score=55.0)
+        config = make_config()
 
         truncated = BacktestEngine(config).run(uptrend_df.iloc[:cutoff])
         full = BacktestEngine(config).run(uptrend_df)
@@ -161,7 +167,7 @@ class TestLookAheadFreedom:
         manipulated = uptrend_df.copy()
         manipulated.iloc[cutoff:, :4] *= 5.0
 
-        config = make_config(min_score=55.0)
+        config = make_config()
         original = BacktestEngine(config).run(uptrend_df)
         changed = BacktestEngine(config).run(manipulated)
 
@@ -176,7 +182,7 @@ class TestLookAheadFreedom:
             assert a.signal_score == pytest.approx(b.signal_score)
 
     def test_run_is_reproducible(self, uptrend_df: pd.DataFrame) -> None:
-        config = make_config(min_score=55.0)
+        config = make_config()
         first = BacktestEngine(config).run(uptrend_df)
         second = BacktestEngine(config).run(uptrend_df)
 
@@ -219,7 +225,13 @@ class TestLookAheadFreedom:
         assert trade.exit_reason is ExitReason.STOP_LOSS
 
 
-class TestMetrics:
+    def test_cooldown_reduces_trade_count(self, uptrend_df: pd.DataFrame) -> None:
+        relaxed = make_config(cooldown_minutes=0)
+        strict = make_config(cooldown_minutes=240)
+        without = BacktestEngine(relaxed).run(uptrend_df)
+        with_cd = BacktestEngine(strict).run(uptrend_df)
+        assert len(with_cd.trades) <= len(without.trades)
+        assert with_cd.signals_skipped_cooldown >= 0
     @staticmethod
     def metrics_for(
         trades: list[SimulatedTrade], *, initial_capital: float = 10_000.0

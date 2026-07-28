@@ -83,9 +83,14 @@ class Settings(BaseSettings):
     enable_universe_scan: bool = True
 
     # --- Signal- und Risikoparameter --------------------------------------
-    signal_min_score: float = 65.0
+    signal_min_score: float = 75.0
+    signal_require_strong: bool = True
     signal_cooldown_minutes: int = 120
     signal_expiry_multiplier: int = 4
+    signal_rsi_long_max: float = 75.0
+    signal_rsi_short_min: float = 25.0
+    signal_block_range_market: bool = True
+    signal_min_adx: float = 20.0
     atr_multiplier: float = 1.5
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
