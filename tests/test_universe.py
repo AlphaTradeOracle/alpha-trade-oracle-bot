@@ -500,10 +500,10 @@ class TestUniverseBatchScan:
         assert eth.last_scanned_at is not None
 
     @pytest.mark.asyncio
-    async def test_universe_dispatch_only_for_watchlist(
+    async def test_universe_dispatches_without_watchlist(
         self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
     ) -> None:
-        from app.repositories.chat_repository import ChatRepository, WatchlistRepository
+        from app.repositories.chat_repository import ChatRepository
 
         repo = AssetRepository(session)
         await repo.upsert_universe_entry(
@@ -515,18 +515,19 @@ class TestUniverseBatchScan:
             market_cap_rank=1,
             market_cap_usd=Decimal("1"),
         )
-        asset = await repo.get_by_symbol("BTCUSDT")
-        assert asset is not None
-
-        chat = await ChatRepository(session).get_or_create(chat_id=111, title="tester")
-        await WatchlistRepository(session).add(chat.id, asset.id)
+        await ChatRepository(session).get_or_create(chat_id=111, title="tester")
 
         provider = MultiSymbolStubProvider(uptrend_frames, [BTC])
         settings = service_settings(
             enable_universe_scan=True,
             universe_scan_batch_size=10,
             signal_min_score=0.0,
+            signal_require_strong=False,
             min_risk_reward_ratio=0.01,
+            signal_rsi_long_max=100.0,
+            signal_rsi_short_min=0.0,
+            signal_block_range_market=False,
+            signal_min_adx=0.0,
         )
         analysis = AnalysisService(provider, settings=settings)
         dispatcher = RecordingDispatcher()
@@ -540,45 +541,8 @@ class TestUniverseBatchScan:
         result = await scan.scan(session, dispatch=True, use_universe=True)
 
         assert result.universe_mode is True
-        if result.signals_dispatched:
-            assert len(dispatcher.dispatched) == 1
-
-    @pytest.mark.asyncio
-    async def test_universe_without_watchlist_does_not_dispatch(
-        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
-    ) -> None:
-        repo = AssetRepository(session)
-        await repo.upsert_universe_entry(
-            symbol="BTCUSDT",
-            base_asset="BTC",
-            quote_asset="USDT",
-            exchange="stub",
-            coingecko_id="bitcoin",
-            market_cap_rank=1,
-            market_cap_usd=Decimal("1"),
-        )
-
-        provider = MultiSymbolStubProvider(uptrend_frames, [BTC])
-        settings = service_settings(
-            enable_universe_scan=True,
-            universe_scan_batch_size=10,
-            signal_min_score=0.0,
-            min_risk_reward_ratio=0.01,
-        )
-        analysis = AnalysisService(provider, settings=settings)
-        dispatcher = RecordingDispatcher()
-        scan = ScanService(
-            analysis,
-            SignalDeduplicator(cooldown_minutes=0),
-            dispatcher=dispatcher,
-            settings=settings,
-        )
-
-        result = await scan.scan(session, dispatch=True, use_universe=True)
-
-        assert result.universe_mode is True
-        assert result.signals_dispatched == 0
-        assert dispatcher.dispatched == []
+        assert result.signals_dispatched == 1
+        assert len(dispatcher.dispatched) == 1
 
     @pytest.mark.asyncio
     async def test_list_universe_batch_orders_nulls_first(self, session: AsyncSession) -> None:
