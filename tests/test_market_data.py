@@ -15,6 +15,7 @@ from app.core.config import Settings
 from app.core.errors import MarketDataError, SymbolNotFoundError
 from app.core.time import datetime_to_ms
 from app.market_data.binance import BinanceMarketDataProvider
+from app.market_data.kucoin import KucoinMarketDataProvider
 from app.market_data.types import Candle, CandleSeries, SymbolInfo
 
 #: Ohne Wiederholungen laufen die Fehlerfaelle ohne Backoff-Wartezeit.
@@ -319,3 +320,253 @@ class TestBinanceProvider:
 
         assert series.is_empty
         assert series.data_quality(min_candles=210) == 0.0
+
+
+# --- KuCoin ----------------------------------------------------------------
+
+
+KUCOIN_SYMBOLS = [
+    {
+        "symbol": "BTC-USDT",
+        "baseCurrency": "BTC",
+        "quoteCurrency": "USDT",
+        "enableTrading": True,
+        "priceIncrement": "0.01",
+        "baseIncrement": "0.00001",
+    },
+    {
+        "symbol": "ETH-USDT",
+        "baseCurrency": "ETH",
+        "quoteCurrency": "USDT",
+        "enableTrading": True,
+        "priceIncrement": "0.01",
+        "baseIncrement": "0.0001",
+    },
+]
+
+
+def kucoin_ok(data: object) -> dict[str, object]:
+    return {"code": "200000", "data": data}
+
+
+def kucoin_candle(index: int, interval_minutes: int = 60) -> list[object]:
+    """Eine Kerze im KuCoin-Format: time, open, close, high, low, volume, turnover."""
+    open_time = BASE_TIME + timedelta(minutes=interval_minutes * index)
+    return [
+        str(int(open_time.timestamp())),
+        f"{100.0 + index}",
+        f"{100.5 + index}",
+        f"{101.0 + index}",
+        f"{99.0 + index}",
+        "10.0",
+        "1005.0",
+    ]
+
+
+def make_kucoin_provider(handler) -> KucoinMarketDataProvider:  # type: ignore[no-untyped-def]
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.kucoin.com"
+    )
+    provider = KucoinMarketDataProvider(NO_RETRY_SETTINGS, client=client)
+    provider._owns_client = True
+    return provider
+
+
+class TestKucoinProvider:
+    @pytest.mark.asyncio
+    async def test_fetches_symbol_info_and_normalizes_dash(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path.endswith("/api/v1/symbols")
+            return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            info = await provider.get_symbol_info("BTC-USDT")
+        finally:
+            await provider.close()
+
+        assert info.symbol == "BTCUSDT"
+        assert info.base_asset == "BTC"
+        assert info.quote_asset == "USDT"
+        assert info.price_precision == 2
+        assert info.quantity_precision == 5
+
+    @pytest.mark.asyncio
+    async def test_unknown_symbol_raises(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=kucoin_ok([]))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            with pytest.raises(SymbolNotFoundError):
+                await provider.get_symbol_info("DOESNOTEXIST")
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_lists_available_symbols(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            symbols = await provider.list_symbols(quote_asset="USDT")
+        finally:
+            await provider.close()
+
+        assert {s.symbol for s in symbols} == {"BTCUSDT", "ETHUSDT"}
+
+    @pytest.mark.asyncio
+    async def test_fetches_current_price(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/v1/symbols"):
+                return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+            assert "orderbook/level1" in request.url.path
+            assert request.url.params.get("symbol") == "BTC-USDT"
+            return httpx.Response(200, json=kucoin_ok({"price": "42350.12"}))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            price = await provider.get_price("BTCUSDT")
+        finally:
+            await provider.close()
+
+        assert price == pytest.approx(42350.12)
+
+    @pytest.mark.asyncio
+    async def test_fetches_multiple_prices_from_all_tickers(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "allTickers" in request.url.path
+            return httpx.Response(
+                200,
+                json=kucoin_ok(
+                    {
+                        "ticker": [
+                            {"symbol": "BTC-USDT", "last": "42350.12"},
+                            {"symbol": "ETH-USDT", "last": "2280.40"},
+                            {"symbol": "SOL-USDT", "last": "150.00"},
+                        ]
+                    }
+                ),
+            )
+
+        provider = make_kucoin_provider(handler)
+        try:
+            prices = await provider.get_prices(["BTCUSDT", "ETHUSDT"])
+        finally:
+            await provider.close()
+
+        assert prices == {"BTCUSDT": pytest.approx(42350.12), "ETHUSDT": pytest.approx(2280.40)}
+
+    @pytest.mark.asyncio
+    async def test_normalizes_candles_with_kucoin_ohlc_order(self) -> None:
+        # KuCoin liefert neueste zuerst; Close steht vor High/Low.
+        payload = [kucoin_candle(i) for i in range(4, -1, -1)]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/v1/symbols"):
+                return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+            assert "market/candles" in request.url.path
+            assert request.url.params.get("symbol") == "BTC-USDT"
+            assert request.url.params.get("type") == "1hour"
+            return httpx.Response(200, json=kucoin_ok(payload))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            series = await provider.get_candles("BTCUSDT", "1h", limit=5)
+        finally:
+            await provider.close()
+
+        assert len(series) == 5
+        first = series.candles[0]
+        assert first.open_time == BASE_TIME
+        assert first.open == pytest.approx(100.0)
+        assert first.close == pytest.approx(100.5)
+        assert first.high == pytest.approx(101.0)
+        assert first.low == pytest.approx(99.0)
+        assert first.volume == pytest.approx(10.0)
+        assert series.source == "kucoin"
+
+    @pytest.mark.asyncio
+    async def test_detects_missing_candles(self) -> None:
+        payload = [kucoin_candle(i) for i in (6, 5, 2, 1, 0)]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/v1/symbols"):
+                return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+            return httpx.Response(200, json=kucoin_ok(payload))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            series = await provider.get_candles("BTCUSDT", "1h", limit=10)
+        finally:
+            await provider.close()
+
+        assert series.missing_candles == 2
+        assert series.gaps
+
+    @pytest.mark.asyncio
+    async def test_raises_on_rate_limit(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, json={"code": "429000", "msg": "Too many requests"})
+
+        provider = make_kucoin_provider(handler)
+        try:
+            with pytest.raises(MarketDataError):
+                await provider.get_candles("BTCUSDT", "1h", limit=5)
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_raises_on_api_error_code(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/v1/symbols"):
+                return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+            return httpx.Response(
+                200, json={"code": "400100", "msg": "Invalid symbol", "data": None}
+            )
+
+        provider = make_kucoin_provider(handler)
+        try:
+            with pytest.raises((MarketDataError, SymbolNotFoundError)):
+                await provider.get_candles("BTCUSDT", "1h", limit=5)
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_health_check_reports_failure_without_raising(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, text="unavailable")
+
+        provider = make_kucoin_provider(handler)
+        try:
+            assert await provider.health_check() is False
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_empty_response_yields_empty_series(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/v1/symbols"):
+                return httpx.Response(200, json=kucoin_ok(KUCOIN_SYMBOLS))
+            return httpx.Response(200, json=kucoin_ok([]))
+
+        provider = make_kucoin_provider(handler)
+        try:
+            series = await provider.get_candles("BTCUSDT", "1h", limit=5)
+        finally:
+            await provider.close()
+
+        assert series.is_empty
+        assert series.data_quality(min_candles=210) == 0.0
+
+    @pytest.mark.asyncio
+    async def test_factory_registers_kucoin(self) -> None:
+        from app.market_data.factory import available_providers, create_market_data_provider
+
+        assert "kucoin" in available_providers()
+        provider = create_market_data_provider(Settings(market_data_provider="kucoin"))
+        try:
+            assert provider.name == "kucoin"
+        finally:
+            await provider.close()

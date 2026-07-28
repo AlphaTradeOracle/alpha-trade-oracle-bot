@@ -154,6 +154,7 @@ def service_settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "enable_llm_analysis": False,
         "enable_sentiment": False,
+        "enable_universe_scan": False,
         "default_timeframes": "15m,1h,4h,1d",
         "min_candles_required": 210,
         "candle_limit": 400,

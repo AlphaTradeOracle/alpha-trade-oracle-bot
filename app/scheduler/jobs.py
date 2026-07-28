@@ -15,6 +15,7 @@ from app.core.logging import get_logger, set_correlation_id
 from app.database.session import session_scope
 from app.repositories.event_repository import EventRepository, ScheduledJobRepository
 from app.services.scan_service import ScanService
+from app.services.universe_service import UniverseService
 
 logger = get_logger(__name__)
 
@@ -43,6 +44,15 @@ def market_scan_job(interval_minutes: int) -> JobDefinition:
         job_type="market_scan",
         interval_seconds=interval_minutes * 60,
         description=f"Marktscan alle {interval_minutes} Minuten",
+    )
+
+
+def universe_refresh_job(interval_hours: int) -> JobDefinition:
+    return JobDefinition(
+        key=f"universe_refresh:{interval_hours}h",
+        job_type="universe_refresh",
+        interval_seconds=interval_hours * 3600,
+        description=f"Universe-Refresh alle {interval_hours} Stunden",
     )
 
 
@@ -79,6 +89,51 @@ async def run_market_scan(scan_service: ScanService, job_key: str) -> None:
                 "scheduled_job_failed",
                 f"Job {job_key} ist fehlgeschlagen: {error}",
                 severity=EventSeverity.ERROR,
+            )
+
+    if success:
+        logger.info("job_completed", job_key=job_key, **summary)
+
+
+async def run_universe_refresh(universe_service: UniverseService, job_key: str) -> None:
+    """Universe-Refresh ausfuehren, sofern das Ausfuehrungsrecht beansprucht werden kann."""
+    set_correlation_id()
+
+    async with session_scope() as session:
+        claimed = await ScheduledJobRepository(session).claim(job_key)
+
+    if not claimed:
+        logger.debug("job_skipped_not_due", job_key=job_key)
+        return
+
+    logger.info("job_started", job_key=job_key)
+
+    try:
+        async with session_scope() as session:
+            result = await universe_service.refresh(session)
+        success = True
+        error: str | None = None
+        summary = result.as_summary()
+    except Exception as exc:
+        success = False
+        error = str(exc)
+        summary = {}
+        logger.error("job_failed", job_key=job_key, error=error, exc_info=True)
+
+    async with session_scope() as session:
+        await ScheduledJobRepository(session).complete(job_key, success=success, error=error)
+        if not success:
+            await EventRepository(session).record(
+                "scheduled_job_failed",
+                f"Job {job_key} ist fehlgeschlagen: {error}",
+                severity=EventSeverity.ERROR,
+            )
+        else:
+            await EventRepository(session).record(
+                "universe_refresh_completed",
+                "Universe-Refresh abgeschlossen.",
+                severity=EventSeverity.INFO,
+                payload=summary,
             )
 
     if success:

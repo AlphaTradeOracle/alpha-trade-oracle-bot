@@ -53,3 +53,9 @@ class AssetResponse(BaseModel):
     exchange: str
     price_precision: int
     is_active: bool
+    coingecko_id: str | None = None
+    market_cap_rank: int | None = None
+    market_cap_usd: float | None = None
+    in_universe: bool = False
+    last_ranked_at: datetime | None = None
+    last_scanned_at: datetime | None = None

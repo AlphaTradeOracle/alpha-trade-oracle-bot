@@ -108,6 +108,9 @@ Optional:
 | `ENABLE_LLM_ANALYSIS` | `true`/`false` — System funktioniert auch ohne LLM |
 | `ENABLE_SENTIMENT` | standardmäßig `false` |
 | `DEFAULT_SYMBOLS` | Fallback, wenn keine Watchlist existiert |
+| `ENABLE_UNIVERSE_SCAN` | Top-N Market-Cap-Batch-Scans (Default `true`) |
+| `UNIVERSE_SIZE` / `UNIVERSE_SCAN_BATCH_SIZE` | Größe und Batch des Universums |
+| `COINGECKO_API_KEY` | optional — höhere CoinGecko-Limits |
 
 Binance-API-Keys sind für reine Marktanalysen **nicht** erforderlich
 (öffentliche REST-Endpunkte).
@@ -146,6 +149,8 @@ Admin:
 
 ```bash
 python -m app.cli analyze BTCUSDT --no-llm
+python -m app.cli universe refresh
+python -m app.cli scan --universe --no-dispatch
 python -m app.cli scan --symbols BTCUSDT,ETHUSDT
 python -m app.cli backtest --symbol BTCUSDT --timeframe 1h --start 2024-01-01 --end 2025-01-01
 python -m app.cli check
@@ -153,6 +158,16 @@ python -m app.cli seed
 ```
 
 Makefile-Äquivalente: `make analyze`, `make scan`, `make backtest`, `make check`, `make seed`.
+
+## Top-1000 Market-Cap-Universe
+
+1. `python -m app.cli universe refresh` lädt das CoinGecko-Top-N und mappt auf
+   handelbare Paare des aktiven Providers (`MARKET_DATA_PROVIDER`).
+2. Der Scheduler refreshed alle `UNIVERSE_REFRESH_HOURS` (Default 24) und scannt
+   alle `SCAN_INTERVAL_MINUTES` eine Batch von `UNIVERSE_SCAN_BATCH_SIZE`
+   Symbolen (Round-Robin über `last_scanned_at`).
+3. Bulk-Scans laufen ohne LLM; Telegram-Versand nur für Symbole auf einer
+   aktiven Watchlist.
 
 ## API
 
@@ -195,12 +210,13 @@ vertikalen Analyse-/Scan-Ablauf ab.
 - Sentiment-Modul ist vorbereitet, aber standardmäßig deaktiviert
 - Automatische Kalibrierung speichert Kandidatenversionen, aktiviert sie aber nie selbst
 - Performance-Endpunkt bewertet Signalproduktion, nicht Trade-Outcomes
-- Nur Binance als Marktdaten-Provider
+- Marktdaten-Provider: Binance und KuCoin (Umschalten via `MARKET_DATA_PROVIDER`)
+- Top-1000 Market-Cap-Universe via CoinGecko (`universe refresh` + Batch-Scan)
 - Docker Desktop muss auf dem Host installiert sein
 
 ## Roadmap
 
-- Weitere Marktdaten-Provider (Bybit, Kraken)
+- Weitere Marktdaten-Provider (Bybit, Kraken) und Multi-Provider-Aggregation
 - Sentiment-Quellen (Fear & Greed, Funding, Dominanz)
 - Walk-Forward-Kalibrierung mit manueller Freigabe
 - Trade-Outcome-Tracking für echte Signalperformance

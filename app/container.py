@@ -16,12 +16,14 @@ from app.database.session import dispose_engine
 from app.llm.factory import create_llm_service
 from app.llm.service import LLMService
 from app.market_data.base import MarketDataProvider
+from app.market_data.coingecko import CoinGeckoClient
 from app.market_data.factory import create_market_data_provider
 from app.monitoring.health import HealthService
 from app.sentiment.service import SentimentService
 from app.services.analysis_service import AnalysisService
 from app.services.backtest_service import BacktestService
 from app.services.scan_service import ScanService
+from app.services.universe_service import UniverseService
 from app.signals.dedup import SignalDeduplicator
 
 logger = get_logger(__name__)
@@ -33,10 +35,12 @@ class ApplicationContainer:
 
     settings: Settings
     provider: MarketDataProvider
+    coingecko: CoinGeckoClient
     llm_service: LLMService
     sentiment_service: SentimentService
     analysis_service: AnalysisService
     backtest_service: BacktestService
+    universe_service: UniverseService
     deduplicator: SignalDeduplicator
     health_service: HealthService
     scan_service: ScanService | None = None
@@ -45,6 +49,7 @@ class ApplicationContainer:
         """Alle Ressourcen freigeben. Einzelne Fehler stoppen den Abbau nicht."""
         for name, closer in (
             ("market_data_provider", self.provider.close),
+            ("coingecko", self.coingecko.close),
             ("sentiment_service", self.sentiment_service.close),
             ("redis", close_redis),
             ("database", dispose_engine),
@@ -61,6 +66,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
 
     redis_client = get_redis(cfg)
     provider = create_market_data_provider(cfg, redis_client=redis_client)
+    coingecko = CoinGeckoClient(cfg)
     llm_service = create_llm_service(cfg)
     sentiment_service = SentimentService(settings=cfg)
 
@@ -71,6 +77,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         sentiment_service=sentiment_service,
     )
     backtest_service = BacktestService(provider, settings=cfg)
+    universe_service = UniverseService(provider, coingecko, settings=cfg)
 
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
@@ -87,15 +94,18 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         provider=provider.name,
         llm_enabled=llm_service.is_enabled,
         sentiment_enabled=cfg.enable_sentiment,
+        universe_scan=cfg.enable_universe_scan,
     )
 
     return ApplicationContainer(
         settings=cfg,
         provider=provider,
+        coingecko=coingecko,
         llm_service=llm_service,
         sentiment_service=sentiment_service,
         analysis_service=analysis_service,
         backtest_service=backtest_service,
+        universe_service=universe_service,
         deduplicator=deduplicator,
         health_service=health_service,
     )

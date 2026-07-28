@@ -87,9 +87,10 @@ bestehenden Komponenten überschrieben.
 ## Roadmap nach dem MVP
 
 1. Produktive Sentiment-Quellen (Fear & Greed, Funding Rates, Open Interest)
-2. Weitere Marktdaten-Provider (Bybit, Kraken, CoinGecko) über bestehendes Interface
-3. Prometheus-Export der bereits vorhandenen Metrik-Struktur
-4. Walk-Forward-Optimierung mit manueller Freigabe-Oberfläche
-5. Volumenprofil-basierte Support-/Resistance-Erkennung
-6. Webhook-Betrieb für Telegram statt Long Polling
-7. Signal-Nachverfolgung: automatische Auswertung, ob TP oder SL zuerst erreicht wurde
+2. Market-Cap Top-1000 Universe (CoinGecko → Exchange-Mapping → Batch-Scan) — umgesetzt
+3. Weitere Marktdaten-Provider (Bybit, Kraken) und Multi-Provider-Aggregation
+4. Prometheus-Export der bereits vorhandenen Metrik-Struktur
+5. Walk-Forward-Optimierung mit manueller Freigabe-Oberfläche
+6. Volumenprofil-basierte Support-/Resistance-Erkennung
+7. Webhook-Betrieb für Telegram statt Long Polling
+8. Signal-Nachverfolgung: automatische Auswertung, ob TP oder SL zuerst erreicht wurde

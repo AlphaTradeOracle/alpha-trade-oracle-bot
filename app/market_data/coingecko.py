@@ -1,0 +1,178 @@
+"""CoinGecko-Ranking fuer das Market-Cap-Universe.
+
+Kein vollstaendiger :class:`~app.market_data.base.MarketDataProvider` — nur
+Top-N-Maerkte nach Marktkapitalisierung. Kerzen kommen weiterhin von Binance/KuCoin.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+
+from app.core.config import Settings, get_settings
+from app.core.errors import MarketDataError
+from app.core.http import RateLimiter, request_with_retry
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+#: CoinGecko erlaubt maximal 250 Eintraege pro ``/coins/markets``-Seite.
+MAX_PER_PAGE = 250
+
+#: Konservativ fuer den kostenlosen / Demo-Plan.
+RATE_LIMIT_CALLS = 25
+RATE_LIMIT_PERIOD_SECONDS = 60.0
+
+
+@dataclass(frozen=True, slots=True)
+class CoinGeckoMarket:
+    """Ein Eintrag aus dem Market-Cap-Ranking."""
+
+    id: str
+    symbol: str
+    name: str
+    market_cap: float | None
+    market_cap_rank: int
+
+
+class CoinGeckoClient:
+    """Oeffentliche CoinGecko-REST-API fuer Market-Cap-Rankings."""
+
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._settings = settings or get_settings()
+        self._owns_client = client is None
+        headers = {"User-Agent": "alpha-trade-oracle-bot/0.1", "Accept": "application/json"}
+        api_key = self._settings.coingecko_api_key.get_secret_value().strip()
+        if api_key:
+            if "pro-api.coingecko.com" in self._settings.coingecko_base_url:
+                headers["x-cg-pro-api-key"] = api_key
+            else:
+                headers["x-cg-demo-api-key"] = api_key
+
+        self._client = client or httpx.AsyncClient(
+            base_url=self._settings.coingecko_base_url.rstrip("/"),
+            timeout=httpx.Timeout(self._settings.http_timeout_seconds),
+            headers=headers,
+        )
+        self._rate_limiter = RateLimiter(RATE_LIMIT_CALLS, RATE_LIMIT_PERIOD_SECONDS)
+
+    async def fetch_top_markets(self, limit: int = 1000) -> list[CoinGeckoMarket]:
+        """Top-``limit`` Coins nach Market Cap (USD) laden."""
+        if limit <= 0:
+            return []
+
+        collected: list[CoinGeckoMarket] = []
+        page = 1
+        while len(collected) < limit:
+            remaining = limit - len(collected)
+            per_page = min(MAX_PER_PAGE, remaining)
+            batch = await self._fetch_markets_page(page=page, per_page=per_page)
+            if not batch:
+                break
+            collected.extend(batch)
+            if len(batch) < per_page:
+                break
+            page += 1
+
+        markets = collected[:limit]
+        logger.info("coingecko_top_markets_loaded", requested=limit, received=len(markets))
+        return markets
+
+    async def health_check(self) -> bool:
+        try:
+            await self._rate_limiter.acquire()
+            response = await request_with_retry(
+                self._client,
+                "GET",
+                "/ping",
+                max_retries=self._settings.http_max_retries,
+            )
+            return response.status_code < 400
+        except Exception as exc:
+            logger.warning("coingecko_health_check_failed", error=str(exc))
+            return False
+
+    async def close(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
+
+    async def _fetch_markets_page(self, *, page: int, per_page: int) -> list[CoinGeckoMarket]:
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "per_page": per_page,
+            "page": page,
+            "sparkline": "false",
+        }
+        await self._rate_limiter.acquire()
+        response = await request_with_retry(
+            self._client,
+            "GET",
+            "/coins/markets",
+            max_retries=self._settings.http_max_retries,
+            params=params,
+        )
+        if response.status_code >= 400:
+            raise MarketDataError(
+                f"CoinGecko-Fehler HTTP {response.status_code} bei /coins/markets.",
+                detail=response.text[:200],
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MarketDataError(
+                "Antwort von CoinGecko war kein gueltiges JSON.",
+                detail=response.text[:200],
+            ) from exc
+
+        if not isinstance(payload, list):
+            raise MarketDataError(
+                "Unerwartete Antwort von CoinGecko /coins/markets.",
+                detail=str(payload)[:200],
+            )
+
+        markets: list[CoinGeckoMarket] = []
+        for item in payload:
+            parsed = _parse_market(item)
+            if parsed is not None:
+                markets.append(parsed)
+        return markets
+
+
+def _parse_market(item: Any) -> CoinGeckoMarket | None:
+    if not isinstance(item, dict):
+        return None
+    coin_id = str(item.get("id") or "").strip()
+    symbol = str(item.get("symbol") or "").strip().upper()
+    if not coin_id or not symbol:
+        return None
+    rank_raw = item.get("market_cap_rank")
+    if rank_raw is None:
+        return None
+    try:
+        rank = int(rank_raw)
+    except (TypeError, ValueError):
+        return None
+
+    market_cap_raw = item.get("market_cap")
+    market_cap: float | None
+    try:
+        market_cap = float(market_cap_raw) if market_cap_raw is not None else None
+    except (TypeError, ValueError):
+        market_cap = None
+
+    return CoinGeckoMarket(
+        id=coin_id,
+        symbol=symbol,
+        name=str(item.get("name") or symbol),
+        market_cap=market_cap,
+        market_cap_rank=rank,
+    )

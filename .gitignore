@@ -26,3 +26,7 @@ coverage.xml
 
 *.log
 data/
+
+# Cursor VPS deploy key (never commit)
+.cursor/vps_deploy_key
+.cursor/vps_deploy_key.pub

@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     binance_api_key: SecretStr = SecretStr("")
     binance_api_secret: SecretStr = SecretStr("")
     binance_base_url: str = "https://api.binance.com"
+    kucoin_base_url: str = "https://api.kucoin.com"
     coingecko_api_key: SecretStr = SecretStr("")
+    coingecko_base_url: str = "https://api.coingecko.com/api/v3"
     coinmarketcap_api_key: SecretStr = SecretStr("")
 
     # --- LLM ---------------------------------------------------------------
@@ -78,6 +80,7 @@ class Settings(BaseSettings):
     enable_backtesting: bool = True
     enable_auto_calibration: bool = False
     enable_scheduler: bool = True
+    enable_universe_scan: bool = True
 
     # --- Signal- und Risikoparameter --------------------------------------
     signal_min_score: float = 65.0
@@ -93,6 +96,9 @@ class Settings(BaseSettings):
     scan_interval_minutes: int = 60
     candle_limit: int = 500
     min_candles_required: int = 210
+    universe_size: int = 1000
+    universe_scan_batch_size: int = 50
+    universe_refresh_hours: int = 24
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0
