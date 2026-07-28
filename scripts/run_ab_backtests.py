@@ -18,11 +18,6 @@ from app.core.time import utc_now
 SYMBOLS = [
     "BTCUSDT",
     "ETHUSDT",
-    "FETUSDT",
-    "GRTUSDT",
-    "THETAUSDT",
-    "PROSUSDT",
-    "SOONUSDT",
 ]
 
 METRIC_KEYS = (
@@ -62,7 +57,7 @@ async def main() -> int:
         for symbol in SYMBOLS:
             for scale_out in (False, True):
                 label = "scale_out" if scale_out else "full_exit"
-                print(f"Running {symbol} {timeframe} [{label}] ...", file=sys.stderr)
+                print(f"Running {symbol} {timeframe} [{label}] ...", file=sys.stderr, flush=True)
                 try:
                     report = await container.backtest_service.run(
                         symbol,
@@ -100,9 +95,10 @@ async def main() -> int:
                         f"wr={overall['win_rate']*100:.1f}% "
                         f"pf={overall['profit_factor']:.2f}",
                         file=sys.stderr,
+                        flush=True,
                     )
                 except Exception as exc:
-                    print(f"  FAILED: {exc}", file=sys.stderr)
+                    print(f"  FAILED: {exc}", file=sys.stderr, flush=True)
                     results.append(
                         {
                             "symbol": symbol,
