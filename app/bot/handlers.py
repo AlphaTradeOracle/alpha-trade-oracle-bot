@@ -623,8 +623,8 @@ class BotHandlers:
         async def send_text(payload: str) -> None:
             await BotHandlers._reply(update, payload)
 
-        async def send_photo(photo: bytes) -> None:
-            await reply_photo(message, photo)
+        async def send_photo(photo: bytes, caption: str | None = None) -> None:
+            await reply_photo(message, photo, caption=caption)
 
         await deliver_analysis_with_chart(
             outcome,

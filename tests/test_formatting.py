@@ -74,17 +74,21 @@ class TestSignalMessage:
         message = format_signal_message(make_result())
         assert "BTC/USDT" in message
         assert "LONG" in message
-        assert "Staerke" in message
-        assert "Konfidenz" in message
+        assert "Score: 72/100" in message
 
     def test_contains_risk_levels_for_actionable_signal(self) -> None:
         message = format_signal_message(make_result())
         assert "Entry" in message
-        assert "Stop-Loss" in message
+        assert "SL" in message
         assert "TP1" in message
         assert "TP2" in message
         assert "TP3" in message
-        assert "Chance-Risiko" in message
+        assert "Plan" not in message
+        assert "33/33/34" not in message
+        # TPs stehen untereinander, nicht in einer Zeile.
+        tp1_line = next(line for line in message.splitlines() if "TP1" in line)
+        assert "TP2" not in tp1_line
+        assert "TP3" not in tp1_line
 
     def test_shows_reason_for_no_trade(self) -> None:
         result = make_result(direction=SignalDirection.NO_TRADE)
@@ -97,10 +101,15 @@ class TestSignalMessage:
         message = format_signal_message(make_result(direction=SignalDirection.NEUTRAL))
         assert "TP1" not in message
 
-    def test_marks_position_size_as_informational(self) -> None:
-        """Es werden keine Orders erzeugt; das muss in der Nachricht stehen."""
-        message = format_signal_message(make_result())
-        assert "informativ" in message
+    def test_includes_confirmations(self) -> None:
+        result = make_result()
+        result.reasons = [
+            "Trendlage: 4h bullisch, 1h bullisch, 15m bullisch",
+            "EMA9 ueber EMA20; Supertrend bullisch",
+        ]
+        message = format_signal_message(result)
+        assert "*Bestaetigungen:*" in message
+        assert escape_markdown_v2("Trendlage: 4h bullisch, 1h bullisch, 15m bullisch") in message
 
     def test_fits_telegram_limit(self) -> None:
         message = format_signal_message(make_result())
@@ -120,6 +129,7 @@ class TestLLMIsolation:
         )
         message = format_signal_message(make_result(), llm_analysis=analysis)
         assert escape_markdown_v2("EMA-Staffelung aufwaerts") in message
+        assert "*Bestaetigungen:*" in message
 
     def test_llm_cannot_change_prices(self) -> None:
         """Selbst eine halluzinierte Zahl im Text aendert keinen Kurs."""
@@ -134,15 +144,17 @@ class TestLLMIsolation:
         assert result.risk is not None
         # Die Risikozeilen tragen die berechneten Werte, nicht die des LLM.
         assert escape_markdown_v2(format_price(result.risk.stop_loss, 2)) in message
-        # Die erfundenen Zahlen erscheinen ausschliesslich im Prosa-Abschnitt.
-        before_summary = message.split("*Einordnung:*")[0]
-        assert escape_markdown_v2("111.111") not in before_summary
-        assert escape_markdown_v2("999.999") not in before_summary
+        # Halluzinierte Kurse duerfen nicht als SL/Entry erscheinen.
+        before_confirmations = message.split("*Bestaetigungen:*")[0]
+        assert escape_markdown_v2("111.111") not in before_confirmations
+        assert escape_markdown_v2("999.999") not in before_confirmations
 
     def test_message_without_llm_is_complete(self) -> None:
         """Das System muss ohne LLM voll funktionsfaehig bleiben."""
-        message = format_signal_message(make_result(), llm_analysis=None)
-        assert "Bestaetigungen" in message or "Risiken" in message
+        result = make_result()
+        result.reasons = ["Struktur: hoehere Hochs und hoehere Tiefs"]
+        message = format_signal_message(result, llm_analysis=None)
+        assert "Bestaetigungen" in message
         assert escape_markdown_v2(DISCLAIMER) in message
 
 
@@ -158,6 +170,18 @@ class TestAnalysisMessage:
     def test_contains_disclaimer(self) -> None:
         message = format_analysis_message(make_result(direction=SignalDirection.NEUTRAL))
         assert escape_markdown_v2(DISCLAIMER) in message
+
+    def test_includes_llm_summary_for_analyze(self) -> None:
+        analysis = LLMAnalysisResponse(
+            summary="Die technische Lage ist ueberwiegend konstruktiv, aber nicht eindeutig.",
+            reasons=["EMA-Staffelung aufwaerts"],
+            risks=["Widerstand in Reichweite"],
+        )
+        message = format_analysis_message(make_result(), llm_analysis=analysis)
+        assert "*Einordnung:*" in message
+        assert escape_markdown_v2(
+            "Die technische Lage ist ueberwiegend konstruktiv, aber nicht eindeutig."
+        ) in message
 
 
 class TestScoreBreakdown:

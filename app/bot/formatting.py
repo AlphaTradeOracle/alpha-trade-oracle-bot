@@ -14,7 +14,6 @@ from __future__ import annotations
 from app.core.enums import Confidence, SignalDirection
 from app.core.time import format_display_time
 from app.llm.schemas import LLMAnalysisResponse
-from app.signals.multi_timeframe import describe_timeframe_trends
 from app.signals.types import SignalResult
 
 #: Pflicht-Risikohinweis. Erscheint in jeder ausgehenden Analyse-Nachricht.
@@ -22,6 +21,8 @@ DISCLAIMER = "Keine Finanzberatung. Kryptowaehrungen sind hochriskant."
 
 #: Telegram-Limit pro Nachricht; mit Sicherheitsabstand.
 TELEGRAM_MAX_LENGTH = 4096
+#: Caption-Limit fuer Fotos.
+TELEGRAM_CAPTION_MAX = 1024
 SPLIT_LENGTH = 3900
 
 #: In MarkdownV2 reservierte Zeichen.
@@ -75,16 +76,12 @@ def format_signal_message(
     display_timezone: str = "Europe/Berlin",
     llm_analysis: LLMAnalysisResponse | None = None,
 ) -> str:
-    """Vollstaendige Signal-Nachricht in MarkdownV2 erzeugen."""
+    """Kompakte Signal-Nachricht: Levels + Plan + Bestaetigungen."""
     symbol_label = _pretty_symbol(result.symbol)
+    direction = _DIRECTION_LABELS[result.direction]
     lines: list[str] = [
-        f"*{escape_markdown_v2('Alpha Trade Oracle Signal')}*",
-        "",
-        f"*Asset:* {escape_markdown_v2(symbol_label)}",
-        f"*Signal:* {escape_markdown_v2(_DIRECTION_LABELS[result.direction])}",
-        f"*Staerke:* {escape_markdown_v2(f'{result.score:.0f}/100')}",
-        f"*Konfidenz:* {escape_markdown_v2(_CONFIDENCE_LABELS[result.confidence])}",
-        f"*Marktphase:* {escape_markdown_v2(_PHASE_LABELS.get(result.market_phase.value, result.market_phase.value))}",  # noqa: E501
+        f"*{escape_markdown_v2(symbol_label)}* · *{escape_markdown_v2(direction)}*",
+        escape_markdown_v2(f"Score: {result.score:.0f}/100"),
     ]
 
     if result.direction == SignalDirection.NO_TRADE and result.no_trade_reason:
@@ -95,75 +92,40 @@ def format_signal_message(
         quote = _quote_asset(result.symbol)
         lines += [
             "",
-            "*Entry:*",
             escape_markdown_v2(
-                f"{format_price(risk.entry_low, price_precision)}"
-                f"-{format_price(risk.entry_high, price_precision)} {quote}"
+                f"Entry  {format_price(risk.entry_low, price_precision)}"
+                f" – {format_price(risk.entry_high, price_precision)}"
             ),
-            "",
-            "*Stop-Loss:*",
-            escape_markdown_v2(f"{format_price(risk.stop_loss, price_precision)} {quote}"),
-            "",
-            "*Take Profit:*",
-            escape_markdown_v2(f"TP1: {format_price(risk.take_profit_1, price_precision)} {quote}"),
-            escape_markdown_v2(f"TP2: {format_price(risk.take_profit_2, price_precision)} {quote}"),
-            escape_markdown_v2(f"TP3: {format_price(risk.take_profit_3, price_precision)} {quote}"),
-            "",
-            "*Chance-Risiko-Verhaeltnis:*",
-            escape_markdown_v2(f"{risk.risk_reward_ratio:.2f}".replace(".", ",")),
-            "",
-            "*Positionsgroesse (nur informativ):*",
-            escape_markdown_v2(
-                f"{format_price(risk.suggested_position_size, 6)} bei "
-                f"{format_price(risk.risk_percent, 2)}% Risiko"
-            ),
+            escape_markdown_v2(f"SL     {format_price(risk.stop_loss, price_precision)} {quote}"),
+            escape_markdown_v2(f"TP1    {format_price(risk.take_profit_1, price_precision)}"),
+            escape_markdown_v2(f"TP2    {format_price(risk.take_profit_2, price_precision)}"),
+            escape_markdown_v2(f"TP3    {format_price(risk.take_profit_3, price_precision)}"),
         ]
-
-    trends = describe_timeframe_trends(result.assessments)
-    if trends:
-        lines += ["", "*Trend:*"]
-        lines += [escape_markdown_v2(trend) for trend in trends]
-
-    summary = llm_analysis.summary if llm_analysis else None
-    if summary:
-        lines += ["", "*Einordnung:*", escape_markdown_v2(summary)]
 
     reasons = llm_analysis.reasons if llm_analysis else result.reasons
     if reasons:
         lines += ["", "*Bestaetigungen:*"]
-        lines += [f"• {escape_markdown_v2(item)}" for item in reasons[:6]]
+        lines += [f"• {escape_markdown_v2(item)}" for item in reasons[:8]]
 
     risks = llm_analysis.risks if llm_analysis else result.counter_arguments
     if risks:
         lines += ["", "*Risiken:*"]
-        lines += [f"• {escape_markdown_v2(item)}" for item in risks[:6]]
-    elif result.direction.is_actionable:
-        lines += [
-            "",
-            "*Risiken:*",
-            f"• {escape_markdown_v2('Keine wesentlichen Gegenargumente erkannt')}",
-        ]
+        lines += [f"• {escape_markdown_v2(item)}" for item in risks[:4]]
 
-    if llm_analysis and llm_analysis.uncertainty_note:
-        lines += ["", "*Unsicherheiten:*", escape_markdown_v2(llm_analysis.uncertainty_note)]
+    if result.risk is not None and result.direction.is_actionable and result.risk.invalidation_note:
+        lines += ["", f"*Ungueltig:* {escape_markdown_v2(result.risk.invalidation_note)}"]
 
-    if llm_analysis and llm_analysis.market_sentiment_note:
-        lines += ["", "*Marktstimmung:*", escape_markdown_v2(llm_analysis.market_sentiment_note)]
-
-    if result.risk is not None and result.direction.is_actionable:
-        lines += ["", "*Ungueltig bei:*", escape_markdown_v2(result.risk.invalidation_note)]
-
+    phase = _PHASE_LABELS.get(result.market_phase.value, result.market_phase.value)
+    meta = (
+        f"{result.primary_timeframe} · {phase} · "
+        f"Daten {result.data_quality:.0f}/100"
+    )
     lines += [
         "",
+        escape_markdown_v2(meta),
         escape_markdown_v2(
-            f"Timeframes: {', '.join(result.analyzed_timeframes)} | "
-            f"Datenqualitaet: {result.data_quality:.0f}/100"
+            f"Bis {format_display_time(result.expires_at, display_timezone)}"
         ),
-        escape_markdown_v2(
-            f"Erstellt: {format_display_time(result.created_at, display_timezone)} | "
-            f"Gueltig bis: {format_display_time(result.expires_at, display_timezone)}"
-        ),
-        "",
         f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
     ]
 
@@ -177,12 +139,7 @@ def format_analysis_message(
     display_timezone: str = "Europe/Berlin",
     llm_analysis: LLMAnalysisResponse | None = None,
 ) -> str:
-    """Analyse-Nachricht fuer ``/analyze``.
-
-    Unterscheidet sich von :func:`format_signal_message` darin, dass auch
-    neutrale Ergebnisse ausfuehrlich dargestellt werden — der Nutzer hat
-    explizit nach einer Analyse gefragt, nicht nach einem handelbaren Setup.
-    """
+    """Analyse-Nachricht fuer ``/analyze`` — kompakt plus optionaler Einordnung."""
     message = format_signal_message(
         result,
         price_precision=price_precision,
@@ -190,18 +147,34 @@ def format_analysis_message(
         llm_analysis=llm_analysis,
     )
 
+    extras: list[str] = []
     if not result.direction.is_actionable:
-        note = (
-            "Aktuell liegt kein handelbares Setup vor. Die Analyse dient der "
-            "Einordnung der Marktlage."
+        extras.append(
+            "_"
+            + escape_markdown_v2(
+                "Aktuell liegt kein handelbares Setup vor. Die Analyse dient der "
+                "Einordnung der Marktlage."
+            )
+            + "_"
         )
-        marker = f"*{escape_markdown_v2('Marktphase:')}*"
-        insertion = f"\n\n_{escape_markdown_v2(note)}_"
-        index = message.find("\n", message.find(marker))
-        if index != -1:
-            message = message[:index] + insertion + message[index:]
 
-    return message
+    if llm_analysis and llm_analysis.summary:
+        extras.append(f"*Einordnung:*\n{escape_markdown_v2(llm_analysis.summary)}")
+
+    if llm_analysis and llm_analysis.uncertainty_note:
+        extras.append(
+            f"*Unsicherheiten:*\n{escape_markdown_v2(llm_analysis.uncertainty_note)}"
+        )
+
+    if not extras:
+        return message
+
+    # Extras vor dem Disclaimer einfuegen.
+    marker = f"⚠️ {escape_markdown_v2(DISCLAIMER)}"
+    insertion = "\n\n".join(extras) + "\n\n"
+    if marker in message:
+        return message.replace(marker, insertion + marker, 1)
+    return message + "\n\n" + insertion.rstrip()
 
 
 def format_score_breakdown(result: SignalResult) -> str:
@@ -256,6 +229,19 @@ def split_message(text: str, limit: int = SPLIT_LENGTH) -> list[str]:
         if part:
             result.append(part)
     return result
+
+
+def split_caption_and_body(
+    text: str, *, caption_limit: int = TELEGRAM_CAPTION_MAX
+) -> tuple[str | None, str | None]:
+    """Text fuer Photo-Caption aufteilen.
+
+    Passt alles in die Caption, gibt ``(caption, None)`` zurueck.
+    Sonst ``(None, text)`` — Chart ohne Caption, voller Text darunter.
+    """
+    if len(text) <= caption_limit:
+        return text, None
+    return None, text
 
 
 def _pretty_symbol(symbol: str) -> str:

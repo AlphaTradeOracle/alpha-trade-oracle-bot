@@ -10,7 +10,7 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 
-from app.bot.formatting import format_signal_message, split_message
+from app.bot.formatting import format_signal_message, split_caption_and_body, split_message
 from app.charts.signal_chart import build_signal_chart
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -45,29 +45,58 @@ class TelegramNotifier:
                 message_ids.append(message_id)
         return message_ids
 
-    async def send_photo(self, chat_id: int, photo: bytes) -> int | None:
-        """Signal-Chart als Bild senden."""
+    async def send_photo(
+        self, chat_id: int, photo: bytes, caption: str | None = None
+    ) -> int | None:
+        """Signal-Chart als Bild senden, optional mit MarkdownV2-Caption."""
         async with self._lock:
             try:
-                message = await self._bot.send_photo(chat_id=chat_id, photo=BytesIO(photo))
+                kwargs: dict = {"chat_id": chat_id, "photo": BytesIO(photo)}
+                if caption:
+                    kwargs["caption"] = caption
+                    kwargs["parse_mode"] = ParseMode.MARKDOWN_V2
+                message = await self._bot.send_photo(**kwargs)
                 await asyncio.sleep(SEND_INTERVAL_SECONDS)
                 return message.message_id
             except TelegramError as exc:
+                if caption and "can't parse entities" in str(exc).lower():
+                    logger.warning(
+                        "telegram_photo_caption_fallback", chat_id=chat_id, error=str(exc)
+                    )
+                    try:
+                        plain = _strip_markdown(caption)
+                        message = await self._bot.send_photo(
+                            chat_id=chat_id, photo=BytesIO(photo), caption=plain
+                        )
+                        await asyncio.sleep(SEND_INTERVAL_SECONDS)
+                        return message.message_id
+                    except TelegramError as nested:
+                        logger.warning(
+                            "telegram_photo_failed", chat_id=chat_id, error=str(nested)
+                        )
+                        return None
                 logger.warning("telegram_photo_failed", chat_id=chat_id, error=str(exc))
                 return None
 
     async def send_analysis(
         self, chat_id: int, outcome: AnalysisOutcome, text: str
     ) -> list[int]:
-        """Chart (oben) und Analyse-Text senden."""
+        """Chart oben mit Caption wenn moeglich, sonst Chart + Text darunter."""
         message_ids: list[int] = []
         chart = build_signal_chart(outcome)
-        if chart is not None:
-            photo_id = await self.send_photo(chat_id, chart)
-            if photo_id is not None:
-                message_ids.append(photo_id)
-        message_ids.extend(await self.send(chat_id, text))
-        return message_ids
+        if chart is None:
+            return await self.send(chat_id, text)
+
+        caption, body = split_caption_and_body(text)
+        photo_id = await self.send_photo(chat_id, chart, caption=caption)
+        if photo_id is not None:
+            message_ids.append(photo_id)
+            if body is not None:
+                message_ids.extend(await self.send(chat_id, body))
+            return message_ids
+
+        # Foto fehlgeschlagen → nur Text.
+        return await self.send(chat_id, text)
 
     async def _send_part(self, chat_id: int, text: str) -> int | None:
         """Einen Nachrichtenteil senden.
