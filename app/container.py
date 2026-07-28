@@ -22,6 +22,7 @@ from app.monitoring.health import HealthService
 from app.sentiment.service import SentimentService
 from app.services.analysis_service import AnalysisService
 from app.services.backtest_service import BacktestService
+from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 from app.services.universe_service import UniverseService
 from app.signals.dedup import SignalDeduplicator
@@ -42,6 +43,7 @@ class ApplicationContainer:
     analysis_service: AnalysisService
     backtest_service: BacktestService
     universe_service: UniverseService
+    paper_trading: PaperTradingService
     deduplicator: SignalDeduplicator
     health_service: HealthService
     scan_service: ScanService | None = None
@@ -98,6 +100,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     )
     backtest_service = BacktestService(provider, settings=cfg)
     universe_service = UniverseService(universe_providers, coingecko, settings=cfg)
+    paper_trading = PaperTradingService(settings=cfg)
 
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
@@ -115,6 +118,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         llm_enabled=llm_service.is_enabled,
         sentiment_enabled=cfg.enable_sentiment,
         universe_scan=cfg.enable_universe_scan,
+        paper_trading=cfg.enable_paper_trading,
     )
 
     return ApplicationContainer(
@@ -127,6 +131,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         analysis_service=analysis_service,
         backtest_service=backtest_service,
         universe_service=universe_service,
+        paper_trading=paper_trading,
         deduplicator=deduplicator,
         health_service=health_service,
     )

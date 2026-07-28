@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.database.session import get_db_session
+from app.market_data.base import MarketDataProvider
 from app.monitoring.health import HealthService
 from app.services.analysis_service import AnalysisService
 from app.services.backtest_service import BacktestService
+from app.services.paper_trading_service import PaperTradingService
 
 
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -44,6 +46,37 @@ def backtest_service(request: Request) -> BacktestService:
             detail="Backtesting ist in dieser Instanz nicht aktiviert.",
         )
     return service  # type: ignore[no-any-return]
+
+
+def paper_trading_service(request: Request) -> PaperTradingService:
+    service = getattr(request.app.state, "paper_trading", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paper-Trading ist in dieser Instanz nicht aktiviert.",
+        )
+    return service  # type: ignore[no-any-return]
+
+
+def market_data_provider(request: Request) -> MarketDataProvider:
+    provider = getattr(request.app.state, "provider", None)
+    if provider is None:
+        container = getattr(request.app.state, "container", None)
+        provider = getattr(container, "provider", None) if container is not None else None
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Marktdaten-Provider ist nicht initialisiert.",
+        )
+    return provider  # type: ignore[no-any-return]
+
+
+def universe_providers(request: Request) -> dict[str, MarketDataProvider]:
+    providers = getattr(request.app.state, "universe_providers", None)
+    if providers is None:
+        container = getattr(request.app.state, "container", None)
+        providers = getattr(container, "universe_providers", None) if container is not None else None
+    return providers or {}
 
 
 def health_service(request: Request) -> HealthService:
@@ -82,5 +115,8 @@ SessionDep = Annotated[AsyncSession, Depends(db_session)]
 SettingsDep = Annotated[Settings, Depends(settings_dependency)]
 AnalysisServiceDep = Annotated[AnalysisService, Depends(analysis_service)]
 BacktestServiceDep = Annotated[BacktestService, Depends(backtest_service)]
+PaperTradingDep = Annotated[PaperTradingService, Depends(paper_trading_service)]
+ProviderDep = Annotated[MarketDataProvider, Depends(market_data_provider)]
+UniverseProvidersDep = Annotated[dict[str, MarketDataProvider], Depends(universe_providers)]
 HealthServiceDep = Annotated[HealthService, Depends(health_service)]
 AdminGuard = Depends(require_admin_token)

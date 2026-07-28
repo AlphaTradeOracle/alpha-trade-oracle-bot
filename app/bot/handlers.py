@@ -31,9 +31,11 @@ from app.database.session import session_scope
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import ScheduledJobRepository
+from app.repositories.paper_repository import PaperRepository
 from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome, AnalysisService
 from app.services.backtest_service import BacktestService
+from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 
 logger = get_logger(__name__)
@@ -49,12 +51,13 @@ Verfuegbare Kommandos:
 /unwatch SYMBOL — Symbol aus der Watchlist entfernen
 /watchlist — aktuelle Watchlist anzeigen
 /performance — Auswertung der erzeugten Signale
+/paper — Paper-Trading Depot und offene Positionen
 /settings — aktuelle Konfiguration anzeigen
 /status — Systemstatus
 /help — diese Uebersicht
 
-Der Bot fuehrt keine Trades aus und greift nicht auf Wallets zu.
-Er liefert ausschliesslich Analysen.\
+Der Bot fuehrt keine echten Trades aus und greift nicht auf Wallets zu.
+Paper-Trading ist rein virtuell.\
 """
 
 ADMIN_HELP_TEXT = """\
@@ -77,11 +80,13 @@ class BotHandlers:
         *,
         scan_service: ScanService | None = None,
         backtest_service: BacktestService | None = None,
+        paper_trading: PaperTradingService | None = None,
     ) -> None:
         self._settings = settings
         self._analysis = analysis_service
         self._scan = scan_service
         self._backtest = backtest_service
+        self._paper = paper_trading
         self._access = AccessControl(settings)
 
     def register(self, application: Application) -> None:
@@ -96,6 +101,7 @@ class BotHandlers:
             "unwatch": self.unwatch,
             "watchlist": self.watchlist,
             "performance": self.performance,
+            "paper": self.paper,
             "settings": self.settings_command,
             "admin_status": self.admin_status,
             "run_scan": self.run_scan,
@@ -375,6 +381,73 @@ class BotHandlers:
             "",
             f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
         ]
+        await self._reply(update, "\n".join(lines))
+
+    async def paper(self, update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+        chat_id = _chat_id(update)
+        if chat_id is None or not await self._authorize(update, chat_id):
+            return
+
+        if self._paper is None or not self._settings.enable_paper_trading:
+            await self._reply(
+                update,
+                escape_markdown_v2("Paper-Trading ist derzeit deaktiviert."),
+            )
+            return
+
+        async with session_scope() as session:
+            summary = await self._paper.summary(session)
+            account = await self._paper.get_or_create_account(session)
+            open_positions = await PaperRepository(session).list_open_positions(account.id)
+            closed = await PaperRepository(session).list_closed(account.id, limit=5)
+
+        lines = [
+            f"*{escape_markdown_v2('Paper-Trading')}*",
+            "",
+            escape_markdown_v2(
+                f"Equity: ${summary.equity:,.2f}  |  Cash: ${summary.cash_balance:,.2f}"
+            ),
+            escape_markdown_v2(
+                f"Start: ${summary.initial_balance:,.2f}  |  "
+                f"Realisiert: ${summary.realized_pnl:,.2f}"
+            ),
+            escape_markdown_v2(
+                f"Offen: {summary.open_positions}  |  Margin: ${summary.open_margin:,.2f}"
+            ),
+            escape_markdown_v2(
+                f"Geschlossen: {summary.closed_trades}  |  "
+                f"Win-Rate: {summary.win_rate * 100:.0f}%  |  "
+                f"PF: {summary.profit_factor:.2f}"
+            ),
+            escape_markdown_v2(
+                f"Je Trade: ${self._settings.paper_margin_per_trade:.0f} × "
+                f"{self._settings.paper_leverage:.0f}x"
+            ),
+        ]
+
+        if open_positions:
+            lines += ["", f"*{escape_markdown_v2('Offene Positionen')}*"]
+            for pos in open_positions[:10]:
+                lines.append(
+                    escape_markdown_v2(
+                        f"{pos.symbol} {pos.direction.upper()} @ {float(pos.entry_price):.4g} "
+                        f"| SL {float(pos.current_stop):.4g} "
+                        f"| rem {float(pos.remaining_quantity):.4g}"
+                    )
+                )
+
+        if closed:
+            lines += ["", f"*{escape_markdown_v2('Letzte Abschluesse')}*"]
+            for pos in closed:
+                lines.append(
+                    escape_markdown_v2(
+                        f"{pos.symbol} {pos.direction.upper()} "
+                        f"PnL ${float(pos.realized_pnl):,.2f} "
+                        f"({pos.exit_reason or '-'})"
+                    )
+                )
+
+        lines += ["", f"⚠️ {escape_markdown_v2(DISCLAIMER)}"]
         await self._reply(update, "\n".join(lines))
 
     # --- Admin ------------------------------------------------------------

@@ -172,6 +172,7 @@ async def _run_worker() -> None:
         container.analysis_service,
         container.deduplicator,
         dispatcher=_build_telegram_dispatcher(settings),
+        paper_trading=container.paper_trading,
         settings=settings,
     )
     container.scan_service = scan_service
@@ -181,10 +182,16 @@ async def _run_worker() -> None:
         settings=settings,
         scan_service=scan_service,
         backtest_service=container.backtest_service if settings.enable_backtesting else None,
+        paper_trading=container.paper_trading if settings.enable_paper_trading else None,
     )
 
     scheduler = SchedulerRunner(
-        scan_service, settings, universe_service=container.universe_service
+        scan_service,
+        settings,
+        universe_service=container.universe_service,
+        paper_trading=container.paper_trading,
+        provider=container.provider,
+        providers=container.universe_providers,
     )
 
     stop_event = asyncio.Event()
@@ -352,6 +359,7 @@ async def _run_scan(
         container.analysis_service,
         container.deduplicator,
         dispatcher=dispatcher,
+        paper_trading=container.paper_trading,
         settings=settings,
     )
 

@@ -42,7 +42,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.container = container
     app.state.analysis_service = container.analysis_service
     app.state.backtest_service = container.backtest_service if settings.enable_backtesting else None
+    app.state.paper_trading = container.paper_trading if settings.enable_paper_trading else None
     app.state.health_service = container.health_service
+    app.state.provider = container.provider
+    app.state.universe_providers = container.universe_providers
 
     logger.info(
         "application_started",
