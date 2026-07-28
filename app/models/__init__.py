@@ -7,6 +7,7 @@ from app.models.operations import ApplicationEvent, ScheduledJob
 from app.models.signal import LLMRequest, Signal, SignalDelivery, SignalScoreComponent
 from app.models.strategy import ModelConfig, Strategy, StrategyVersion
 from app.models.user import TelegramChat, User, Watchlist
+from app.models.paper import PaperAccount, PaperFill, PaperPosition
 
 __all__ = [
     "ApplicationEvent",
@@ -19,6 +20,9 @@ __all__ = [
     "LLMRequest",
     "MarketCandle",
     "ModelConfig",
+    "PaperAccount",
+    "PaperFill",
+    "PaperPosition",
     "ScheduledJob",
     "Signal",
     "SignalDelivery",

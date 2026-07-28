@@ -10,6 +10,7 @@ from app.core.errors import ConfigurationError
 from app.core.logging import get_logger
 from app.services.analysis_service import AnalysisService
 from app.services.backtest_service import BacktestService
+from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 
 logger = get_logger(__name__)
@@ -21,6 +22,7 @@ def build_bot_application(
     settings: Settings | None = None,
     scan_service: ScanService | None = None,
     backtest_service: BacktestService | None = None,
+    paper_trading: PaperTradingService | None = None,
 ) -> Application:
     """Telegram-Application mit allen Handlern erzeugen."""
     cfg = settings or get_settings()
@@ -47,6 +49,7 @@ def build_bot_application(
         analysis_service,
         scan_service=scan_service,
         backtest_service=backtest_service,
+        paper_trading=paper_trading,
     )
     handlers.register(application)
     application.add_error_handler(_log_error)

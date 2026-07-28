@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     # --- Signal- und Risikoparameter --------------------------------------
     signal_min_score: float = 75.0
     signal_require_strong: bool = True
+    #: Fuer Shorts: Score darf maximal so hoch sein (Spiegel zu min_score).
+    signal_short_max_score: float = 25.0
     signal_cooldown_minutes: int = 120
     signal_expiry_multiplier: int = 4
     signal_rsi_long_max: float = 75.0
@@ -108,7 +110,18 @@ class Settings(BaseSettings):
     universe_exchanges: str = "kucoin,binance,coinbase"
     universe_ticker_fallback: bool = True
     universe_ticker_fallback_max: int = 250
+    #: Nur Coins mit market_cap_rank <= diesem Wert scannen (0 = kein Limit).
+    universe_max_rank: int = 100
     coinbase_quote_assets: str = "USD,USDC,USDT"
+
+    # --- Paper-Trading -----------------------------------------------------
+    enable_paper_trading: bool = True
+    paper_initial_balance: float = 2_000.0
+    paper_margin_per_trade: float = 100.0
+    paper_leverage: float = 5.0
+    paper_fee_percent: float = 0.1
+    paper_move_stop_to_breakeven: bool = True
+    paper_update_interval_minutes: int = 5
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

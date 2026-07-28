@@ -82,6 +82,7 @@ class SignalDeduplicator:
         min_risk_reward_ratio: float,
         min_data_quality: float = 60.0,
         require_strong: bool = False,
+        short_max_score: float | None = None,
         now: datetime | None = None,
     ) -> DedupDecision:
         """Alle Versandbedingungen pruefen."""
@@ -107,11 +108,21 @@ class SignalDeduplicator:
         if result.expires_at <= reference_time:
             return DedupDecision(False, SuppressionReason.EXPIRED, "Signal ist bereits abgelaufen")
 
-        if result.score < min_score:
+        if result.direction.is_long and result.score < min_score:
             return DedupDecision(
                 False,
                 SuppressionReason.BELOW_MIN_SCORE,
                 f"Score {result.score:.1f} unter dem Minimum von {min_score:.1f}",
+            )
+
+        short_max = (
+            short_max_score if short_max_score is not None else max(0.0, 100.0 - min_score)
+        )
+        if result.direction.is_short and result.score > short_max:
+            return DedupDecision(
+                False,
+                SuppressionReason.BELOW_MIN_SCORE,
+                f"Short-Score {result.score:.1f} ueber dem Maximum von {short_max:.1f}",
             )
 
         if result.data_quality < min_data_quality:

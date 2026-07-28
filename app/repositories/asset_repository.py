@@ -113,13 +113,19 @@ class AssetRepository:
         result = await self._session.execute(statement)
         return int(result.rowcount or 0)
 
-    async def list_universe_batch(self, limit: int) -> list[Asset]:
+    async def list_universe_batch(
+        self, limit: int, *, max_rank: int | None = None
+    ) -> list[Asset]:
         """Naechste Round-Robin-Batch aus dem aktiven Universe."""
         if limit <= 0:
             return []
+        filters = [Asset.in_universe.is_(True), Asset.is_active.is_(True)]
+        if max_rank is not None and max_rank > 0:
+            filters.append(Asset.market_cap_rank.is_not(None))
+            filters.append(Asset.market_cap_rank <= max_rank)
         result = await self._session.execute(
             select(Asset)
-            .where(Asset.in_universe.is_(True), Asset.is_active.is_(True))
+            .where(*filters)
             .order_by(nulls_first(Asset.last_scanned_at), Asset.market_cap_rank, Asset.symbol)
             .limit(limit)
         )

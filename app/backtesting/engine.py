@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -32,11 +33,16 @@ from app.signals.risk import RiskConfig, RiskManager
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
+if TYPE_CHECKING:
+    from app.core.config import Settings
+
 logger = get_logger(__name__)
 
 #: Kerzen, die vor dem ersten Signal fuer die Indikator-Aufwaermphase noetig sind.
 WARMUP_CANDLES = 210
 
+#: Anteil der Position bei TP1 / TP2 / TP3 (Summe 1.0).
+DEFAULT_SCALE_OUT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -63,6 +69,11 @@ class BacktestConfig:
     #: Nur ein Trade gleichzeitig — ohne Positionsverwaltung waere die
     #: Kapitalkurve nicht interpretierbar.
     allow_concurrent_trades: bool = False
+    #: Teilverkaeufe an TP1/TP2/TP3 statt All-or-nothing.
+    scale_out_enabled: bool = True
+    scale_out_fractions: tuple[float, float, float] = DEFAULT_SCALE_OUT_FRACTIONS
+    #: Nach TP1 Stop auf Entry (Break-even) ziehen.
+    move_stop_to_breakeven_after_tp1: bool = True
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -115,6 +126,11 @@ class SimulatedTrade:
     risk_reward_planned: float
     signal_score: float
     expires_at: datetime
+    remaining_quantity: float = 0.0
+    current_stop: float = 0.0
+    tp1_filled: bool = False
+    tp2_filled: bool = False
+    tp3_filled: bool = False
     exit_at: datetime | None = None
     exit_price: float | None = None
     exit_reason: ExitReason | None = None
@@ -124,9 +140,15 @@ class SimulatedTrade:
     pnl_percent: float = 0.0
     holding_minutes: int = 0
 
+    def __post_init__(self) -> None:
+        if self.remaining_quantity <= 0:
+            self.remaining_quantity = self.quantity
+        if self.current_stop == 0.0:
+            self.current_stop = self.stop_loss
+
     @property
     def is_closed(self) -> bool:
-        return self.exit_at is not None
+        return self.remaining_quantity <= 1e-12
 
     def to_db_row(self) -> dict[str, object]:
         return {
@@ -239,10 +261,11 @@ class BacktestEngine:
             outcome.candles_evaluated += 1
 
             if open_trade is not None:
-                closed = self._try_close(open_trade, df, i, interval_minutes)
-                if closed:
-                    equity += open_trade.net_pnl
+                realized = self._process_open_trade(open_trade, df, i, interval_minutes)
+                if realized:
+                    equity += realized
                     outcome.equity_curve.append(equity)
+                if open_trade.is_closed:
                     open_trade = None
 
             if open_trade is not None and not self._config.allow_concurrent_trades:
@@ -261,14 +284,14 @@ class BacktestEngine:
                 outcome.trades.append(trade)
 
         if open_trade is not None and not open_trade.is_closed:
-            self._close_trade(
+            realized = self._close_remaining(
                 open_trade,
                 exit_at=ensure_utc(_index_time(df, total - 1)),
                 exit_price=float(df["close"].iloc[-1]),
                 reason=ExitReason.END_OF_DATA,
                 interval_minutes=interval_minutes,
             )
-            equity += open_trade.net_pnl
+            equity += realized
             outcome.equity_curve.append(equity)
 
         self._log_completion(outcome)
@@ -300,10 +323,13 @@ class BacktestEngine:
             outcome.candles_evaluated += 1
 
             if open_trade is not None:
-                closed = self._try_close(open_trade, primary_df, i, interval_minutes)
-                if closed:
-                    equity += open_trade.net_pnl
+                realized = self._process_open_trade(
+                    open_trade, primary_df, i, interval_minutes
+                )
+                if realized:
+                    equity += realized
                     outcome.equity_curve.append(equity)
+                if open_trade.is_closed:
                     open_trade = None
 
             if open_trade is not None and not self._config.allow_concurrent_trades:
@@ -322,14 +348,14 @@ class BacktestEngine:
                 outcome.trades.append(trade)
 
         if open_trade is not None and not open_trade.is_closed:
-            self._close_trade(
+            realized = self._close_remaining(
                 open_trade,
                 exit_at=ensure_utc(_index_time(primary_df, total - 1)),
                 exit_price=float(primary_df["close"].iloc[-1]),
                 reason=ExitReason.END_OF_DATA,
                 interval_minutes=interval_minutes,
             )
-            equity += open_trade.net_pnl
+            equity += realized
             outcome.equity_curve.append(equity)
 
         self._log_completion(outcome)
@@ -511,15 +537,33 @@ class BacktestEngine:
             take_profit_2=risk.take_profit_2,
             take_profit_3=risk.take_profit_3,
             quantity=quantity,
+            remaining_quantity=quantity,
+            current_stop=risk.stop_loss,
             risk_reward_planned=risk.risk_reward_ratio,
             signal_score=signal.score,
             expires_at=signal.expires_at,
         )
 
+    def _process_open_trade(
+        self, trade: SimulatedTrade, df: pd.DataFrame, index: int, interval_minutes: int
+    ) -> float:
+        """Offenen Trade in Kerze ``index`` fortfuehren. Rueckgabe: realisiertes PnL."""
+        if self._config.scale_out_enabled:
+            return self._process_scale_out(trade, df, index, interval_minutes)
+        closed = self._try_close_full(trade, df, index, interval_minutes)
+        return trade.net_pnl if closed else 0.0
+
     def _try_close(
         self, trade: SimulatedTrade, df: pd.DataFrame, index: int, interval_minutes: int
     ) -> bool:
-        """Pruefen, ob der Trade in der Kerze ``index`` geschlossen wird."""
+        """Kompatibilitaets-Wrapper: True wenn Trade vollstaendig geschlossen."""
+        self._process_open_trade(trade, df, index, interval_minutes)
+        return trade.is_closed
+
+    def _try_close_full(
+        self, trade: SimulatedTrade, df: pd.DataFrame, index: int, interval_minutes: int
+    ) -> bool:
+        """All-or-nothing-Exit (legacy)."""
         candle_time = ensure_utc(_index_time(df, index))
         if candle_time <= trade.entry_at:
             return False
@@ -528,19 +572,16 @@ class BacktestEngine:
         low = float(df["low"].iloc[index])
         is_long = trade.direction.is_long
 
-        stop_hit = low <= trade.stop_loss if is_long else high >= trade.stop_loss
+        stop_hit = low <= trade.current_stop if is_long else high >= trade.current_stop
         tp3_hit = high >= trade.take_profit_3 if is_long else low <= trade.take_profit_3
         tp2_hit = high >= trade.take_profit_2 if is_long else low <= trade.take_profit_2
         tp1_hit = high >= trade.take_profit_1 if is_long else low <= trade.take_profit_1
 
-        # Konservative Annahme: treffen Stop und Ziel in derselben Kerze, gilt der
-        # Stop. Aus OHLC laesst sich die Reihenfolge nicht rekonstruieren, und die
-        # optimistische Annahme wuerde die Ergebnisse systematisch verschoenern.
         if stop_hit:
-            self._close_trade(
+            self._close_remaining(
                 trade,
                 exit_at=candle_time,
-                exit_price=trade.stop_loss,
+                exit_price=trade.current_stop,
                 reason=ExitReason.STOP_LOSS,
                 interval_minutes=interval_minutes,
             )
@@ -552,7 +593,7 @@ class BacktestEngine:
             (tp1_hit, trade.take_profit_1, ExitReason.TAKE_PROFIT_1),
         ):
             if hit:
-                self._close_trade(
+                self._close_remaining(
                     trade,
                     exit_at=candle_time,
                     exit_price=price,
@@ -562,7 +603,7 @@ class BacktestEngine:
                 return True
 
         if candle_time >= trade.expires_at:
-            self._close_trade(
+            self._close_remaining(
                 trade,
                 exit_at=candle_time,
                 exit_price=float(df["close"].iloc[index]),
@@ -573,6 +614,136 @@ class BacktestEngine:
 
         return False
 
+    def _process_scale_out(
+        self, trade: SimulatedTrade, df: pd.DataFrame, index: int, interval_minutes: int
+    ) -> float:
+        """Teilverkaeufe an TP1/TP2/TP3; nach TP1 Stop auf Break-even."""
+        candle_time = ensure_utc(_index_time(df, index))
+        if candle_time <= trade.entry_at or trade.remaining_quantity <= 1e-12:
+            return 0.0
+
+        high = float(df["high"].iloc[index])
+        low = float(df["low"].iloc[index])
+        is_long = trade.direction.is_long
+        realized = 0.0
+
+        stop_hit = low <= trade.current_stop if is_long else high >= trade.current_stop
+        if stop_hit:
+            return self._close_remaining(
+                trade,
+                exit_at=candle_time,
+                exit_price=trade.current_stop,
+                reason=ExitReason.STOP_LOSS,
+                interval_minutes=interval_minutes,
+            )
+
+        fractions = self._config.scale_out_fractions
+        levels = (
+            (not trade.tp1_filled, trade.take_profit_1, ExitReason.TAKE_PROFIT_1, fractions[0], 1),
+            (not trade.tp2_filled, trade.take_profit_2, ExitReason.TAKE_PROFIT_2, fractions[1], 2),
+            (not trade.tp3_filled, trade.take_profit_3, ExitReason.TAKE_PROFIT_3, fractions[2], 3),
+        )
+
+        for pending, price, reason, fraction, level in levels:
+            if not pending:
+                continue
+            hit = high >= price if is_long else low <= price
+            if not hit:
+                break
+            qty = min(trade.quantity * fraction, trade.remaining_quantity)
+            if level == 3:
+                qty = trade.remaining_quantity
+            realized += self._reduce_position(
+                trade,
+                quantity=qty,
+                exit_at=candle_time,
+                exit_price=price,
+                reason=reason,
+                interval_minutes=interval_minutes,
+            )
+            if level == 1:
+                trade.tp1_filled = True
+                if self._config.move_stop_to_breakeven_after_tp1:
+                    trade.current_stop = trade.entry_price
+            elif level == 2:
+                trade.tp2_filled = True
+            else:
+                trade.tp3_filled = True
+
+            if trade.remaining_quantity <= 1e-12:
+                return realized
+
+        if candle_time >= trade.expires_at and trade.remaining_quantity > 1e-12:
+            realized += self._close_remaining(
+                trade,
+                exit_at=candle_time,
+                exit_price=float(df["close"].iloc[index]),
+                reason=ExitReason.EXPIRED,
+                interval_minutes=interval_minutes,
+            )
+
+        return realized
+
+    def _reduce_position(
+        self,
+        trade: SimulatedTrade,
+        *,
+        quantity: float,
+        exit_at: datetime,
+        exit_price: float,
+        reason: ExitReason,
+        interval_minutes: int,
+    ) -> float:
+        if quantity <= 0 or trade.remaining_quantity <= 0:
+            return 0.0
+
+        qty = min(quantity, trade.remaining_quantity)
+        adjusted_exit = self._apply_slippage(exit_price, is_long=not trade.direction.is_long)
+        direction = 1.0 if trade.direction.is_long else -1.0
+        gross = (adjusted_exit - trade.entry_price) * qty * direction
+        fee_rate = self._config.fee_percent / 100.0
+        # Entry-Gebuehr anteilig + Exit-Gebuehr.
+        entry_fee_share = trade.entry_price * qty * fee_rate
+        exit_fee = adjusted_exit * qty * fee_rate
+        fees = entry_fee_share + exit_fee
+        net = gross - fees
+
+        trade.remaining_quantity = max(0.0, trade.remaining_quantity - qty)
+        trade.gross_pnl += gross
+        trade.fees += fees
+        trade.net_pnl += net
+        trade.exit_reason = reason
+        trade.holding_minutes = max(
+            interval_minutes,
+            int((exit_at - trade.entry_at).total_seconds() // 60),
+        )
+        invested = trade.entry_price * trade.quantity
+        trade.pnl_percent = (trade.net_pnl / invested * 100.0) if invested > 0 else 0.0
+        if trade.remaining_quantity <= 1e-12:
+            trade.exit_at = exit_at
+            trade.exit_price = adjusted_exit
+        return net
+
+    def _close_remaining(
+        self,
+        trade: SimulatedTrade,
+        *,
+        exit_at: datetime,
+        exit_price: float,
+        reason: ExitReason,
+        interval_minutes: int,
+    ) -> float:
+        if trade.remaining_quantity <= 1e-12:
+            return 0.0
+        return self._reduce_position(
+            trade,
+            quantity=trade.remaining_quantity,
+            exit_at=exit_at,
+            exit_price=exit_price,
+            reason=reason,
+            interval_minutes=interval_minutes,
+        )
+
     def _close_trade(
         self,
         trade: SimulatedTrade,
@@ -582,26 +753,13 @@ class BacktestEngine:
         reason: ExitReason,
         interval_minutes: int,
     ) -> None:
-        adjusted_exit = self._apply_slippage(exit_price, is_long=not trade.direction.is_long)
-
-        direction = 1.0 if trade.direction.is_long else -1.0
-        trade.exit_at = exit_at
-        trade.exit_price = adjusted_exit
-        trade.exit_reason = reason
-        trade.gross_pnl = (adjusted_exit - trade.entry_price) * trade.quantity * direction
-
-        # Gebuehren fallen auf beiden Seiten an.
-        fee_rate = self._config.fee_percent / 100.0
-        trade.fees = (
-            trade.entry_price * trade.quantity + adjusted_exit * trade.quantity
-        ) * fee_rate
-        trade.net_pnl = trade.gross_pnl - trade.fees
-
-        invested = trade.entry_price * trade.quantity
-        trade.pnl_percent = (trade.net_pnl / invested * 100.0) if invested > 0 else 0.0
-        trade.holding_minutes = max(
-            interval_minutes,
-            int((exit_at - trade.entry_at).total_seconds() // 60),
+        """Legacy-API: Restposition schliessen."""
+        self._close_remaining(
+            trade,
+            exit_at=exit_at,
+            exit_price=exit_price,
+            reason=reason,
+            interval_minutes=interval_minutes,
         )
 
     def _apply_slippage(self, price: float, *, is_long: bool) -> float:

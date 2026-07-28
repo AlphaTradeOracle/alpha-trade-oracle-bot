@@ -224,6 +224,56 @@ class TestLookAheadFreedom:
         assert engine._try_close(trade, df, 1, 60) is True
         assert trade.exit_reason is ExitReason.STOP_LOSS
 
+    def test_scale_out_partial_then_breakeven_stop(self) -> None:
+        engine = BacktestEngine(
+            make_config(
+                fee_percent=0.0,
+                slippage_percent=0.0,
+                scale_out_enabled=True,
+                move_stop_to_breakeven_after_tp1=True,
+            )
+        )
+        trade = SimulatedTrade(
+            symbol="BTCUSDT",
+            timeframe="1h",
+            direction=SignalDirection.LONG,
+            entry_at=datetime(2024, 1, 1, tzinfo=UTC),
+            entry_price=100.0,
+            stop_loss=95.0,
+            take_profit_1=110.0,
+            take_profit_2=120.0,
+            take_profit_3=130.0,
+            quantity=3.0,
+            risk_reward_planned=2.0,
+            signal_score=70.0,
+            expires_at=datetime(2024, 1, 10, tzinfo=UTC),
+        )
+        df = pd.DataFrame(
+            {
+                "open": [100.0, 100.0, 100.0],
+                "high": [100.0, 111.0, 100.0],
+                "low": [100.0, 99.0, 99.5],
+                "close": [100.0, 110.0, 100.0],
+                "volume": [1.0, 1.0, 1.0],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    datetime(2024, 1, 1, tzinfo=UTC),
+                    datetime(2024, 1, 1, 1, tzinfo=UTC),
+                    datetime(2024, 1, 1, 2, tzinfo=UTC),
+                ]
+            ),
+        )
+
+        assert engine._try_close(trade, df, 1, 60) is False
+        assert trade.tp1_filled is True
+        assert trade.current_stop == pytest.approx(100.0)
+        assert trade.remaining_quantity == pytest.approx(2.0)
+
+        assert engine._try_close(trade, df, 2, 60) is True
+        assert trade.exit_reason is ExitReason.STOP_LOSS
+        assert trade.net_pnl == pytest.approx(10.0)  # 1 unit @ +10 from TP1; rest @ BE
+
 
     def test_cooldown_reduces_trade_count(self, uptrend_df: pd.DataFrame) -> None:
         relaxed = make_config(cooldown_minutes=0)
@@ -263,6 +313,7 @@ class TestLookAheadFreedom:
         trade.exit_at = datetime(2024, 1, 1, 2, tzinfo=UTC)
         trade.exit_price = 100.0 + net_pnl
         trade.exit_reason = ExitReason.TAKE_PROFIT_1 if net_pnl > 0 else ExitReason.STOP_LOSS
+        trade.remaining_quantity = 0.0
         trade.gross_pnl = net_pnl
         trade.fees = 0.0
         trade.net_pnl = net_pnl

@@ -19,6 +19,7 @@ from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import EventRepository
 from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome, AnalysisService
+from app.services.paper_trading_service import PaperTradingService
 from app.signals.dedup import SignalDeduplicator
 
 logger = get_logger(__name__)
@@ -71,12 +72,14 @@ class ScanService:
         deduplicator: SignalDeduplicator,
         *,
         dispatcher: SignalDispatcher | None = None,
+        paper_trading: PaperTradingService | None = None,
         settings: Settings | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._analysis = analysis_service
         self._dedup = deduplicator
         self._dispatcher = dispatcher
+        self._paper = paper_trading
 
     async def scan(
         self,
@@ -167,6 +170,7 @@ class ScanService:
         decision = await self._dedup.evaluate(
             outcome.result,
             min_score=self._settings.signal_min_score,
+            short_max_score=self._settings.signal_short_max_score,
             min_risk_reward_ratio=self._settings.min_risk_reward_ratio,
             require_strong=self._settings.signal_require_strong,
         )
@@ -193,7 +197,12 @@ class ScanService:
                 score=outcome.result.score,
                 universe_mode=universe_mode,
             )
+            if self._paper is not None and self._paper.enabled:
+                await self._paper.open_from_signal(session, outcome)
             return
+
+        if self._paper is not None and self._paper.enabled:
+            await self._paper.open_from_signal(session, outcome)
 
         deliveries = await self._dispatcher.dispatch(outcome)
         sent_any = False
@@ -258,7 +267,8 @@ class ScanService:
 
         if use_universe:
             batch = await AssetRepository(session).list_universe_batch(
-                self._settings.universe_scan_batch_size
+                self._settings.universe_scan_batch_size,
+                max_rank=self._settings.universe_max_rank or None,
             )
             if batch:
                 return [asset.symbol for asset in batch]
