@@ -44,6 +44,7 @@ class AnalysisOutcome:
     asset_id: int | None = None
     llm_analysis: LLMAnalysisResponse | None = None
     llm_call: LLMCallResult | None = None
+    chart_series: CandleSeries | None = None
     #: Timeframes, die wegen Datenmangel oder API-Fehler ausgelassen wurden.
     skipped_timeframes: list[str] = None  # type: ignore[assignment]
 
@@ -161,6 +162,7 @@ class AnalysisService:
             result=result,
             price_precision=info.price_precision,
             skipped_timeframes=skipped,
+            chart_series=self._select_chart_series(series_map, result.primary_timeframe),
         )
 
         await self._attach_llm_summary(outcome, use_llm=use_llm)
@@ -169,6 +171,22 @@ class AnalysisService:
             await self._persist(session, outcome, info, indicator_sets, series_map, version_id)
 
         return outcome
+
+    def _select_chart_series(
+        self, series_map: dict[str, CandleSeries], primary_timeframe: str
+    ) -> CandleSeries | None:
+        """Kerzen fuer das Telegram-Chart (primaerer Timeframe, sonst Fallback)."""
+        preferred = series_map.get(primary_timeframe)
+        if preferred is not None and not preferred.is_empty:
+            return preferred
+        for timeframe in self._settings.timeframes:
+            series = series_map.get(timeframe)
+            if series is not None and not series.is_empty:
+                return series
+        for series in series_map.values():
+            if not series.is_empty:
+                return series
+        return None
 
     # --- Teilschritte -----------------------------------------------------
 

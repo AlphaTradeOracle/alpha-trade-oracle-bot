@@ -24,6 +24,7 @@ dependencies = [
     "structlog>=24.4",
     "typer>=0.13",
     "tenacity>=9.0",
+    "matplotlib>=3.9",
 ]
 
 [project.optional-dependencies]
@@ -83,7 +84,7 @@ strict_equality = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pandas.*", "apscheduler.*", "telegram.*", "scripts.*"]
+module = ["pandas.*", "apscheduler.*", "telegram.*", "scripts.*", "matplotlib.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
