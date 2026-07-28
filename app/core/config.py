@@ -116,9 +116,9 @@ class Settings(BaseSettings):
 
     # --- Paper-Trading -----------------------------------------------------
     enable_paper_trading: bool = True
-    paper_initial_balance: float = 2_000.0
+    paper_initial_balance: float = 5_000.0
     paper_margin_per_trade: float = 100.0
-    paper_leverage: float = 5.0
+    paper_leverage: float = 10.0
     paper_fee_percent: float = 0.1
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5

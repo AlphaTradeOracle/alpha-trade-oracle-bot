@@ -29,6 +29,9 @@ class PaperRepository:
         )
         account = result.scalar_one_or_none()
         if account is not None:
+            # Keep cash/initial intact; sync trade sizing from settings.
+            account.margin_per_trade = margin_per_trade
+            account.leverage = leverage
             return account
 
         account = PaperAccount(
