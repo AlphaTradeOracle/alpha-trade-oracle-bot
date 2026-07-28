@@ -37,9 +37,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_HOST=0.0.0.0 \
     APP_PORT=8000
 
-# curl wird vom Healthcheck benoetigt.
+# curl wird vom Healthcheck benoetigt; matplotlib braucht libfreetype fuer Font-Rendering.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl libfreetype6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Anwendung laeuft nicht als root.

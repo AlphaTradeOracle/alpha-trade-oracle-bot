@@ -72,11 +72,10 @@ async def run(symbol: str, *, use_llm: bool, chat_id: int | None) -> int:
         breakdown = format_score_breakdown(result)
 
         print(f"Sende Analyse an Chat {target_chat} ...")
-        for part in split_message(message):
-            message_id = await notifier.send(target_chat, part)
-            if message_id is None:
-                print("Telegram-Versand fehlgeschlagen.", file=sys.stderr)
-                return 1
+        message_ids = await notifier.send_analysis(target_chat, outcome, message)
+        if not message_ids:
+            print("Telegram-Versand fehlgeschlagen.", file=sys.stderr)
+            return 1
 
         await notifier.send(target_chat, breakdown)
         print("Fertig. Pruefe Telegram — die Analyse sollte dort angekommen sein.")

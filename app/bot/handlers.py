@@ -14,6 +14,7 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from app.bot.auth import AccessControl
+from app.bot.delivery import deliver_analysis_with_chart, reply_photo
 from app.bot.formatting import (
     DISCLAIMER,
     escape_markdown_v2,
@@ -31,7 +32,7 @@ from app.repositories.asset_repository import AssetRepository
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import ScheduledJobRepository
 from app.repositories.signal_repository import SignalRepository
-from app.services.analysis_service import AnalysisService
+from app.services.analysis_service import AnalysisOutcome, AnalysisService
 from app.services.backtest_service import BacktestService
 from app.services.scan_service import ScanService
 
@@ -226,7 +227,7 @@ class BotHandlers:
                     display_timezone=self._settings.display_timezone,
                     llm_analysis=outcome.llm_analysis,
                 )
-                await self._reply(update, text)
+                await self._reply_analysis(update, outcome, text)
 
                 if not compact:
                     await self._reply(update, format_score_breakdown(outcome.result))
@@ -538,6 +539,26 @@ class BotHandlers:
             return None
         candidate = args[0].upper().strip().replace("/", "").replace("-", "")
         return candidate or None
+
+    @staticmethod
+    async def _reply_analysis(update: Update, outcome: AnalysisOutcome, text: str) -> None:
+        """Chart und Analyse-Text als Antwort senden."""
+        message = update.effective_message
+        if message is None:
+            return
+
+        async def send_text(payload: str) -> None:
+            await BotHandlers._reply(update, payload)
+
+        async def send_photo(photo: bytes) -> None:
+            await reply_photo(message, photo)
+
+        await deliver_analysis_with_chart(
+            outcome,
+            text,
+            send_text=send_text,
+            send_photo=send_photo,
+        )
 
     @staticmethod
     async def _reply(update: Update, text: str) -> None:
