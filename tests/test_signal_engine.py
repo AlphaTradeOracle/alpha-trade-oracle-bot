@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -132,7 +133,7 @@ class TestNoTradeRules:
     def test_excessive_volatility_forces_no_trade(
         self, uptrend_indicators: dict[str, IndicatorSet]
     ) -> None:
-        engine = SignalEngine(SignalEngineConfig(max_atr_percent=0.01))
+        engine = SignalEngine(SignalEngineConfig(max_atr_percent=0.01, rsi_long_max=100.0))
         result = engine.generate("BTCUSDT", uptrend_indicators, now=NOW)
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
@@ -141,7 +142,7 @@ class TestNoTradeRules:
     def test_insufficient_risk_reward_forces_no_trade(
         self, uptrend_indicators: dict[str, IndicatorSet]
     ) -> None:
-        engine = SignalEngine(SignalEngineConfig(min_risk_reward_ratio=99.0))
+        engine = SignalEngine(SignalEngineConfig(min_risk_reward_ratio=99.0, rsi_long_max=100.0))
         result = engine.generate("BTCUSDT", uptrend_indicators, now=NOW)
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
@@ -151,9 +152,56 @@ class TestNoTradeRules:
         self, sideways_indicators: dict[str, IndicatorSet]
     ) -> None:
         """NO_TRADE gilt nur fuer eigentlich handelbare Richtungen."""
-        result = SignalEngine().generate("BTCUSDT", sideways_indicators, now=NOW)
+        engine = SignalEngine(SignalEngineConfig(block_range_market=False, min_adx=0.0))
+        result = engine.generate("BTCUSDT", sideways_indicators, now=NOW)
         if result.direction is SignalDirection.NEUTRAL:
             assert result.no_trade_reason is None
+
+    def test_overbought_rsi_blocks_long(
+        self, uptrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        modified = dict(uptrend_indicators)
+        modified["1h"] = replace(
+            uptrend_indicators["1h"],
+            rsi_14=82.0,
+            adx_14=30.0,
+        )
+        result = SignalEngine().generate("BTCUSDT", modified, now=NOW)
+        assert result.direction is SignalDirection.NO_TRADE
+        assert result.no_trade_reason is not None
+        assert "RSI" in result.no_trade_reason
+
+    def test_oversold_rsi_blocks_short(
+        self, downtrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        modified = dict(downtrend_indicators)
+        modified["1h"] = replace(
+            downtrend_indicators["1h"],
+            rsi_14=18.0,
+            adx_14=30.0,
+        )
+        result = SignalEngine().generate("BTCUSDT", modified, now=NOW)
+        assert result.direction is SignalDirection.NO_TRADE
+        assert result.no_trade_reason is not None
+        assert "RSI" in result.no_trade_reason
+
+    def test_range_market_blocks_trade(
+        self, sideways_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        result = SignalEngine().generate("BTCUSDT", sideways_indicators, now=NOW)
+        if result.direction is SignalDirection.NO_TRADE:
+            assert result.no_trade_reason is not None
+            assert "Seitwaertsmarkt" in result.no_trade_reason
+
+    def test_low_adx_blocks_trade(self, uptrend_indicators: dict[str, IndicatorSet]) -> None:
+        modified = dict(uptrend_indicators)
+        modified["1h"] = replace(uptrend_indicators["1h"], adx_14=12.0)
+        result = SignalEngine(SignalEngineConfig(block_range_market=False)).generate(
+            "BTCUSDT", modified, now=NOW
+        )
+        assert result.direction is SignalDirection.NO_TRADE
+        assert result.no_trade_reason is not None
+        assert "ADX" in result.no_trade_reason
 
 
 class TestConfidence:

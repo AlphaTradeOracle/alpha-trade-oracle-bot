@@ -47,15 +47,55 @@ class BacktestConfig:
     fee_percent: float = 0.1
     slippage_percent: float = 0.05
     initial_capital: float = 10_000.0
-    min_score: float = 65.0
+    min_score: float = 75.0
     min_risk_reward_ratio: float = 2.0
     atr_multiplier: float = 1.5
     max_atr_percent: float = 12.0
     expiry_multiplier: int = 4
+    timeframes: tuple[str, ...] = ("15m", "1h", "4h", "1d")
+    use_multi_timeframe: bool = False
+    cooldown_minutes: int = 120
+    require_strong_signals: bool = True
+    block_range_market: bool = True
+    min_adx: float = 20.0
+    rsi_long_max: float = 75.0
+    rsi_short_min: float = 25.0
     #: Nur ein Trade gleichzeitig — ohne Positionsverwaltung waere die
     #: Kapitalkurve nicht interpretierbar.
     allow_concurrent_trades: bool = False
     weights: StrategyWeights = DEFAULT_WEIGHTS
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Settings,
+        *,
+        symbol: str,
+        timeframe: str,
+        weights: StrategyWeights = DEFAULT_WEIGHTS,
+        **overrides: object,
+    ) -> BacktestConfig:
+        """Backtest-Konfiguration aus den zentralen Settings ableiten."""
+        params: dict[str, object] = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "min_score": settings.signal_min_score,
+            "min_risk_reward_ratio": settings.min_risk_reward_ratio,
+            "atr_multiplier": settings.atr_multiplier,
+            "max_atr_percent": settings.max_atr_percent,
+            "expiry_multiplier": settings.signal_expiry_multiplier,
+            "timeframes": tuple(settings.timeframes),
+            "use_multi_timeframe": True,
+            "cooldown_minutes": settings.signal_cooldown_minutes,
+            "require_strong_signals": settings.signal_require_strong,
+            "block_range_market": settings.signal_block_range_market,
+            "min_adx": settings.signal_min_adx,
+            "rsi_long_max": settings.signal_rsi_long_max,
+            "rsi_short_min": settings.signal_rsi_short_min,
+            "weights": weights,
+        }
+        params.update(overrides)
+        return cls(**params)  # type: ignore[arg-type]
 
 
 @dataclass
@@ -125,6 +165,9 @@ class BacktestOutcome:
     candles_evaluated: int = 0
     signals_generated: int = 0
     signals_skipped_below_score: int = 0
+    signals_skipped_no_trade: int = 0
+    signals_skipped_not_strong: int = 0
+    signals_skipped_cooldown: int = 0
 
 
 class BacktestEngine:
@@ -133,16 +176,22 @@ class BacktestEngine:
     def __init__(self, config: BacktestConfig) -> None:
         self._config = config
         self._indicators = IndicatorEngine(min_candles=WARMUP_CANDLES)
+        engine_config = SignalEngineConfig(
+            weights=config.weights,
+            primary_timeframe=config.timeframe,
+            confirmation_timeframe="4h",
+            min_risk_reward_ratio=config.min_risk_reward_ratio,
+            max_atr_percent=config.max_atr_percent,
+            expiry_multiplier=config.expiry_multiplier,
+            enable_sentiment=False,
+            block_range_market=config.block_range_market,
+            min_adx=config.min_adx,
+            rsi_long_max=config.rsi_long_max,
+            rsi_short_min=config.rsi_short_min,
+            strategy_version_label="backtest:1",
+        )
         self._signal_engine = SignalEngine(
-            SignalEngineConfig(
-                weights=config.weights,
-                primary_timeframe=config.timeframe,
-                confirmation_timeframe=config.timeframe,
-                min_risk_reward_ratio=config.min_risk_reward_ratio,
-                max_atr_percent=config.max_atr_percent,
-                expiry_multiplier=config.expiry_multiplier,
-                enable_sentiment=False,
-            ),
+            engine_config,
             RiskManager(
                 RiskConfig(
                     atr_multiplier=config.atr_multiplier,
@@ -152,7 +201,23 @@ class BacktestEngine:
             ),
         )
 
-    def run(self, df: pd.DataFrame) -> BacktestOutcome:
+    def run(
+        self,
+        df: pd.DataFrame | None = None,
+        *,
+        mtf_frames: dict[str, pd.DataFrame] | None = None,
+    ) -> BacktestOutcome:
+        """Backtest auf historischen OHLCV-Daten ausfuehren."""
+        if mtf_frames is not None:
+            return self._run_mtf(mtf_frames)
+        if df is None:
+            raise BacktestError(
+                "Es wurden weder ein DataFrame noch Multi-Timeframe-Daten uebergeben.",
+                detail="run(df=...) oder run(mtf_frames={...}) verwenden",
+            )
+        return self._run_single(df)
+
+    def _run_single(self, df: pd.DataFrame) -> BacktestOutcome:
         """Backtest auf einem OHLCV-DataFrame ausfuehren.
 
         Args:
@@ -166,12 +231,10 @@ class BacktestEngine:
         outcome.equity_curve.append(equity)
 
         open_trade: SimulatedTrade | None = None
+        last_entry_at: datetime | None = None
         interval_minutes = timeframe_minutes(self._config.timeframe)
         total = len(df)
 
-        # Der Einstieg erfolgt auf Kerze i + 1, die Ausstiegspruefung fruehestens
-        # auf i + 2. Beide muessen existieren, sonst entstuende ein Trade mit
-        # Haltedauer null, der die Statistik verzerrt.
         for i in range(WARMUP_CANDLES, total - 2):
             outcome.candles_evaluated += 1
 
@@ -185,28 +248,18 @@ class BacktestEngine:
             if open_trade is not None and not self._config.allow_concurrent_trades:
                 continue
 
-            # Kernpunkt der Look-ahead-Freiheit: nur Daten bis einschliesslich i.
             window = df.iloc[: i + 1]
             signal = self._generate_signal(window, i)
-            if signal is None:
+            if not self._should_take_signal(signal, window, i, last_entry_at, outcome):
                 continue
 
             outcome.signals_generated += 1
-            if signal.score < self._config.min_score and signal.direction.is_long:
-                outcome.signals_skipped_below_score += 1
-                continue
-            if signal.direction.is_short and (100.0 - signal.score) < self._config.min_score:
-                outcome.signals_skipped_below_score += 1
-                continue
-            if signal.risk is None:
-                continue
-
-            trade = self._open_trade(signal, df, i, equity)
+            trade = self._open_trade(signal, df, i, equity)  # type: ignore[arg-type]
             if trade is not None:
                 open_trade = trade
+                last_entry_at = trade.entry_at
                 outcome.trades.append(trade)
 
-        # Offener Trade am Datenende schliessen, damit die Statistik konsistent ist.
         if open_trade is not None and not open_trade.is_closed:
             self._close_trade(
                 open_trade,
@@ -218,6 +271,116 @@ class BacktestEngine:
             equity += open_trade.net_pnl
             outcome.equity_curve.append(equity)
 
+        self._log_completion(outcome)
+        return outcome
+
+    def _run_mtf(self, mtf_frames: dict[str, pd.DataFrame]) -> BacktestOutcome:
+        """Multi-Timeframe-Backtest — identische Logik wie im Live-Scan."""
+        primary_tf = self._config.timeframe
+        if primary_tf not in mtf_frames:
+            raise BacktestError(
+                f"Primaerer Timeframe {primary_tf!r} fehlt in den geladenen Daten.",
+                detail=f"Vorhanden: {', '.join(sorted(mtf_frames))}",
+            )
+
+        for timeframe, frame in mtf_frames.items():
+            self._validate(frame, label=timeframe)
+
+        primary_df = mtf_frames[primary_tf]
+        outcome = BacktestOutcome(config=self._config)
+        equity = self._config.initial_capital
+        outcome.equity_curve.append(equity)
+
+        open_trade: SimulatedTrade | None = None
+        last_entry_at: datetime | None = None
+        interval_minutes = timeframe_minutes(primary_tf)
+        total = len(primary_df)
+
+        for i in range(WARMUP_CANDLES, total - 2):
+            outcome.candles_evaluated += 1
+
+            if open_trade is not None:
+                closed = self._try_close(open_trade, primary_df, i, interval_minutes)
+                if closed:
+                    equity += open_trade.net_pnl
+                    outcome.equity_curve.append(equity)
+                    open_trade = None
+
+            if open_trade is not None and not self._config.allow_concurrent_trades:
+                continue
+
+            cutoff = ensure_utc(_index_time(primary_df, i))
+            signal = self._generate_signal_mtf(mtf_frames, cutoff, i)
+            if not self._should_take_signal(signal, primary_df, i, last_entry_at, outcome):
+                continue
+
+            outcome.signals_generated += 1
+            trade = self._open_trade(signal, primary_df, i, equity)  # type: ignore[arg-type]
+            if trade is not None:
+                open_trade = trade
+                last_entry_at = trade.entry_at
+                outcome.trades.append(trade)
+
+        if open_trade is not None and not open_trade.is_closed:
+            self._close_trade(
+                open_trade,
+                exit_at=ensure_utc(_index_time(primary_df, total - 1)),
+                exit_price=float(primary_df["close"].iloc[-1]),
+                reason=ExitReason.END_OF_DATA,
+                interval_minutes=interval_minutes,
+            )
+            equity += open_trade.net_pnl
+            outcome.equity_curve.append(equity)
+
+        self._log_completion(outcome)
+        return outcome
+
+    def _should_take_signal(
+        self,
+        signal: SignalResult | None,
+        df: pd.DataFrame,
+        index: int,
+        last_entry_at: datetime | None,
+        outcome: BacktestOutcome,
+    ) -> bool:
+        if signal is None:
+            return False
+
+        if signal.direction is SignalDirection.NO_TRADE or signal.no_trade_reason:
+            outcome.signals_skipped_no_trade += 1
+            return False
+
+        if not signal.direction.is_actionable:
+            outcome.signals_skipped_no_trade += 1
+            return False
+
+        if self._config.require_strong_signals and signal.direction not in {
+            SignalDirection.STRONG_LONG,
+            SignalDirection.STRONG_SHORT,
+        }:
+            outcome.signals_skipped_not_strong += 1
+            return False
+
+        if signal.score < self._config.min_score and signal.direction.is_long:
+            outcome.signals_skipped_below_score += 1
+            return False
+        if signal.direction.is_short and (100.0 - signal.score) < self._config.min_score:
+            outcome.signals_skipped_below_score += 1
+            return False
+
+        if signal.risk is None:
+            return False
+
+        if self._config.cooldown_minutes > 0 and last_entry_at is not None:
+            candle_time = ensure_utc(_index_time(df, index))
+            elapsed = (candle_time - last_entry_at).total_seconds() / 60.0
+            if elapsed < self._config.cooldown_minutes:
+                outcome.signals_skipped_cooldown += 1
+                return False
+
+        return True
+
+    def _log_completion(self, outcome: BacktestOutcome) -> None:
         logger.info(
             "backtest_completed",
             symbol=self._config.symbol,
@@ -225,29 +388,32 @@ class BacktestEngine:
             candles=outcome.candles_evaluated,
             signals=outcome.signals_generated,
             trades=len(outcome.trades),
+            skipped_no_trade=outcome.signals_skipped_no_trade,
+            skipped_not_strong=outcome.signals_skipped_not_strong,
+            skipped_cooldown=outcome.signals_skipped_cooldown,
         )
-        return outcome
 
     # --- Teilschritte -----------------------------------------------------
 
-    def _validate(self, df: pd.DataFrame) -> None:
+    def _validate(self, df: pd.DataFrame, *, label: str | None = None) -> None:
+        prefix = f"{label}: " if label else ""
         required = ("open", "high", "low", "close", "volume")
         missing = [column for column in required if column not in df.columns]
         if missing:
             raise BacktestError(
-                f"OHLCV-Daten fehlen Spalten: {', '.join(missing)}",
+                f"{prefix}OHLCV-Daten fehlen Spalten: {', '.join(missing)}",
                 detail=f"Erwartet: {', '.join(required)}",
             )
         if len(df) < WARMUP_CANDLES + 10:
             raise BacktestError(
-                f"Zu wenige Kerzen fuer einen Backtest: {len(df)} vorhanden, "
+                f"{prefix}Zu wenige Kerzen fuer einen Backtest: {len(df)} vorhanden, "
                 f"mindestens {WARMUP_CANDLES + 10} benoetigt.",
                 detail="Zeitraum vergroessern oder kleineren Timeframe waehlen",
             )
         if not df.index.is_monotonic_increasing:
-            raise BacktestError("OHLCV-Daten muessen aufsteigend nach Zeit sortiert sein.")
+            raise BacktestError(f"{prefix}OHLCV-Daten muessen aufsteigend nach Zeit sortiert sein.")
 
-    def _generate_signal(self, window: pd.DataFrame, index: int):  # type: ignore[no-untyped-def]
+    def _generate_signal(self, window: pd.DataFrame, index: int) -> SignalResult | None:
         try:
             indicators = self._indicators.compute(
                 window, self._config.timeframe, symbol=self._config.symbol, strict=False
@@ -261,6 +427,43 @@ class BacktestEngine:
             )
         except Exception as exc:
             logger.debug("backtest_signal_skipped", index=index, error=str(exc))
+            return None
+
+    def _generate_signal_mtf(
+        self,
+        mtf_frames: dict[str, pd.DataFrame],
+        cutoff: datetime,
+        index: int,
+    ) -> SignalResult | None:
+        """Signale mit allen Timeframes bis zum Stichtag erzeugen."""
+        try:
+            indicator_sets: dict[str, object] = {}
+            requested = self._config.timeframes or tuple(mtf_frames)
+            for timeframe in requested:
+                frame = mtf_frames.get(timeframe)
+                if frame is None:
+                    continue
+                mask = frame.index <= cutoff
+                window = frame.loc[mask]
+                if len(window) < WARMUP_CANDLES:
+                    continue
+                indicator_sets[timeframe] = self._indicators.compute(
+                    window, timeframe, symbol=self._config.symbol, strict=False
+                )
+
+            if not indicator_sets:
+                return None
+
+            coverage = len(indicator_sets) / max(len(requested), 1)
+            data_quality = 100.0 * coverage
+            return self._signal_engine.generate(
+                self._config.symbol,
+                indicator_sets,  # type: ignore[arg-type]
+                data_quality=data_quality,
+                now=cutoff,
+            )
+        except Exception as exc:
+            logger.debug("backtest_mtf_signal_skipped", index=index, error=str(exc))
             return None
 
     def _open_trade(

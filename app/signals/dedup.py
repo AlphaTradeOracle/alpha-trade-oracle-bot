@@ -81,6 +81,7 @@ class SignalDeduplicator:
         min_score: float,
         min_risk_reward_ratio: float,
         min_data_quality: float = 60.0,
+        require_strong: bool = False,
         now: datetime | None = None,
     ) -> DedupDecision:
         """Alle Versandbedingungen pruefen."""
@@ -91,6 +92,16 @@ class SignalDeduplicator:
                 False,
                 SuppressionReason.NOT_ACTIONABLE,
                 result.no_trade_reason or f"Richtung {result.direction.value}",
+            )
+
+        if require_strong and result.direction not in {
+            SignalDirection.STRONG_LONG,
+            SignalDirection.STRONG_SHORT,
+        }:
+            return DedupDecision(
+                False,
+                SuppressionReason.NOT_STRONG,
+                f"Nur STRONG-Signale erlaubt, erhalten: {result.direction.value}",
             )
 
         if result.expires_at <= reference_time:

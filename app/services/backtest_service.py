@@ -68,21 +68,6 @@ class BacktestService:
                 detail=f"start={start_utc.isoformat()} end={end_utc.isoformat()}",
             )
 
-        warmup_start = start_utc - timeframe_to_timedelta(timeframe) * WARMUP_CANDLES
-        series = await self._provider.get_candles(
-            normalized, timeframe, limit=100_000, start_time=warmup_start, end_time=end_utc
-        )
-        if series.is_empty:
-            raise BacktestError(
-                f"Fuer {normalized} {timeframe} wurden im Zeitraum keine Kerzen gefunden.",
-                detail=f"{start_utc.date()} bis {end_utc.date()}",
-            )
-
-        df = series.to_dataframe()
-        capital = (
-            initial_capital if initial_capital is not None else self._settings.reference_capital
-        )
-
         weights = DEFAULT_WEIGHTS
         strategy_version_id: int | None = None
         if session is not None:
@@ -90,19 +75,48 @@ class BacktestService:
             if loaded_weights is not None:
                 weights = loaded_weights
 
-        config = BacktestConfig(
+        config = BacktestConfig.from_settings(
+            self._settings,
             symbol=normalized,
             timeframe=timeframe,
+            weights=weights,
             fee_percent=fee_percent,
             slippage_percent=slippage_percent,
-            initial_capital=capital,
-            min_score=self._settings.signal_min_score,
-            min_risk_reward_ratio=self._settings.min_risk_reward_ratio,
-            atr_multiplier=self._settings.atr_multiplier,
-            max_atr_percent=self._settings.max_atr_percent,
-            expiry_multiplier=self._settings.signal_expiry_multiplier,
-            weights=weights,
+            initial_capital=(
+                initial_capital if initial_capital is not None else self._settings.reference_capital
+            ),
         )
+
+        timeframes = list(config.timeframes) if config.use_multi_timeframe else [timeframe]
+        mtf_frames: dict[str, object] = {}
+        candles_loaded = 0
+
+        for tf in timeframes:
+            warmup_start = start_utc - timeframe_to_timedelta(tf) * WARMUP_CANDLES
+            series = await self._provider.get_candles(
+                normalized, tf, limit=100_000, start_time=warmup_start, end_time=end_utc
+            )
+            if series.is_empty:
+                if tf == timeframe:
+                    raise BacktestError(
+                        f"Fuer {normalized} {tf} wurden im Zeitraum keine Kerzen gefunden.",
+                        detail=f"{start_utc.date()} bis {end_utc.date()}",
+                    )
+                logger.warning(
+                    "backtest_timeframe_skipped",
+                    symbol=normalized,
+                    timeframe=tf,
+                    reason="no_candles",
+                )
+                continue
+            mtf_frames[tf] = series.to_dataframe()
+            candles_loaded += len(series)
+
+        if timeframe not in mtf_frames:
+            raise BacktestError(
+                f"Fuer {normalized} {timeframe} wurden im Zeitraum keine Kerzen gefunden.",
+                detail=f"{start_utc.date()} bis {end_utc.date()}",
+            )
 
         repository = BacktestRepository(session) if session is not None and persist else None
         run_id: int | None = None
@@ -113,7 +127,7 @@ class BacktestService:
                 timeframe=timeframe,
                 start_at=start_utc,
                 end_at=end_utc,
-                initial_capital=capital,
+                initial_capital=config.initial_capital,
                 fee_percent=fee_percent,
                 slippage_percent=slippage_percent,
                 strategy_version_id=strategy_version_id,
@@ -122,13 +136,21 @@ class BacktestService:
                     "min_risk_reward_ratio": config.min_risk_reward_ratio,
                     "atr_multiplier": config.atr_multiplier,
                     "warmup_candles": WARMUP_CANDLES,
+                    "use_multi_timeframe": config.use_multi_timeframe,
+                    "timeframes": list(config.timeframes),
+                    "cooldown_minutes": config.cooldown_minutes,
+                    "require_strong_signals": config.require_strong_signals,
                     "weights": weights.model_dump(),
                 },
             )
             run_id = run.id
 
         try:
-            outcome = BacktestEngine(config).run(df)
+            engine = BacktestEngine(config)
+            if config.use_multi_timeframe and len(mtf_frames) > 1:
+                outcome = engine.run(mtf_frames=mtf_frames)  # type: ignore[arg-type]
+            else:
+                outcome = engine.run(mtf_frames[timeframe])  # type: ignore[arg-type]
             metrics = compute_metrics(outcome)
         except Exception as exc:
             if repository is not None and run_id is not None:
@@ -156,5 +178,5 @@ class BacktestService:
         )
 
         return BacktestReport(
-            run_id=run_id, outcome=outcome, metrics=metrics, candles_loaded=len(series)
+            run_id=run_id, outcome=outcome, metrics=metrics, candles_loaded=candles_loaded
         )

@@ -26,7 +26,7 @@ from app.repositories.asset_repository import AssetRepository
 from app.repositories.signal_repository import SignalRepository
 from app.repositories.strategy_repository import StrategyRepository
 from app.sentiment.service import SentimentService
-from app.signals.engine import SignalEngine, SignalEngineConfig
+from app.signals.engine import SignalEngine, signal_engine_config_from_settings
 from app.signals.risk import RiskConfig, RiskManager
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
@@ -241,12 +241,9 @@ class AnalysisService:
                 reference_capital=self._settings.reference_capital,
             )
         )
-        config = SignalEngineConfig(
+        config = signal_engine_config_from_settings(
+            self._settings,
             weights=weights,
-            primary_timeframe=self._settings.primary_timeframe,
-            min_risk_reward_ratio=self._settings.min_risk_reward_ratio,
-            max_atr_percent=self._settings.max_atr_percent,
-            expiry_multiplier=self._settings.signal_expiry_multiplier,
             enable_sentiment=self._settings.enable_sentiment,
         )
         return SignalEngine(config, risk_manager)

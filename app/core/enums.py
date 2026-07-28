@@ -79,6 +79,7 @@ class SuppressionReason(StrEnum):
     COOLDOWN = "cooldown"
     DUPLICATE = "duplicate"
     BELOW_MIN_SCORE = "below_min_score"
+    NOT_STRONG = "not_strong"
     NOT_ACTIONABLE = "not_actionable"
     EXPIRED = "expired"
     LOW_DATA_QUALITY = "low_data_quality"

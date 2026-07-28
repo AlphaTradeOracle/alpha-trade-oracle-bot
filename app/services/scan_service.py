@@ -172,6 +172,7 @@ class ScanService:
             outcome.result,
             min_score=self._settings.signal_min_score,
             min_risk_reward_ratio=self._settings.min_risk_reward_ratio,
+            require_strong=self._settings.signal_require_strong,
         )
 
         signals = SignalRepository(session)

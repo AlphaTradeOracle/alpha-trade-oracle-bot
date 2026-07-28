@@ -10,6 +10,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from app.core.config import Settings
 from app.core.enums import (
     Confidence,
     MarketPhase,
@@ -60,7 +61,35 @@ class SignalEngineConfig:
     max_atr_percent: float = 12.0
     expiry_multiplier: int = 4
     enable_sentiment: bool = False
+    block_range_market: bool = True
+    min_adx: float = 20.0
+    rsi_long_max: float = 75.0
+    rsi_short_min: float = 25.0
     strategy_version_label: str = "default:1"
+
+
+def signal_engine_config_from_settings(
+    settings: Settings,
+    *,
+    weights: StrategyWeights = DEFAULT_WEIGHTS,
+    enable_sentiment: bool | None = None,
+) -> SignalEngineConfig:
+    """SignalEngineConfig aus den zentralen Settings ableiten."""
+    return SignalEngineConfig(
+        weights=weights,
+        primary_timeframe=settings.primary_timeframe,
+        confirmation_timeframe="4h",
+        min_risk_reward_ratio=settings.min_risk_reward_ratio,
+        max_atr_percent=settings.max_atr_percent,
+        expiry_multiplier=settings.signal_expiry_multiplier,
+        enable_sentiment=(
+            settings.enable_sentiment if enable_sentiment is None else enable_sentiment
+        ),
+        block_range_market=settings.signal_block_range_market,
+        min_adx=settings.signal_min_adx,
+        rsi_long_max=settings.signal_rsi_long_max,
+        rsi_short_min=settings.signal_rsi_short_min,
+    )
 
 
 class SignalEngine:
@@ -133,13 +162,19 @@ class SignalEngine:
 
         score = self._weighted_score(components)
         direction = self._determine_direction(score, agreement)
+        market_phase = determine_market_phase(assessments, primary_timeframe)
 
-        no_trade_reason = self._check_no_trade(direction, primary_indicators, risk, data_quality)
+        no_trade_reason = self._check_no_trade(
+            direction,
+            primary_indicators,
+            risk,
+            data_quality,
+            market_phase=market_phase,
+        )
         if no_trade_reason is not None:
             direction = SignalDirection.NO_TRADE
 
         confidence = self._determine_confidence(score, agreement, data_quality)
-        market_phase = determine_market_phase(assessments, primary_timeframe)
         reasons, counter_arguments = self._build_arguments(direction, components, assessments, risk)
 
         expires_at = created_at + self._expiry_duration(primary_timeframe)
@@ -300,6 +335,8 @@ class SignalEngine:
         indicators: IndicatorSet,
         risk: object | None,
         data_quality: float,
+        *,
+        market_phase: MarketPhase,
     ) -> str | None:
         """Harte Ausschlusskriterien. Sie ueberschreiben jede Richtung."""
         if not direction.is_actionable:
@@ -310,6 +347,32 @@ class SignalEngine:
                 f"Datenqualitaet {data_quality:.0f} liegt unter dem Minimum "
                 f"von {MIN_DATA_QUALITY:.0f}"
             )
+
+        if self._config.block_range_market and market_phase is MarketPhase.RANGE:
+            adx_text = (
+                f" (ADX {indicators.adx_14:.1f})"
+                if indicators.adx_14 is not None
+                else ""
+            )
+            return f"Seitwaertsmarkt ohne Trendstaerke{adx_text} — kein klares Setup"
+
+        if indicators.adx_14 is not None and indicators.adx_14 < self._config.min_adx:
+            return (
+                f"Trendstaerke zu gering (ADX {indicators.adx_14:.1f} "
+                f"unter Minimum {self._config.min_adx:.1f})"
+            )
+
+        if indicators.rsi_14 is not None:
+            if direction.is_long and indicators.rsi_14 > self._config.rsi_long_max:
+                return (
+                    f"RSI {indicators.rsi_14:.1f} ueberkauft "
+                    f"(Maximum fuer Longs: {self._config.rsi_long_max:.0f})"
+                )
+            if direction.is_short and indicators.rsi_14 < self._config.rsi_short_min:
+                return (
+                    f"RSI {indicators.rsi_14:.1f} ueberverkauft "
+                    f"(Minimum fuer Shorts: {self._config.rsi_short_min:.0f})"
+                )
 
         if (
             indicators.atr_percent is not None
@@ -470,4 +533,5 @@ __all__ = [
     "MarketPhase",
     "SignalEngine",
     "SignalEngineConfig",
+    "signal_engine_config_from_settings",
 ]
