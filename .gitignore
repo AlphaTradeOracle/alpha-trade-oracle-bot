@@ -27,6 +27,12 @@ coverage.xml
 *.log
 data/
 
+# Local exports / one-off outputs
+assets_db_export.txt
+scripts/*_out.json
+scripts/paper_dashboard.json
+scripts/_*.py
+
 # Cursor VPS deploy key (never commit)
 .cursor/vps_deploy_key
 .cursor/vps_deploy_key.pub
