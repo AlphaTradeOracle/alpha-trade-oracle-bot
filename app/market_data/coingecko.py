@@ -25,6 +25,12 @@ MAX_PER_PAGE = 250
 RATE_LIMIT_CALLS = 25
 RATE_LIMIT_PERIOD_SECONDS = 60.0
 
+#: CoinGecko ``market.identifier`` / ``market.name`` auf unsere Provider-Namen.
+EXCHANGE_IDENTIFIER_ALIASES: dict[str, frozenset[str]] = {
+    "kucoin": frozenset({"kucoin", "kucoin_exchange"}),
+    "binance": frozenset({"binance", "binance_us"}),
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CoinGeckoMarket:
@@ -35,6 +41,16 @@ class CoinGeckoMarket:
     name: str
     market_cap: float | None
     market_cap_rank: int
+
+
+@dataclass(frozen=True, slots=True)
+class CoinGeckoTicker:
+    """Ein Boersen-Ticker aus ``/coins/{id}/tickers``."""
+
+    base: str
+    target: str
+    market_name: str
+    market_identifier: str
 
 
 class CoinGeckoClient:
@@ -84,6 +100,22 @@ class CoinGeckoClient:
         markets = collected[:limit]
         logger.info("coingecko_top_markets_loaded", requested=limit, received=len(markets))
         return markets
+
+    async def fetch_coin_tickers(self, coin_id: str, *, max_pages: int = 2) -> list[CoinGeckoTicker]:
+        """Boersen-Ticker eines Coins laden — fuer das Mapping auf CEX-Symbole."""
+        normalized_id = coin_id.strip()
+        if not normalized_id:
+            return []
+
+        collected: list[CoinGeckoTicker] = []
+        for page in range(1, max_pages + 1):
+            batch = await self._fetch_tickers_page(normalized_id, page=page)
+            if not batch:
+                break
+            collected.extend(batch)
+            if len(batch) < 100:
+                break
+        return collected
 
     async def health_check(self) -> bool:
         try:
@@ -146,6 +178,59 @@ class CoinGeckoClient:
                 markets.append(parsed)
         return markets
 
+    async def _fetch_tickers_page(self, coin_id: str, *, page: int) -> list[CoinGeckoTicker]:
+        params = {
+            "include_exchange_logo": "false",
+            "page": page,
+            "order": "trust_score_desc",
+        }
+        await self._rate_limiter.acquire()
+        response = await request_with_retry(
+            self._client,
+            "GET",
+            f"/coins/{coin_id}/tickers",
+            max_retries=self._settings.http_max_retries,
+            params=params,
+        )
+        if response.status_code >= 400:
+            raise MarketDataError(
+                f"CoinGecko-Fehler HTTP {response.status_code} bei /coins/{coin_id}/tickers.",
+                detail=response.text[:200],
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MarketDataError(
+                "Antwort von CoinGecko war kein gueltiges JSON.",
+                detail=response.text[:200],
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise MarketDataError(
+                f"Unerwartete Antwort von CoinGecko /coins/{coin_id}/tickers.",
+                detail=str(payload)[:200],
+            )
+
+        tickers_raw = payload.get("tickers")
+        if not isinstance(tickers_raw, list):
+            return []
+
+        tickers: list[CoinGeckoTicker] = []
+        for item in tickers_raw:
+            parsed = _parse_ticker(item)
+            if parsed is not None:
+                tickers.append(parsed)
+        return tickers
+
+
+def exchange_matches_provider(ticker: CoinGeckoTicker, provider_name: str) -> bool:
+    """Pruefen, ob ein CoinGecko-Ticker zu unserem Provider passt."""
+    aliases = EXCHANGE_IDENTIFIER_ALIASES.get(provider_name.lower(), frozenset({provider_name.lower()}))
+    identifier = ticker.market_identifier.lower().strip()
+    name = ticker.market_name.lower().strip()
+    return identifier in aliases or name in aliases or provider_name.lower() in name
+
 
 def _parse_market(item: Any) -> CoinGeckoMarket | None:
     if not isinstance(item, dict):
@@ -175,4 +260,24 @@ def _parse_market(item: Any) -> CoinGeckoMarket | None:
         name=str(item.get("name") or symbol),
         market_cap=market_cap,
         market_cap_rank=rank,
+    )
+
+
+def _parse_ticker(item: Any) -> CoinGeckoTicker | None:
+    if not isinstance(item, dict):
+        return None
+    base = str(item.get("base") or "").strip().upper()
+    target = str(item.get("target") or "").strip().upper()
+    market = item.get("market")
+    if not base or not target or not isinstance(market, dict):
+        return None
+    identifier = str(market.get("identifier") or "").strip().lower()
+    name = str(market.get("name") or "").strip()
+    if not identifier and not name:
+        return None
+    return CoinGeckoTicker(
+        base=base,
+        target=target,
+        market_name=name,
+        market_identifier=identifier,
     )

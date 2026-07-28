@@ -47,3 +47,34 @@ def create_market_data_provider(
 
 def available_providers() -> list[str]:
     return sorted(_PROVIDERS)
+
+
+def parse_universe_exchange_names(settings: Settings | None = None) -> list[str]:
+    """Boersen fuer das Universe-Mapping in Prioritaetsreihenfolge."""
+    cfg = settings or get_settings()
+    primary = cfg.market_data_provider.lower().strip()
+    configured = [name.strip().lower() for name in cfg.universe_exchanges.split(",") if name.strip()]
+    ordered: list[str] = []
+
+    if primary:
+        ordered.append(primary)
+    for name in configured:
+        if name in _PROVIDERS and name not in ordered:
+            ordered.append(name)
+    if not ordered and primary in _PROVIDERS:
+        ordered = [primary]
+    return ordered
+
+
+def create_universe_providers(
+    settings: Settings | None = None, *, redis_client: object | None = None
+) -> dict[str, MarketDataProvider]:
+    """Provider-Instanzen fuer alle im Universe konfigurierten Boersen."""
+    cfg = settings or get_settings()
+    providers: dict[str, MarketDataProvider] = {}
+    for name in parse_universe_exchange_names(cfg):
+        provider: MarketDataProvider = _PROVIDERS[name](cfg)
+        if redis_client is not None and cfg.market_data_cache_ttl_seconds > 0:
+            provider = CachedMarketDataProvider(provider, redis_client, cfg)  # type: ignore[assignment]
+        providers[name] = provider
+    return providers
