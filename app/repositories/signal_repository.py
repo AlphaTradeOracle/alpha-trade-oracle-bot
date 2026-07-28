@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -148,6 +148,33 @@ class SignalRepository:
         if direction:
             statement = statement.where(Signal.direction == direction.value)
         result = await self._session.execute(statement.limit(limit).offset(offset))
+        return list(result.scalars())
+
+    async def list_since(
+        self,
+        since: datetime,
+        *,
+        actionable_only: bool = True,
+        dispatched_only: bool = False,
+        limit: int = 500,
+    ) -> list[Signal]:
+        """Signale ab einem Zeitpunkt laden (fuer Paper-Backfill)."""
+        statement = select(Signal).where(Signal.created_at >= since)
+        if actionable_only:
+            statement = statement.where(
+                Signal.direction.in_(
+                    [
+                        SignalDirection.STRONG_LONG.value,
+                        SignalDirection.LONG.value,
+                        SignalDirection.SHORT.value,
+                        SignalDirection.STRONG_SHORT.value,
+                    ]
+                )
+            )
+        if dispatched_only:
+            statement = statement.where(Signal.is_dispatched.is_(True))
+        statement = statement.order_by(Signal.created_at.asc()).limit(limit)
+        result = await self._session.execute(statement)
         return list(result.scalars())
 
     async def get_last_dispatched(self, symbol: str, timeframe: str) -> PreviousSignal | None:
