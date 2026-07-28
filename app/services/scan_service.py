@@ -100,8 +100,6 @@ class ScanService:
             logger.info("scan_no_targets")
             return result
 
-        watched = set(await WatchlistRepository(session).distinct_watched_symbols())
-
         logger.info(
             "scan_started",
             symbol_count=len(targets),
@@ -118,7 +116,6 @@ class ScanService:
                     result,
                     dispatch=dispatch,
                     universe_mode=universe_mode,
-                    watched=watched,
                 )
             except AlphaTradeOracleError as exc:
                 result.failures.append((symbol, str(exc)))
@@ -158,7 +155,6 @@ class ScanService:
         *,
         dispatch: bool,
         universe_mode: bool,
-        watched: set[str],
     ) -> None:
         outcome = await self._analysis.analyze(
             symbol,
@@ -190,10 +186,7 @@ class ScanService:
             await self._record_suppression(session, outcome, decision.reason)
             return
 
-        allow_dispatch = dispatch and (
-            (not universe_mode) or symbol.upper() in {s.upper() for s in watched}
-        )
-        if not allow_dispatch or self._dispatcher is None:
+        if not dispatch or self._dispatcher is None:
             logger.info(
                 "signal_ready_not_dispatched",
                 symbol=symbol,
