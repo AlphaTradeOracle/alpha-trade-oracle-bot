@@ -171,11 +171,24 @@ class UniverseService:
             if provider is None:
                 logger.warning("universe_provider_missing", exchange=exchange)
                 continue
-            listed = await provider.list_symbols(quote_asset=quote)
-            indices[exchange] = {
-                info.symbol.upper(): info for info in listed if info.is_active
-            }
+            merged: dict[str, SymbolInfo] = {}
+            for candidate in self._quote_candidates(exchange, quote):
+                listed = await provider.list_symbols(quote_asset=candidate)
+                for info in listed:
+                    if info.is_active:
+                        merged[info.symbol.upper()] = info
+            indices[exchange] = merged
         return indices
+
+    def _quote_candidates(self, exchange: str, default_quote: str) -> tuple[str, ...]:
+        if exchange == "coinbase":
+            configured = [
+                item.strip().upper()
+                for item in self._settings.coinbase_quote_assets.split(",")
+                if item.strip()
+            ]
+            return tuple(configured or ("USD", "USDC", "USDT"))
+        return (default_quote.upper(),)
 
     def _map_direct(
         self,
@@ -186,11 +199,13 @@ class UniverseService:
         base = market.symbol.upper().strip()
         if not base:
             return None
-        symbol = f"{base}{quote}"
         for exchange in self._exchange_order:
-            info = exchange_indices.get(exchange, {}).get(symbol)
-            if info is not None:
-                return symbol, info, exchange
+            index = exchange_indices.get(exchange, {})
+            for candidate in self._quote_candidates(exchange, quote):
+                symbol = f"{base}{candidate}"
+                info = index.get(symbol)
+                if info is not None:
+                    return symbol, info, exchange
         return None
 
     async def _map_via_tickers(
@@ -224,16 +239,17 @@ class UniverseService:
         exchange: str,
         index: dict[str, SymbolInfo],
     ) -> tuple[str, SymbolInfo, str] | None:
-        wanted_quote = quote.upper()
+        quote_candidates = self._quote_candidates(exchange, quote)
         for ticker in tickers:
-            if ticker.target.upper() != wanted_quote:
+            target = ticker.target.upper()
+            if target not in quote_candidates:
                 continue
             if not exchange_matches_provider(ticker, exchange):
                 continue
             base = ticker.base.upper().strip()
-            if not base or base in SKIP_BASE_ASSETS or base == wanted_quote:
+            if not base or base in SKIP_BASE_ASSETS or base in quote_candidates:
                 continue
-            symbol = f"{base}{wanted_quote}"
+            symbol = f"{base}{target}"
             info = index.get(symbol)
             if info is not None:
                 return symbol, info, exchange

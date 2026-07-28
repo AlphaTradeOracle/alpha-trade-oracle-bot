@@ -29,6 +29,7 @@ RATE_LIMIT_PERIOD_SECONDS = 60.0
 EXCHANGE_IDENTIFIER_ALIASES: dict[str, frozenset[str]] = {
     "kucoin": frozenset({"kucoin", "kucoin_exchange"}),
     "binance": frozenset({"binance", "binance_us"}),
+    "coinbase": frozenset({"coinbase", "gdax", "coinbase_exchange"}),
 }
 
 

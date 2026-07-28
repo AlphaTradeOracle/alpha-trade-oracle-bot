@@ -378,6 +378,44 @@ class TestUniverseService:
         assert asset is not None
         assert asset.exchange == "binance"
 
+    @pytest.mark.asyncio
+    async def test_maps_coinbase_usd_pair(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        render = SymbolInfo(
+            symbol="RNDRUSD",
+            base_asset="RNDR",
+            quote_asset="USD",
+            price_precision=4,
+            quantity_precision=4,
+            is_active=True,
+        )
+        kucoin = NamedStubProvider("kucoin", uptrend_frames, [BTC])
+        binance = NamedStubProvider("binance", uptrend_frames, [BTC])
+        coinbase = NamedStubProvider("coinbase", uptrend_frames, [render])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[CoinGeckoMarket("render-token", "RNDR", "Render", 70.0, 40)]
+        )
+        settings = service_settings(
+            universe_size=10,
+            market_data_provider="kucoin",
+            universe_exchanges="kucoin,binance,coinbase",
+            coinbase_quote_assets="USD,USDC",
+        )
+        service = UniverseService(
+            {"kucoin": kucoin, "binance": binance, "coinbase": coinbase},
+            gecko,
+            settings=settings,
+        )
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        asset = await AssetRepository(session).get_by_symbol("RNDRUSD")
+        assert asset is not None
+        assert asset.exchange == "coinbase"
+
 
 class TestAnalysisProviderRouting:
     @pytest.mark.asyncio
