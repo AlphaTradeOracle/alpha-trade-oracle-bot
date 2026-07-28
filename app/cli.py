@@ -91,6 +91,29 @@ def universe_refresh() -> None:
     asyncio.run(_run_universe_refresh())
 
 
+paper_app = typer.Typer(help="Paper-Trading verwalten.")
+cli.add_typer(paper_app, name="paper")
+
+
+@paper_app.command("backfill")
+def paper_backfill(
+    since: Annotated[
+        str,
+        typer.Option("--since", help="ISO-Datum/Zeit oder 'today' (UTC)"),
+    ] = "today",
+    dispatched_only: Annotated[
+        bool,
+        typer.Option("--dispatched-only/--all-qualifying", help="Nur versendete Signale"),
+    ] = False,
+    update_prices: Annotated[
+        bool,
+        typer.Option("--update/--no-update", help="Danach offene Positionen gegen Kurse pruefen"),
+    ] = True,
+) -> None:
+    """Signale ab einem Zeitpunkt als Paper-Trades nachziehen."""
+    asyncio.run(_run_paper_backfill(since, dispatched_only, update_prices))
+
+
 @cli.command()
 def backtest(
     symbol: Annotated[str, typer.Option("--symbol", help="Handelspaar, z. B. BTCUSDT")],
@@ -406,6 +429,65 @@ async def _run_universe_refresh() -> None:
         preview = ", ".join(result.symbols[:15])
         suffix = " ..." if len(result.symbols) > 15 else ""
         typer.echo(f"  examples: {preview}{suffix}")
+
+    await container.aclose()
+
+
+async def _run_paper_backfill(
+    since: str,
+    dispatched_only: bool,
+    update_prices: bool,
+) -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+
+    if since.strip().lower() == "today":
+        now = utc_now()
+        since_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        since_dt = ensure_utc(datetime.fromisoformat(since))
+
+    async with session_scope() as session:
+        result = await container.paper_trading.backfill_from_signals(
+            session,
+            since=since_dt,
+            dispatched_only=dispatched_only,
+            one_per_symbol=True,
+        )
+        updated = 0
+        if update_prices and result.opened > 0:
+            account = await container.paper_trading.get_or_create_account(session)
+            from app.repositories.paper_repository import PaperRepository
+            from app.scheduler.jobs import _collect_prices
+
+            opens = await PaperRepository(session).list_open_positions(account.id)
+            symbols = [position.symbol for position in opens]
+            if symbols:
+                prices = await _collect_prices(
+                    container.provider,
+                    symbols,
+                    providers=container.universe_providers,
+                )
+                changed = await container.paper_trading.update_open_positions(session, prices)
+                updated = len(changed)
+        summary = await container.paper_trading.summary(session)
+
+    typer.echo("")
+    typer.secho("Paper-Backfill abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    typer.echo(f"  since:              {since_dt.isoformat()}")
+    typer.echo(f"  considered:         {result.considered}")
+    typer.echo(f"  opened:             {result.opened}")
+    typer.echo(f"  skipped_existing:   {result.skipped_existing}")
+    typer.echo(f"  skipped_filters:    {result.skipped_filters}")
+    typer.echo(f"  skipped_cash:       {result.skipped_cash}")
+    typer.echo(f"  price_updates:      {updated}")
+    if result.opened_symbols:
+        typer.echo(f"  symbols:            {', '.join(result.opened_symbols)}")
+    typer.echo(
+        f"  equity:             ${summary.equity:,.2f}  "
+        f"(cash ${summary.cash_balance:,.2f}, open {summary.open_positions})"
+    )
 
     await container.aclose()
 

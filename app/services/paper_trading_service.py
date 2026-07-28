@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.enums import ExitReason, SignalDirection
+from app.core.enums import Confidence, ExitReason, MarketPhase, SignalDirection
 from app.core.logging import get_logger
 from app.core.time import utc_now
 from app.models.paper import PaperAccount, PaperFill, PaperPosition
+from app.models.signal import Signal
+from app.repositories.asset_repository import AssetRepository
 from app.repositories.paper_repository import PaperRepository
+from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome
+from app.signals.types import RiskParameters, SignalResult
 
 logger = get_logger(__name__)
 
@@ -31,6 +36,20 @@ class PaperSummary:
     win_rate: float
     closed_trades: int
     profit_factor: float
+
+
+@dataclass
+class PaperBackfillResult:
+    considered: int = 0
+    opened: int = 0
+    skipped_existing: int = 0
+    skipped_filters: int = 0
+    skipped_cash: int = 0
+    opened_symbols: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.opened_symbols is None:
+            self.opened_symbols = []
 
 
 class PaperTradingService:
@@ -137,6 +156,172 @@ class PaperTradingService:
             notional=float(notional),
             quantity=float(quantity),
         )
+        return position
+
+    async def backfill_from_signals(
+        self,
+        session: AsyncSession,
+        *,
+        since: datetime,
+        dispatched_only: bool = False,
+        one_per_symbol: bool = True,
+    ) -> PaperBackfillResult:
+        """Qualifizierende Signale ab ``since`` als Paper-Trades nachziehen."""
+        result = PaperBackfillResult()
+        if not self.enabled:
+            return result
+
+        signals = await SignalRepository(session).list_since(
+            since,
+            actionable_only=True,
+            dispatched_only=dispatched_only,
+            limit=1000,
+        )
+        if not signals:
+            return result
+
+        asset_ids = list({signal.asset_id for signal in signals})
+        symbols_by_id = await AssetRepository(session).get_symbols_by_ids(asset_ids)
+
+        seen_symbols: set[str] = set()
+        # Neueste Signale zuerst bevorzugen, wenn one_per_symbol.
+        ordered = sorted(signals, key=lambda s: s.created_at, reverse=True)
+
+        for signal in ordered:
+            result.considered += 1
+            symbol = symbols_by_id.get(signal.asset_id)
+            if not symbol:
+                result.skipped_filters += 1
+                continue
+            symbol = symbol.upper()
+            if one_per_symbol and symbol in seen_symbols:
+                result.skipped_filters += 1
+                continue
+            if not self._passes_paper_gates(signal):
+                result.skipped_filters += 1
+                continue
+
+            position = await self.open_from_stored_signal(
+                session, signal, symbol=symbol, extend_expiry=True
+            )
+            if position is None:
+                account = await self.get_or_create_account(session)
+                existing = await PaperRepository(session).get_open_by_symbol(account.id, symbol)
+                if existing is not None:
+                    result.skipped_existing += 1
+                else:
+                    result.skipped_cash += 1
+                continue
+
+            seen_symbols.add(symbol)
+            result.opened += 1
+            assert result.opened_symbols is not None
+            result.opened_symbols.append(symbol)
+
+        return result
+
+    def _passes_paper_gates(self, signal: Signal) -> bool:
+        try:
+            direction = SignalDirection(signal.direction)
+        except ValueError:
+            return False
+        if not direction.is_actionable:
+            return False
+        if self._settings.signal_require_strong and direction not in {
+            SignalDirection.STRONG_LONG,
+            SignalDirection.STRONG_SHORT,
+        }:
+            return False
+        if direction.is_long and float(signal.score) < self._settings.signal_min_score:
+            return False
+        if direction.is_short and float(signal.score) > self._settings.signal_short_max_score:
+            return False
+        if signal.stop_loss is None or signal.take_profit_1 is None:
+            return False
+        if signal.take_profit_2 is None or signal.take_profit_3 is None:
+            return False
+        rr = float(signal.risk_reward_ratio or 0.0)
+        if rr < self._settings.min_risk_reward_ratio:
+            return False
+        if float(signal.data_quality) < 60.0:
+            return False
+        return True
+
+    async def open_from_stored_signal(
+        self,
+        session: AsyncSession,
+        signal: Signal,
+        *,
+        symbol: str,
+        extend_expiry: bool = False,
+    ) -> PaperPosition | None:
+        """Paper-Position aus einem persistierten Signal oeffnen."""
+        if not self.enabled:
+            return None
+        try:
+            direction = SignalDirection(signal.direction)
+        except ValueError:
+            return None
+        if not direction.is_actionable:
+            return None
+        if signal.stop_loss is None or signal.take_profit_1 is None:
+            return None
+        if signal.take_profit_2 is None or signal.take_profit_3 is None:
+            return None
+
+        entry_low = float(signal.entry_low or signal.reference_price)
+        entry_high = float(signal.entry_high or signal.reference_price)
+        risk = RiskParameters(
+            entry_low=entry_low,
+            entry_high=entry_high,
+            stop_loss=float(signal.stop_loss),
+            take_profit_1=float(signal.take_profit_1),
+            take_profit_2=float(signal.take_profit_2),
+            take_profit_3=float(signal.take_profit_3),
+            risk_reward_ratio=float(signal.risk_reward_ratio or 0.0),
+            risk_percent=float(signal.risk_percent or 0.0),
+            suggested_position_size=float(signal.suggested_position_size or 0.0),
+            stop_distance_percent=0.0,
+            invalidation_note=signal.invalidation_note or "",
+        )
+        expires_at = signal.expires_at
+        if extend_expiry:
+            floor = utc_now() + timedelta(hours=4)
+            if expires_at < floor:
+                expires_at = floor
+
+        result = SignalResult(
+            symbol=symbol.upper(),
+            created_at=signal.created_at,
+            expires_at=expires_at,
+            direction=direction,
+            score=float(signal.score),
+            confidence=Confidence(signal.confidence),
+            market_phase=MarketPhase(signal.market_phase),
+            primary_timeframe=signal.primary_timeframe,
+            analyzed_timeframes=[
+                part.strip()
+                for part in (signal.analyzed_timeframes or "").split(",")
+                if part.strip()
+            ],
+            reference_price=float(signal.reference_price),
+            data_quality=float(signal.data_quality),
+            components=[],
+            assessments={},
+            risk=risk,
+        )
+        result.fingerprint = signal.fingerprint
+        outcome = AnalysisOutcome(
+            result=result,
+            price_precision=8,
+            signal_id=signal.id,
+            asset_id=signal.asset_id,
+        )
+        position = await self.open_from_signal(session, outcome)
+        if position is not None:
+            position.opened_at = signal.created_at
+            if position.fills:
+                position.fills[0].filled_at = signal.created_at
         return position
 
     async def update_open_positions(
