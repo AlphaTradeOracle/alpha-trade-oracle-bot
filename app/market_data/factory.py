@@ -10,6 +10,7 @@ from app.core.logging import get_logger
 from app.market_data.base import MarketDataProvider
 from app.market_data.binance import BinanceMarketDataProvider
 from app.market_data.cache import CachedMarketDataProvider
+from app.market_data.coinbase import CoinbaseMarketDataProvider
 from app.market_data.kucoin import KucoinMarketDataProvider
 
 logger = get_logger(__name__)
@@ -19,6 +20,7 @@ logger = get_logger(__name__)
 _PROVIDERS: dict[str, Callable[..., MarketDataProvider]] = {
     "binance": BinanceMarketDataProvider,
     "kucoin": KucoinMarketDataProvider,
+    "coinbase": CoinbaseMarketDataProvider,
 }
 
 

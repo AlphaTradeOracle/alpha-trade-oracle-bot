@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     binance_api_secret: SecretStr = SecretStr("")
     binance_base_url: str = "https://api.binance.com"
     kucoin_base_url: str = "https://api.kucoin.com"
+    coinbase_base_url: str = "https://api.coinbase.com/api/v3/brokerage"
     coingecko_api_key: SecretStr = SecretStr("")
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"
     coinmarketcap_api_key: SecretStr = SecretStr("")
@@ -104,9 +105,10 @@ class Settings(BaseSettings):
     universe_size: int = 1000
     universe_scan_batch_size: int = 50
     universe_refresh_hours: int = 24
-    universe_exchanges: str = "kucoin,binance"
+    universe_exchanges: str = "kucoin,binance,coinbase"
     universe_ticker_fallback: bool = True
     universe_ticker_fallback_max: int = 250
+    coinbase_quote_assets: str = "USD,USDC,USDT"
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

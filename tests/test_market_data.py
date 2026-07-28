@@ -570,3 +570,170 @@ class TestKucoinProvider:
             assert provider.name == "kucoin"
         finally:
             await provider.close()
+
+
+# --- Coinbase --------------------------------------------------------------
+
+
+COINBASE_PRODUCTS = {
+    "products": [
+        {
+            "product_id": "BTC-USD",
+            "product_type": "SPOT",
+            "status": "online",
+            "trading_disabled": False,
+            "is_disabled": False,
+            "view_only": False,
+            "base_currency_id": "BTC",
+            "quote_currency_id": "USD",
+            "price_increment": "0.01",
+            "base_increment": "0.00000001",
+            "price": "64000.12",
+        },
+        {
+            "product_id": "ETH-USDC",
+            "product_type": "SPOT",
+            "status": "online",
+            "trading_disabled": False,
+            "is_disabled": False,
+            "view_only": False,
+            "base_currency_id": "ETH",
+            "quote_currency_id": "USDC",
+            "price_increment": "0.01",
+            "base_increment": "0.00000001",
+            "price": "3200.50",
+        },
+    ],
+    "pagination": {"has_next": False},
+}
+
+
+def coinbase_candle(index: int, interval_minutes: int = 60) -> dict[str, str]:
+    open_time = BASE_TIME + timedelta(minutes=interval_minutes * index)
+    return {
+        "start": str(int(open_time.timestamp())),
+        "open": f"{100.0 + index}",
+        "high": f"{101.0 + index}",
+        "low": f"{99.0 + index}",
+        "close": f"{100.5 + index}",
+        "volume": "10.0",
+    }
+
+
+def make_coinbase_provider(handler) -> "CoinbaseMarketDataProvider":  # type: ignore[no-untyped-def]
+    from app.market_data.coinbase import CoinbaseMarketDataProvider
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.coinbase.com/api/v3/brokerage",
+    )
+    provider = CoinbaseMarketDataProvider(NO_RETRY_SETTINGS, client=client)
+    provider._owns_client = True
+    return provider
+
+
+class TestCoinbaseProvider:
+    @pytest.mark.asyncio
+    async def test_fetches_symbol_info_and_normalizes_dash(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path.endswith("/market/products")
+            return httpx.Response(200, json=COINBASE_PRODUCTS)
+
+        provider = make_coinbase_provider(handler)
+        try:
+            info = await provider.get_symbol_info("BTC-USD")
+        finally:
+            await provider.close()
+
+        assert info.symbol == "BTCUSD"
+        assert info.base_asset == "BTC"
+        assert info.quote_asset == "USD"
+
+    @pytest.mark.asyncio
+    async def test_prefers_usd_over_usdc_for_same_base(self) -> None:
+        payload = {
+            "products": [
+                {
+                    "product_id": "SOL-USDC",
+                    "product_type": "SPOT",
+                    "status": "online",
+                    "trading_disabled": False,
+                    "is_disabled": False,
+                    "view_only": False,
+                    "base_currency_id": "SOL",
+                    "quote_currency_id": "USDC",
+                    "price_increment": "0.01",
+                    "base_increment": "0.0001",
+                    "price": "150.00",
+                },
+                {
+                    "product_id": "SOL-USD",
+                    "product_type": "SPOT",
+                    "status": "online",
+                    "trading_disabled": False,
+                    "is_disabled": False,
+                    "view_only": False,
+                    "base_currency_id": "SOL",
+                    "quote_currency_id": "USD",
+                    "price_increment": "0.01",
+                    "base_increment": "0.0001",
+                    "price": "150.00",
+                },
+            ],
+            "pagination": {"has_next": False},
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=payload)
+
+        provider = make_coinbase_provider(handler)
+        try:
+            info = await provider.get_symbol_info("SOLUSD")
+        finally:
+            await provider.close()
+
+        assert info.quote_asset == "USD"
+
+    @pytest.mark.asyncio
+    async def test_fetches_current_price_from_product_cache(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=COINBASE_PRODUCTS)
+
+        provider = make_coinbase_provider(handler)
+        try:
+            price = await provider.get_price("BTCUSD")
+        finally:
+            await provider.close()
+
+        assert price == pytest.approx(64000.12)
+
+    @pytest.mark.asyncio
+    async def test_fetches_candles(self) -> None:
+        candles = [coinbase_candle(i) for i in range(5)]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/market/products"):
+                return httpx.Response(200, json=COINBASE_PRODUCTS)
+            assert "/market/products/BTC-USD/candles" in request.url.path
+            assert request.url.params.get("granularity") == "ONE_HOUR"
+            return httpx.Response(200, json={"candles": list(reversed(candles))})
+
+        provider = make_coinbase_provider(handler)
+        try:
+            series = await provider.get_candles("BTCUSD", "1h", limit=5)
+        finally:
+            await provider.close()
+
+        assert len(series.candles) == 5
+        assert series.candles[0].open == pytest.approx(100.0)
+
+    @pytest.mark.asyncio
+    async def test_factory_registers_coinbase(self) -> None:
+        from app.market_data.factory import available_providers, create_market_data_provider
+
+        assert "coinbase" in available_providers()
+        provider = create_market_data_provider(Settings(market_data_provider="coinbase"))
+        try:
+            assert provider.name == "coinbase"
+        finally:
+            await provider.close()
