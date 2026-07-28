@@ -14,6 +14,7 @@ from app.core.config import Settings, get_settings
 from app.core.enums import DeliveryStatus, EventSeverity, SuppressionReason
 from app.core.errors import AlphaTradeOracleError
 from app.core.logging import get_logger, set_correlation_id
+from app.repositories.asset_repository import AssetRepository
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import EventRepository
 from app.repositories.signal_repository import SignalRepository
@@ -33,6 +34,7 @@ class ScanResult:
     signals_suppressed: int = 0
     failures: list[tuple[str, str]] = field(default_factory=list)
     suppression_details: list[tuple[str, str]] = field(default_factory=list)
+    universe_mode: bool = False
 
     def as_summary(self) -> dict[str, int]:
         return {
@@ -41,6 +43,7 @@ class ScanResult:
             "signals_dispatched": self.signals_dispatched,
             "signals_suppressed": self.signals_suppressed,
             "failures": len(self.failures),
+            "universe_mode": int(self.universe_mode),
         }
 
 
@@ -60,7 +63,7 @@ class SignalDispatcher:
 
 
 class ScanService:
-    """Fuehrt Marktscans ueber die Watchlist oder die Standardsymbole aus."""
+    """Fuehrt Marktscans ueber Universe-Batch, Watchlist oder Standardsymbole aus."""
 
     def __init__(
         self,
@@ -81,28 +84,51 @@ class ScanService:
         *,
         symbols: list[str] | None = None,
         dispatch: bool = True,
+        use_universe: bool | None = None,
     ) -> ScanResult:
-        """Alle relevanten Symbole analysieren und passende Signale zustellen."""
+        """Relevante Symbole analysieren und passende Signale zustellen."""
         set_correlation_id()
         result = ScanResult()
 
-        targets = symbols or await self._resolve_targets(session)
+        universe_mode = self._should_use_universe(symbols, use_universe)
+        result.universe_mode = universe_mode
+
+        targets = await self._resolve_targets(
+            session, symbols=symbols, use_universe=universe_mode
+        )
         if not targets:
             logger.info("scan_no_targets")
             return result
 
-        logger.info("scan_started", symbol_count=len(targets), symbols=targets)
+        watched = set(await WatchlistRepository(session).distinct_watched_symbols())
+
+        logger.info(
+            "scan_started",
+            symbol_count=len(targets),
+            universe_mode=universe_mode,
+            symbols=targets[:20],
+        )
 
         for symbol in targets:
             result.symbols_scanned += 1
             try:
-                await self._scan_symbol(session, symbol, result, dispatch=dispatch)
+                await self._scan_symbol(
+                    session,
+                    symbol,
+                    result,
+                    dispatch=dispatch,
+                    universe_mode=universe_mode,
+                    watched=watched,
+                )
             except AlphaTradeOracleError as exc:
                 result.failures.append((symbol, str(exc)))
                 logger.warning("scan_symbol_failed", symbol=symbol, error=str(exc))
             except Exception as exc:
                 result.failures.append((symbol, str(exc)))
                 logger.error("scan_symbol_error", symbol=symbol, error=str(exc), exc_info=True)
+            finally:
+                if universe_mode:
+                    await AssetRepository(session).mark_scanned(symbol)
 
         await EventRepository(session).record(
             "market_scan_completed",
@@ -115,10 +141,31 @@ class ScanService:
         logger.info("scan_completed", **result.as_summary())
         return result
 
+    def _should_use_universe(
+        self, symbols: list[str] | None, use_universe: bool | None
+    ) -> bool:
+        if symbols is not None:
+            return False
+        if use_universe is not None:
+            return use_universe
+        return self._settings.enable_universe_scan
+
     async def _scan_symbol(
-        self, session: AsyncSession, symbol: str, result: ScanResult, *, dispatch: bool
+        self,
+        session: AsyncSession,
+        symbol: str,
+        result: ScanResult,
+        *,
+        dispatch: bool,
+        universe_mode: bool,
+        watched: set[str],
     ) -> None:
-        outcome = await self._analysis.analyze(symbol, session=session, persist=True)
+        outcome = await self._analysis.analyze(
+            symbol,
+            session=session,
+            persist=True,
+            use_llm=False if universe_mode else None,
+        )
         result.signals_created += 1
 
         decision = await self._dedup.evaluate(
@@ -142,8 +189,16 @@ class ScanService:
             await self._record_suppression(session, outcome, decision.reason)
             return
 
-        if not dispatch or self._dispatcher is None:
-            logger.info("signal_ready_not_dispatched", symbol=symbol, score=outcome.result.score)
+        allow_dispatch = dispatch and (
+            (not universe_mode) or symbol.upper() in {s.upper() for s in watched}
+        )
+        if not allow_dispatch or self._dispatcher is None:
+            logger.info(
+                "signal_ready_not_dispatched",
+                symbol=symbol,
+                score=outcome.result.score,
+                universe_mode=universe_mode,
+            )
             return
 
         deliveries = await self._dispatcher.dispatch(outcome)
@@ -196,8 +251,25 @@ class ScanService:
                 suppression_reason=reason,
             )
 
-    async def _resolve_targets(self, session: AsyncSession) -> list[str]:
-        """Watchlist-Symbole bevorzugen, sonst die Standardsymbole."""
+    async def _resolve_targets(
+        self,
+        session: AsyncSession,
+        *,
+        symbols: list[str] | None,
+        use_universe: bool,
+    ) -> list[str]:
+        """Ziele bestimmen: explizit, Universe-Batch oder Watchlist/Defaults."""
+        if symbols is not None:
+            return [symbol.upper().strip() for symbol in symbols if symbol.strip()]
+
+        if use_universe:
+            batch = await AssetRepository(session).list_universe_batch(
+                self._settings.universe_scan_batch_size
+            )
+            if batch:
+                return [asset.symbol for asset in batch]
+            logger.info("universe_batch_empty_falling_back")
+
         watched = await WatchlistRepository(session).distinct_watched_symbols()
         if watched:
             return watched

@@ -3,11 +3,12 @@
 Aufruf: ``python -m app.cli <kommando>``.
 
 Wichtigste Kommandos:
-- ``worker``   startet Telegram-Bot und Scheduler
-- ``backtest`` fuehrt einen Backtest aus
-- ``analyze``  einmalige Analyse auf der Konsole
-- ``scan``     einmaliger Marktscan
-- ``seed``     Grunddaten anlegen
+- ``worker``            startet Telegram-Bot und Scheduler
+- ``backtest``          fuehrt einen Backtest aus
+- ``analyze``           einmalige Analyse auf der Konsole
+- ``scan``              einmaliger Marktscan
+- ``universe refresh``  Top-N Market Cap laden und mappen
+- ``seed``              Grunddaten anlegen
 """
 
 from __future__ import annotations
@@ -63,14 +64,31 @@ def analyze(
 @cli.command()
 def scan(
     symbols: Annotated[
-        str | None, typer.Option("--symbols", help="Kommaliste; sonst Watchlist bzw. Defaults")
+        str | None, typer.Option("--symbols", help="Kommaliste; sonst Universe/Watchlist/Defaults")
     ] = None,
     dispatch: Annotated[
         bool, typer.Option("--dispatch/--no-dispatch", help="Signale per Telegram versenden")
     ] = False,
+    universe: Annotated[
+        bool,
+        typer.Option(
+            "--universe/--no-universe",
+            help="Universe-Batch scannen (ignoriert Watchlist-Defaults)",
+        ),
+    ] = False,
 ) -> None:
     """Einmaligen Marktscan ausfuehren."""
-    asyncio.run(_run_scan(symbols, dispatch))
+    asyncio.run(_run_scan(symbols, dispatch, use_universe=universe or None))
+
+
+universe_app = typer.Typer(help="Market-Cap-Universe verwalten.")
+cli.add_typer(universe_app, name="universe")
+
+
+@universe_app.command("refresh")
+def universe_refresh() -> None:
+    """Top-N Market Cap von CoinGecko laden und auf Boersen-Paare mappen."""
+    asyncio.run(_run_universe_refresh())
 
 
 @cli.command()
@@ -165,7 +183,9 @@ async def _run_worker() -> None:
         backtest_service=container.backtest_service if settings.enable_backtesting else None,
     )
 
-    scheduler = SchedulerRunner(scan_service, settings)
+    scheduler = SchedulerRunner(
+        scan_service, settings, universe_service=container.universe_service
+    )
 
     stop_event = asyncio.Event()
 
@@ -311,7 +331,9 @@ async def _run_analyze(symbol: str, timeframes: str | None, persist: bool, no_ll
     await container.aclose()
 
 
-async def _run_scan(symbols: str | None, dispatch: bool) -> None:
+async def _run_scan(
+    symbols: str | None, dispatch: bool, *, use_universe: bool | None = None
+) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=False)
     container = build_container(settings)
@@ -337,7 +359,10 @@ async def _run_scan(symbols: str | None, dispatch: bool) -> None:
 
     async with session_scope() as session:
         result = await scan_service.scan(
-            session, symbols=symbol_list, dispatch=dispatcher is not None
+            session,
+            symbols=symbol_list,
+            dispatch=dispatcher is not None,
+            use_universe=use_universe,
         )
 
     typer.echo("")
@@ -348,6 +373,31 @@ async def _run_scan(symbols: str | None, dispatch: bool) -> None:
         typer.echo(f"  unterdrueckt {symbol}: {detail}")
     for symbol, error in result.failures:
         typer.secho(f"  Fehler {symbol}: {error}", fg=typer.colors.RED)
+
+    await container.aclose()
+
+
+async def _run_universe_refresh() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+
+    try:
+        async with session_scope() as session:
+            result = await container.universe_service.refresh(session)
+    except AlphaTradeOracleError as exc:
+        typer.secho(f"Universe-Refresh fehlgeschlagen: {exc}", fg=typer.colors.RED)
+        await container.aclose()
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("")
+    typer.secho("Universe-Refresh abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    for key, value in result.as_summary().items():
+        typer.echo(f"  {key}: {value}")
+    if result.symbols:
+        preview = ", ".join(result.symbols[:15])
+        suffix = " ..." if len(result.symbols) > 15 else ""
+        typer.echo(f"  examples: {preview}{suffix}")
 
     await container.aclose()
 

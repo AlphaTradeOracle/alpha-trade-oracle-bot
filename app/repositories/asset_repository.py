@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import nulls_first, nulls_last, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_now
@@ -45,6 +45,105 @@ class AssetRepository:
         self._session.add(asset)
         await self._session.flush()
         return asset
+
+    async def upsert_universe_entry(
+        self,
+        *,
+        symbol: str,
+        base_asset: str,
+        quote_asset: str,
+        exchange: str,
+        coingecko_id: str,
+        market_cap_rank: int,
+        market_cap_usd: Decimal | None,
+        price_precision: int = 2,
+        quantity_precision: int = 6,
+        is_active: bool = True,
+    ) -> Asset:
+        """Asset fuer das Scan-Universe anlegen oder Ranking-Felder aktualisieren."""
+        now = utc_now()
+        existing = await self.get_by_symbol(symbol)
+        if existing is not None:
+            existing.base_asset = base_asset
+            existing.quote_asset = quote_asset
+            existing.exchange = exchange
+            existing.coingecko_id = coingecko_id
+            existing.market_cap_rank = market_cap_rank
+            existing.market_cap_usd = market_cap_usd
+            existing.in_universe = True
+            existing.is_active = is_active
+            existing.price_precision = price_precision
+            existing.quantity_precision = quantity_precision
+            existing.last_ranked_at = now
+            return existing
+
+        asset = Asset(
+            symbol=symbol.upper(),
+            base_asset=base_asset,
+            quote_asset=quote_asset,
+            exchange=exchange,
+            price_precision=price_precision,
+            quantity_precision=quantity_precision,
+            is_active=is_active,
+            coingecko_id=coingecko_id,
+            market_cap_rank=market_cap_rank,
+            market_cap_usd=market_cap_usd,
+            in_universe=True,
+            last_ranked_at=now,
+        )
+        self._session.add(asset)
+        await self._session.flush()
+        return asset
+
+    async def deactivate_stale_universe(self, active_symbols: set[str]) -> int:
+        """``in_universe`` fuer Symbole ausserhalb der aktuellen Top-N zuruecksetzen."""
+        normalized = {symbol.upper() for symbol in active_symbols}
+        if not normalized:
+            statement = (
+                update(Asset)
+                .where(Asset.in_universe.is_(True))
+                .values(in_universe=False, market_cap_rank=None)
+            )
+        else:
+            statement = (
+                update(Asset)
+                .where(Asset.in_universe.is_(True), Asset.symbol.notin_(normalized))
+                .values(in_universe=False, market_cap_rank=None)
+            )
+        result = await self._session.execute(statement)
+        return int(result.rowcount or 0)
+
+    async def list_universe_batch(self, limit: int) -> list[Asset]:
+        """Naechste Round-Robin-Batch aus dem aktiven Universe."""
+        if limit <= 0:
+            return []
+        result = await self._session.execute(
+            select(Asset)
+            .where(Asset.in_universe.is_(True), Asset.is_active.is_(True))
+            .order_by(nulls_first(Asset.last_scanned_at), Asset.market_cap_rank, Asset.symbol)
+            .limit(limit)
+        )
+        return list(result.scalars())
+
+    async def list_universe(self, *, limit: int | None = None) -> list[Asset]:
+        """Aktives Universe nach Market-Cap-Rang."""
+        statement = (
+            select(Asset)
+            .where(Asset.in_universe.is_(True), Asset.is_active.is_(True))
+            .order_by(nulls_last(Asset.market_cap_rank), Asset.symbol)
+        )
+        if limit is not None:
+            statement = statement.limit(limit)
+        result = await self._session.execute(statement)
+        return list(result.scalars())
+
+    async def mark_scanned(self, symbol: str) -> None:
+        """Scan-Zeitstempel fuer Round-Robin setzen."""
+        await self._session.execute(
+            update(Asset)
+            .where(Asset.symbol == symbol.upper())
+            .values(last_scanned_at=utc_now())
+        )
 
     async def get_symbols_by_ids(self, asset_ids: list[int]) -> dict[int, str]:
         """Symbole zu mehreren IDs in einer Abfrage auflösen."""

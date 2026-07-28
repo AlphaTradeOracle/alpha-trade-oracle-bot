@@ -24,6 +24,9 @@ class Asset(Base, TimestampMixin):
     """Ein handelbares Instrument, z. B. BTCUSDT auf Binance."""
 
     __tablename__ = "assets"
+    __table_args__ = (
+        Index("ix_assets_universe_scan", "in_universe", "last_scanned_at", "market_cap_rank"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
@@ -33,6 +36,13 @@ class Asset(Base, TimestampMixin):
     price_precision: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     quantity_precision: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    coingecko_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    market_cap_rank: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    market_cap_usd: Mapped[Decimal | None] = mapped_column(BIG_AMOUNT, nullable=True)
+    in_universe: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    last_ranked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     candles: Mapped[list[MarketCandle]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"

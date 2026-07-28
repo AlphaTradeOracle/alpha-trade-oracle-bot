@@ -35,7 +35,15 @@ Handelbare Instrumente.
 | `exchange` | `VARCHAR(32)` | `binance` |
 | `price_precision` | `INT` | Dezimalstellen für die Ausgabe |
 | `is_active` | `BOOL` | |
+| `coingecko_id` | `VARCHAR(64)` | CoinGecko-Slug, nullable |
+| `market_cap_rank` | `INT` | aktueller Market-Cap-Rang, nullable |
+| `market_cap_usd` | `NUMERIC(28,8)` | Marktkapitalisierung in USD, nullable |
+| `in_universe` | `BOOL` | Teil des Top-N-Scan-Universums |
+| `last_ranked_at` | `TIMESTAMPTZ` | letzter Universe-Refresh |
+| `last_scanned_at` | `TIMESTAMPTZ` | letzter Batch-Scan (Round-Robin) |
 | `created_at`, `updated_at` | `TIMESTAMPTZ` | |
+
+Index `ix_assets_universe_scan` auf `(in_universe, last_scanned_at, market_cap_rank)` für Batch-Auswahl.
 
 ### `market_candles`
 Normalisierte OHLCV-Daten.

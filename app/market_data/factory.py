@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.core.config import Settings, get_settings
 from app.core.errors import ConfigurationError
 from app.core.logging import get_logger
 from app.market_data.base import MarketDataProvider
 from app.market_data.binance import BinanceMarketDataProvider
 from app.market_data.cache import CachedMarketDataProvider
+from app.market_data.kucoin import KucoinMarketDataProvider
 
 logger = get_logger(__name__)
 
 #: Registrierte Provider. Weitere Boersen werden hier ergaenzt, ohne dass
 #: aufrufender Code angepasst werden muss.
-_PROVIDERS: dict[str, type[BinanceMarketDataProvider]] = {
+_PROVIDERS: dict[str, Callable[..., MarketDataProvider]] = {
     "binance": BinanceMarketDataProvider,
+    "kucoin": KucoinMarketDataProvider,
 }
 
 

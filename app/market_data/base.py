@@ -1,8 +1,8 @@
 """Provider-unabhaengiges Interface der Marktdaten-Schicht.
 
-Die Domaenenlogik haengt nur von diesem Protocol ab, nie von Binance. Ein
-weiterer Provider (Bybit, Kraken, CoinGecko) muss lediglich diese Methoden
-implementieren, um eingesetzt werden zu koennen.
+Die Domaenenlogik haengt nur von diesem Protocol ab, nie von einer konkreten
+Boerse. Weitere Provider (Bybit, Kraken, CoinGecko, …) muessen lediglich diese
+Methoden implementieren, um eingesetzt werden zu koennen.
 """
 
 from __future__ import annotations
