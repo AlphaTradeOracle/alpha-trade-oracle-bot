@@ -18,6 +18,7 @@ from app.repositories.asset_repository import AssetRepository
 from app.repositories.paper_repository import PaperRepository
 from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome
+from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskManager
 from app.signals.types import RiskParameters, SignalResult
 
 logger = get_logger(__name__)
@@ -50,6 +51,14 @@ class PaperBackfillResult:
     def __post_init__(self) -> None:
         if self.opened_symbols is None:
             self.opened_symbols = []
+
+
+@dataclass
+class PaperRebuildResult:
+    reset_positions: int = 0
+    backfill: PaperBackfillResult | None = None
+    replayed: int = 0
+    still_open: int = 0
 
 
 class PaperTradingService:
@@ -275,17 +284,28 @@ class PaperTradingService:
 
         entry_low = float(signal.entry_low or signal.reference_price)
         entry_high = float(signal.entry_high or signal.reference_price)
+        entry_mid = (entry_low + entry_high) / 2.0
+        stop_loss = float(signal.stop_loss)
+        # Paper nutzt aktuelle TP-Multiples (Wide), nicht die historisch gespeicherten TPs.
+        tp1, tp2, tp3 = RiskManager.targets_from_stop(
+            entry_mid,
+            stop_loss,
+            is_long=direction.is_long,
+            multipliers=DEFAULT_TP_MULTIPLIERS,
+        )
+        stop_distance = abs(entry_mid - stop_loss)
+        rr = abs(tp2 - entry_mid) / stop_distance if stop_distance > 0 else 0.0
         risk = RiskParameters(
             entry_low=entry_low,
             entry_high=entry_high,
-            stop_loss=float(signal.stop_loss),
-            take_profit_1=float(signal.take_profit_1),
-            take_profit_2=float(signal.take_profit_2),
-            take_profit_3=float(signal.take_profit_3),
-            risk_reward_ratio=float(signal.risk_reward_ratio or 0.0),
+            stop_loss=stop_loss,
+            take_profit_1=tp1,
+            take_profit_2=tp2,
+            take_profit_3=tp3,
+            risk_reward_ratio=rr,
             risk_percent=float(signal.risk_percent or 0.0),
             suggested_position_size=float(signal.suggested_position_size or 0.0),
-            stop_distance_percent=0.0,
+            stop_distance_percent=(stop_distance / entry_mid * 100.0) if entry_mid else 0.0,
             invalidation_note=signal.invalidation_note or "",
         )
         expires_at = signal.expires_at
@@ -324,6 +344,126 @@ class PaperTradingService:
         return await self.open_from_signal(
             session, outcome, opened_at=signal.created_at
         )
+
+    async def rebuild_from_signals(
+        self,
+        session: AsyncSession,
+        *,
+        since: datetime,
+        provider,
+        providers: list | None = None,
+        dispatched_only: bool = False,
+        one_per_symbol: bool = True,
+    ) -> PaperRebuildResult:
+        """Paper-Ledger leeren, mit aktuellen TP-Multiples neu befuellen und per Kerzen replayen."""
+        from app.scheduler.jobs import _collect_prices
+
+        out = PaperRebuildResult()
+        if not self.enabled:
+            return out
+
+        account = await self.get_or_create_account(session)
+        repo = PaperRepository(session)
+        out.reset_positions = await repo.reset_ledger(account)
+
+        out.backfill = await self.backfill_from_signals(
+            session,
+            since=since,
+            dispatched_only=dispatched_only,
+            one_per_symbol=one_per_symbol,
+        )
+
+        positions = await repo.list_positions(account.id)
+        for position in positions:
+            if position.status != "open":
+                continue
+            try:
+                series = await provider.get_candles(
+                    position.symbol,
+                    position.timeframe or "1h",
+                    limit=100_000,
+                    start_time=position.opened_at,
+                    end_time=utc_now(),
+                )
+                await self._replay_bars(session, account, position, series.candles)
+                out.replayed += 1
+            except Exception as exc:
+                logger.warning(
+                    "paper_rebuild_replay_failed",
+                    symbol=position.symbol,
+                    error=str(exc),
+                )
+
+        still_open = await repo.list_open_positions(account.id)
+        out.still_open = len(still_open)
+        if still_open:
+            symbols = [p.symbol for p in still_open]
+            prices = await _collect_prices(provider, symbols, providers=providers)
+            await self.update_open_positions(session, prices)
+            still_open = await repo.list_open_positions(account.id)
+            out.still_open = len(still_open)
+
+        return out
+
+    async def _replay_bars(
+        self,
+        session: AsyncSession,
+        account: PaperAccount,
+        position: PaperPosition,
+        bars,
+    ) -> None:
+        """OHLC-Replay: Stop hat Vorrang, danach TPs in Reihenfolge."""
+        if not bars:
+            return
+        for candle in bars:
+            if position.status != "open":
+                break
+            when = getattr(candle, "open_time", None) or getattr(candle, "timestamp", None)
+            if when is None:
+                when = utc_now()
+            high = float(candle.high)
+            low = float(candle.low)
+            close = float(candle.close)
+            is_long = SignalDirection(position.direction).is_long
+            stop = float(position.current_stop)
+
+            stop_hit = low <= stop if is_long else high >= stop
+            if stop_hit:
+                await self._close_remaining(
+                    session,
+                    account,
+                    position,
+                    price=stop,
+                    reason=ExitReason.STOP_LOSS,
+                    when=when,
+                )
+                break
+
+            await self._apply_price(
+                session,
+                account,
+                position,
+                price=high if is_long else low,
+                when=when,
+                check_stop=False,
+            )
+            if position.status != "open":
+                break
+
+            if (
+                position.expires_at is not None
+                and when >= position.expires_at
+                and position.remaining_quantity > 0
+            ):
+                await self._close_remaining(
+                    session,
+                    account,
+                    position,
+                    price=close,
+                    reason=ExitReason.EXPIRED,
+                    when=when,
+                )
+                break
 
     async def update_open_positions(
         self, session: AsyncSession, prices: dict[str, float]
@@ -393,18 +533,22 @@ class PaperTradingService:
         account: PaperAccount,
         position: PaperPosition,
         price: float,
+        *,
+        when=None,
+        check_stop: bool = True,
     ) -> bool:
         is_long = SignalDirection(position.direction).is_long
         stop = float(position.current_stop)
         changed = False
-        now = utc_now()
+        now = when or utc_now()
 
-        stop_hit = price <= stop if is_long else price >= stop
-        if stop_hit:
-            await self._close_remaining(
-                session, account, position, price=stop, reason=ExitReason.STOP_LOSS, when=now
-            )
-            return True
+        if check_stop:
+            stop_hit = price <= stop if is_long else price >= stop
+            if stop_hit:
+                await self._close_remaining(
+                    session, account, position, price=stop, reason=ExitReason.STOP_LOSS, when=now
+                )
+                return True
 
         levels = (
             (not position.tp1_filled, float(position.take_profit_1), ExitReason.TAKE_PROFIT_1, SCALE_OUT_FRACTIONS[0], 1),
@@ -439,7 +583,8 @@ class PaperTradingService:
                 break
 
         if (
-            position.status == "open"
+            check_stop
+            and position.status == "open"
             and position.expires_at is not None
             and now >= position.expires_at
             and position.remaining_quantity > 0

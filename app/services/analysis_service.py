@@ -27,7 +27,7 @@ from app.repositories.signal_repository import SignalRepository
 from app.repositories.strategy_repository import StrategyRepository
 from app.sentiment.service import SentimentService
 from app.signals.engine import SignalEngine, signal_engine_config_from_settings
-from app.signals.risk import RiskConfig, RiskManager
+from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskConfig, RiskManager
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
@@ -267,6 +267,7 @@ class AnalysisService:
                 min_stop_distance_percent=self._settings.min_stop_distance_percent,
                 max_stop_distance_percent=self._settings.max_stop_distance_percent,
                 reference_capital=self._settings.reference_capital,
+                tp_multipliers=DEFAULT_TP_MULTIPLIERS,
             )
         )
         config = signal_engine_config_from_settings(

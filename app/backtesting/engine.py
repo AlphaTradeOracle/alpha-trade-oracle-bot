@@ -74,6 +74,8 @@ class BacktestConfig:
     scale_out_fractions: tuple[float, float, float] = DEFAULT_SCALE_OUT_FRACTIONS
     #: Nach TP1 Stop auf Entry (Break-even) ziehen.
     move_stop_to_breakeven_after_tp1: bool = True
+    #: Take-Profit als Vielfache von R (Stop-Abstand).
+    tp_multipliers: tuple[float, float, float] = (2.0, 4.0, 6.0)
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -219,6 +221,7 @@ class BacktestEngine:
                     atr_multiplier=config.atr_multiplier,
                     min_risk_reward_ratio=config.min_risk_reward_ratio,
                     reference_capital=config.initial_capital,
+                    tp_multipliers=config.tp_multipliers,
                 )
             ),
         )

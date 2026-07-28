@@ -13,7 +13,8 @@ from app.indicators.engine import IndicatorSet
 from app.signals.types import RiskParameters
 
 #: Vielfache des Risikoabstands R fuer die drei Take-Profit-Ziele.
-TP_MULTIPLIERS = (1.5, 2.5, 4.0)
+TP_MULTIPLIERS = (2.0, 4.0, 6.0)
+DEFAULT_TP_MULTIPLIERS = TP_MULTIPLIERS
 
 #: Halbe Breite der Entry-Zone in ATR.
 ENTRY_ZONE_ATR_FRACTION = 0.25
@@ -41,6 +42,7 @@ class RiskConfig:
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
     reference_capital: float = 10_000.0
+    tp_multipliers: tuple[float, float, float] = DEFAULT_TP_MULTIPLIERS
 
 
 class RiskManager:
@@ -207,7 +209,31 @@ class RiskManager:
         return stop_loss, stop_distance, stop_distance_percent, None
 
     @staticmethod
+    def targets_from_stop(
+        entry: float,
+        stop_loss: float,
+        *,
+        is_long: bool,
+        multipliers: tuple[float, float, float] = DEFAULT_TP_MULTIPLIERS,
+    ) -> tuple[float, float, float]:
+        """TP1/TP2/TP3 als reine R-Multiples ohne Struktur-Snap."""
+        distance = abs(entry - stop_loss)
+        if distance <= 0:
+            return entry, entry, entry
+        if is_long:
+            return (
+                entry + distance * multipliers[0],
+                entry + distance * multipliers[1],
+                entry + distance * multipliers[2],
+            )
+        return (
+            entry - distance * multipliers[0],
+            entry - distance * multipliers[1],
+            entry - distance * multipliers[2],
+        )
+
     def _take_profits(
+        self,
         entry: float,
         stop_distance: float,
         indicators: IndicatorSet,
@@ -226,7 +252,7 @@ class RiskManager:
         buffer = 1.0 - LEVEL_BUFFER_PERCENT / 100.0
 
         targets: list[float] = []
-        for multiplier in TP_MULTIPLIERS:
+        for multiplier in self._config.tp_multipliers:
             raw = (
                 entry + stop_distance * multiplier
                 if is_long

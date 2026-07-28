@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -47,6 +47,34 @@ class PaperRepository:
         self._session.add(account)
         await self._session.flush()
         return account
+
+    async def reset_ledger(self, account: PaperAccount) -> int:
+        """Alle Positionen/Fills loeschen und Cash auf Initial zuruecksetzen."""
+        result = await self._session.execute(
+            select(PaperPosition.id).where(PaperPosition.account_id == account.id)
+        )
+        position_ids = list(result.scalars().all())
+        deleted = len(position_ids)
+        if position_ids:
+            await self._session.execute(
+                delete(PaperFill).where(PaperFill.position_id.in_(position_ids))
+            )
+            await self._session.execute(
+                delete(PaperPosition).where(PaperPosition.account_id == account.id)
+            )
+        account.cash_balance = account.initial_balance
+        account.realized_pnl = Decimal("0")
+        await self._session.flush()
+        return deleted
+
+    async def list_positions(self, account_id: int) -> list[PaperPosition]:
+        result = await self._session.execute(
+            select(PaperPosition)
+            .where(PaperPosition.account_id == account_id)
+            .options(selectinload(PaperPosition.fills))
+            .order_by(PaperPosition.opened_at.asc())
+        )
+        return list(result.scalars())
 
     async def get_account(self, name: str = "default") -> PaperAccount | None:
         result = await self._session.execute(

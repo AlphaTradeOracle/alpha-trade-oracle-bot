@@ -114,6 +114,21 @@ def paper_backfill(
     asyncio.run(_run_paper_backfill(since, dispatched_only, update_prices))
 
 
+@paper_app.command("rebuild")
+def paper_rebuild(
+    since: Annotated[
+        str,
+        typer.Option("--since", help="ISO-Datum/Zeit oder 'today' (UTC)"),
+    ] = "today",
+    dispatched_only: Annotated[
+        bool,
+        typer.Option("--dispatched-only/--all-qualifying", help="Nur versendete Signale"),
+    ] = False,
+) -> None:
+    """Paper-Ledger zuruecksetzen und mit aktuellen TP-Multiples neu berechnen."""
+    asyncio.run(_run_paper_rebuild(since, dispatched_only))
+
+
 @cli.command()
 def backtest(
     symbol: Annotated[str, typer.Option("--symbol", help="Handelspaar, z. B. BTCUSDT")],
@@ -487,6 +502,51 @@ async def _run_paper_backfill(
     typer.echo(
         f"  equity:             ${summary.equity:,.2f}  "
         f"(cash ${summary.cash_balance:,.2f}, open {summary.open_positions})"
+    )
+
+    await container.aclose()
+
+
+async def _run_paper_rebuild(since: str, dispatched_only: bool) -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+
+    if since.strip().lower() == "today":
+        now = utc_now()
+        since_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        since_dt = ensure_utc(datetime.fromisoformat(since))
+
+    async with session_scope() as session:
+        result = await container.paper_trading.rebuild_from_signals(
+            session,
+            since=since_dt,
+            provider=container.provider,
+            providers=container.universe_providers,
+            dispatched_only=dispatched_only,
+            one_per_symbol=True,
+        )
+        summary = await container.paper_trading.summary(session)
+        opened = result.backfill.opened if result.backfill else 0
+        symbols = result.backfill.opened_symbols if result.backfill else []
+
+    typer.echo("")
+    typer.secho("Paper-Rebuild abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    typer.echo(f"  since:              {since_dt.isoformat()}")
+    typer.echo(f"  reset_positions:    {result.reset_positions}")
+    typer.echo(f"  opened:             {opened}")
+    typer.echo(f"  replayed:           {result.replayed}")
+    typer.echo(f"  still_open:         {result.still_open}")
+    if symbols:
+        typer.echo(f"  symbols:            {', '.join(symbols)}")
+    typer.echo(
+        f"  equity:             ${summary.equity:,.2f}  "
+        f"(cash ${summary.cash_balance:,.2f}, realized ${summary.realized_pnl:,.2f})"
+    )
+    typer.echo(
+        f"  closed:             {summary.closed_trades}  "
+        f"win_rate {summary.win_rate * 100:.0f}%  PF {summary.profit_factor:.2f}"
     )
 
     await container.aclose()
