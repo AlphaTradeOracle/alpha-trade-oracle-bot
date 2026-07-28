@@ -51,6 +51,7 @@ class BacktestService:
         slippage_percent: float = 0.05,
         initial_capital: float | None = None,
         persist: bool = True,
+        **config_overrides: object,
     ) -> BacktestReport:
         """Backtest ausfuehren.
 
@@ -85,6 +86,7 @@ class BacktestService:
             initial_capital=(
                 initial_capital if initial_capital is not None else self._settings.reference_capital
             ),
+            **config_overrides,
         )
 
         timeframes = list(config.timeframes) if config.use_multi_timeframe else [timeframe]
@@ -140,6 +142,8 @@ class BacktestService:
                     "timeframes": list(config.timeframes),
                     "cooldown_minutes": config.cooldown_minutes,
                     "require_strong_signals": config.require_strong_signals,
+                    "scale_out_enabled": config.scale_out_enabled,
+                    "move_stop_to_breakeven_after_tp1": config.move_stop_to_breakeven_after_tp1,
                     "weights": weights.model_dump(),
                 },
             )
