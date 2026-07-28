@@ -17,7 +17,7 @@ from app.llm.factory import create_llm_service
 from app.llm.service import LLMService
 from app.market_data.base import MarketDataProvider
 from app.market_data.coingecko import CoinGeckoClient
-from app.market_data.factory import create_market_data_provider
+from app.market_data.factory import create_market_data_provider, create_universe_providers
 from app.monitoring.health import HealthService
 from app.sentiment.service import SentimentService
 from app.services.analysis_service import AnalysisService
@@ -35,6 +35,7 @@ class ApplicationContainer:
 
     settings: Settings
     provider: MarketDataProvider
+    universe_providers: dict[str, MarketDataProvider]
     coingecko: CoinGeckoClient
     llm_service: LLMService
     sentiment_service: SentimentService
@@ -47,8 +48,8 @@ class ApplicationContainer:
 
     async def aclose(self) -> None:
         """Alle Ressourcen freigeben. Einzelne Fehler stoppen den Abbau nicht."""
+        closed: set[int] = set()
         for name, closer in (
-            ("market_data_provider", self.provider.close),
             ("coingecko", self.coingecko.close),
             ("sentiment_service", self.sentiment_service.close),
             ("redis", close_redis),
@@ -59,25 +60,44 @@ class ApplicationContainer:
             except Exception as exc:
                 logger.warning("shutdown_step_failed", component=name, error=str(exc))
 
+        for exchange, provider in self.universe_providers.items():
+            if id(provider) in closed:
+                continue
+            try:
+                await provider.close()
+                closed.add(id(provider))
+            except Exception as exc:
+                logger.warning(
+                    "shutdown_step_failed",
+                    component=f"market_data_provider:{exchange}",
+                    error=str(exc),
+                )
+
 
 def build_container(settings: Settings | None = None) -> ApplicationContainer:
     """Container aufbauen. Redis-Ausfaelle werden erst beim Zugriff sichtbar."""
     cfg = settings or get_settings()
 
     redis_client = get_redis(cfg)
-    provider = create_market_data_provider(cfg, redis_client=redis_client)
+    universe_providers = create_universe_providers(cfg, redis_client=redis_client)
+    primary_key = cfg.market_data_provider.lower().strip()
+    provider = universe_providers.get(primary_key)
+    if provider is None:
+        provider = create_market_data_provider(cfg, redis_client=redis_client)
+        universe_providers[primary_key] = provider
     coingecko = CoinGeckoClient(cfg)
     llm_service = create_llm_service(cfg)
     sentiment_service = SentimentService(settings=cfg)
 
     analysis_service = AnalysisService(
         provider,
+        providers=universe_providers,
         settings=cfg,
         llm_service=llm_service,
         sentiment_service=sentiment_service,
     )
     backtest_service = BacktestService(provider, settings=cfg)
-    universe_service = UniverseService(provider, coingecko, settings=cfg)
+    universe_service = UniverseService(universe_providers, coingecko, settings=cfg)
 
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
@@ -100,6 +120,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     return ApplicationContainer(
         settings=cfg,
         provider=provider,
+        universe_providers=universe_providers,
         coingecko=coingecko,
         llm_service=llm_service,
         sentiment_service=sentiment_service,

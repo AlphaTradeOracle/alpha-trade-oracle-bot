@@ -60,6 +60,7 @@ class AnalysisService:
         self,
         provider: MarketDataProvider,
         *,
+        providers: dict[str, MarketDataProvider] | None = None,
         settings: Settings | None = None,
         llm_service: LLMService | None = None,
         sentiment_service: SentimentService | None = None,
@@ -67,6 +68,7 @@ class AnalysisService:
     ) -> None:
         self._settings = settings or get_settings()
         self._provider = provider
+        self._providers = providers or {provider.name: provider}
         self._llm = llm_service
         self._sentiment = sentiment_service
         self._indicators = indicator_engine or IndicatorEngine(
@@ -75,7 +77,15 @@ class AnalysisService:
 
     @property
     def provider(self) -> MarketDataProvider:
-        """Der genutzte Marktdaten-Provider, z. B. fuer Statusabfragen."""
+        """Der primaere Marktdaten-Provider, z. B. fuer Statusabfragen."""
+        return self._provider
+
+    def _provider_for(self, exchange: str | None) -> MarketDataProvider:
+        """Provider fuer eine Boerse waehlen; Fallback ist der primaere Provider."""
+        if exchange:
+            resolved = self._providers.get(exchange.lower().strip())
+            if resolved is not None:
+                return resolved
         return self._provider
 
     async def analyze(
@@ -84,6 +94,7 @@ class AnalysisService:
         *,
         timeframes: list[str] | None = None,
         session: AsyncSession | None = None,
+        exchange: str | None = None,
         weights: StrategyWeights | None = None,
         strategy_version_id: int | None = None,
         persist: bool = True,
@@ -97,19 +108,28 @@ class AnalysisService:
             session: DB-Session. Ohne Session wird nicht persistiert.
             weights: Abweichende Gewichtung, sonst die aktive Strategieversion.
             persist: Steuert die Persistierung unabhaengig von der Session.
+            exchange: Boerse fuer Kerzen (z. B. ``binance``). Ohne Angabe aus DB.
             use_llm: Ueberschreibt ``ENABLE_LLM_ANALYSIS`` fuer diesen Aufruf.
         """
         normalized = symbol.upper().strip()
         target_timeframes = timeframes or self._settings.timeframes
 
-        info = await self._provider.get_symbol_info(normalized)
+        resolved_exchange = exchange
+        if resolved_exchange is None and session is not None:
+            asset = await AssetRepository(session).get_by_symbol(normalized)
+            if asset is not None:
+                resolved_exchange = asset.exchange
+
+        provider = self._provider_for(resolved_exchange)
+
+        info = await provider.get_symbol_info(normalized)
         if not info.is_active:
             raise MarketDataError(
                 f"Handelspaar {normalized} wird derzeit nicht gehandelt.",
-                detail=f"Status beim Provider {self._provider.name}: inaktiv",
+                detail=f"Status beim Provider {provider.name}: inaktiv",
             )
 
-        series_map = await self._provider.get_multi_timeframe_candles(
+        series_map = await provider.get_multi_timeframe_candles(
             normalized, target_timeframes, limit=self._settings.candle_limit
         )
         if not series_map:
@@ -168,7 +188,15 @@ class AnalysisService:
         await self._attach_llm_summary(outcome, use_llm=use_llm)
 
         if persist and session is not None:
-            await self._persist(session, outcome, info, indicator_sets, series_map, version_id)
+            await self._persist(
+                session,
+                outcome,
+                info,
+                indicator_sets,
+                series_map,
+                version_id,
+                exchange=provider.name,
+            )
 
         return outcome
 
@@ -285,11 +313,13 @@ class AnalysisService:
         indicator_sets: dict[str, IndicatorSet],
         series_map: dict[str, CandleSeries],
         strategy_version_id: int | None,
+        *,
+        exchange: str,
     ) -> None:
         assets = AssetRepository(session)
         signals = SignalRepository(session)
 
-        asset = await assets.get_or_create(info, exchange=self._provider.name)  # type: ignore[arg-type]
+        asset = await assets.get_or_create(info, exchange=exchange)  # type: ignore[arg-type]
         outcome.asset_id = asset.id
 
         for timeframe, series in series_map.items():

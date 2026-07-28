@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import MarketDataError
-from app.market_data.coingecko import CoinGeckoClient, CoinGeckoMarket
+from app.market_data.coingecko import (
+    CoinGeckoClient,
+    CoinGeckoMarket,
+    CoinGeckoTicker,
+    exchange_matches_provider,
+)
 from app.market_data.types import SymbolInfo
 from app.models.market import Asset
 from app.repositories.asset_repository import AssetRepository
@@ -126,6 +131,55 @@ class TestCoinGeckoClient:
         finally:
             await gecko.close()
 
+    @pytest.mark.asyncio
+    async def test_fetches_coin_tickers(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path.endswith("/coins/arbitrum/tickers")
+            return httpx.Response(
+                200,
+                json={
+                    "tickers": [
+                        {
+                            "base": "ARB",
+                            "target": "USDT",
+                            "market": {"name": "KuCoin", "identifier": "kucoin"},
+                        },
+                        {
+                            "base": "ARB",
+                            "target": "USDT",
+                            "market": {"name": "Binance", "identifier": "binance"},
+                        },
+                    ]
+                },
+            )
+
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.coingecko.com/api/v3",
+        )
+        gecko = CoinGeckoClient(NO_RETRY, client=client)
+        gecko._owns_client = True
+        try:
+            tickers = await gecko.fetch_coin_tickers("arbitrum")
+        finally:
+            await gecko.close()
+
+        assert len(tickers) == 2
+        assert tickers[0].base == "ARB"
+        assert tickers[0].target == "USDT"
+        assert tickers[0].market_identifier == "kucoin"
+
+
+class TestExchangeMatching:
+    def test_matches_kucoin_identifier(self) -> None:
+        ticker = CoinGeckoTicker("BTC", "USDT", "KuCoin", "kucoin")
+        assert exchange_matches_provider(ticker, "kucoin") is True
+        assert exchange_matches_provider(ticker, "binance") is False
+
+    def test_matches_binance_name(self) -> None:
+        ticker = CoinGeckoTicker("ETH", "USDT", "Binance", "binance")
+        assert exchange_matches_provider(ticker, "binance") is True
+
 
 class MultiSymbolStubProvider(StubProvider):
     def __init__(
@@ -151,6 +205,12 @@ class MultiSymbolStubProvider(StubProvider):
 
             raise SymbolNotFoundError(symbol)
         return info
+
+
+class NamedStubProvider(MultiSymbolStubProvider):
+    def __init__(self, name: str, frames: dict[str, pd.DataFrame], infos: list[SymbolInfo]) -> None:
+        super().__init__(frames, infos)
+        self.name = name
 
 
 class TrackingAnalysisService(AnalysisService):
@@ -229,6 +289,125 @@ class TestUniverseService:
 
     def test_stable_skip_set_contains_usdt(self) -> None:
         assert "USDT" in SKIP_BASE_ASSETS
+
+    @pytest.mark.asyncio
+    async def test_prefers_primary_exchange_in_dual_mapping(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        kucoin = NamedStubProvider("kucoin", uptrend_frames, [BTC])
+        binance = NamedStubProvider("binance", uptrend_frames, [BTC, ETH])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1)]
+        )
+        settings = service_settings(
+            universe_size=10,
+            market_data_provider="kucoin",
+            universe_exchanges="kucoin,binance",
+        )
+        service = UniverseService({"kucoin": kucoin, "binance": binance}, gecko, settings=settings)
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        assert result.mapped_via_direct == 1
+        asset = await AssetRepository(session).get_by_symbol("BTCUSDT")
+        assert asset is not None
+        assert asset.exchange == "kucoin"
+
+    @pytest.mark.asyncio
+    async def test_maps_binance_only_coin(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        kucoin = NamedStubProvider("kucoin", uptrend_frames, [BTC])
+        binance = NamedStubProvider("binance", uptrend_frames, [BTC, ETH])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2)]
+        )
+        settings = service_settings(
+            universe_size=10,
+            market_data_provider="kucoin",
+            universe_exchanges="kucoin,binance",
+        )
+        service = UniverseService({"kucoin": kucoin, "binance": binance}, gecko, settings=settings)
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        asset = await AssetRepository(session).get_by_symbol("ETHUSDT")
+        assert asset is not None
+        assert asset.exchange == "binance"
+
+    @pytest.mark.asyncio
+    async def test_ticker_fallback_maps_alias_base(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        pepe = SymbolInfo(
+            symbol="PEPEUSDT",
+            base_asset="PEPE",
+            quote_asset="USDT",
+            price_precision=8,
+            quantity_precision=0,
+            is_active=True,
+        )
+        kucoin = NamedStubProvider("kucoin", uptrend_frames, [BTC])
+        binance = NamedStubProvider("binance", uptrend_frames, [pepe])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[CoinGeckoMarket("pepe", "1000PEPE", "Pepe", 70.0, 50)]
+        )
+        gecko.fetch_coin_tickers = AsyncMock(
+            return_value=[CoinGeckoTicker("PEPE", "USDT", "Binance", "binance")]
+        )
+        settings = service_settings(
+            universe_size=10,
+            market_data_provider="kucoin",
+            universe_exchanges="kucoin,binance",
+            universe_ticker_fallback=True,
+            universe_ticker_fallback_max=10,
+        )
+        service = UniverseService({"kucoin": kucoin, "binance": binance}, gecko, settings=settings)
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        assert result.mapped_via_ticker == 1
+        assert result.ticker_lookups == 1
+        asset = await AssetRepository(session).get_by_symbol("PEPEUSDT")
+        assert asset is not None
+        assert asset.exchange == "binance"
+
+
+class TestAnalysisProviderRouting:
+    @pytest.mark.asyncio
+    async def test_uses_asset_exchange_from_db(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        await AssetRepository(session).upsert_universe_entry(
+            symbol="ETHUSDT",
+            base_asset="ETH",
+            quote_asset="USDT",
+            exchange="binance",
+            coingecko_id="ethereum",
+            market_cap_rank=2,
+            market_cap_usd=Decimal("1"),
+        )
+
+        kucoin = NamedStubProvider("kucoin", uptrend_frames, [BTC])
+        binance = NamedStubProvider("binance", uptrend_frames, [ETH])
+        settings = service_settings(enable_llm_analysis=False)
+        analysis = AnalysisService(
+            kucoin,
+            providers={"kucoin": kucoin, "binance": binance},
+            settings=settings,
+        )
+
+        outcome = await analysis.analyze("ETHUSDT", session=session, persist=False)
+
+        assert outcome.result.symbol == "ETHUSDT"
+        assert any("ETHUSDT" in call for call in binance.calls)
+        assert not any("ETHUSDT" in call for call in kucoin.calls)
 
 
 class TestUniverseBatchScan:

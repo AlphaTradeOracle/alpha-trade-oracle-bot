@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     universe_size: int = 1000
     universe_scan_batch_size: int = 50
     universe_refresh_hours: int = 24
+    universe_exchanges: str = "kucoin,binance"
+    universe_ticker_fallback: bool = True
+    universe_ticker_fallback_max: int = 250
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0
