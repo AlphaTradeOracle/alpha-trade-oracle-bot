@@ -72,7 +72,11 @@ class PaperTradingService:
         )
 
     async def open_from_signal(
-        self, session: AsyncSession, outcome: AnalysisOutcome
+        self,
+        session: AsyncSession,
+        outcome: AnalysisOutcome,
+        *,
+        opened_at: datetime | None = None,
     ) -> PaperPosition | None:
         if not self.enabled:
             return None
@@ -108,7 +112,7 @@ class PaperTradingService:
         entry_fee = notional * fee_rate
 
         account.cash_balance -= margin + entry_fee
-        now = utc_now()
+        now = opened_at or utc_now()
 
         position = PaperPosition(
             account_id=account.id,
@@ -317,12 +321,9 @@ class PaperTradingService:
             signal_id=signal.id,
             asset_id=signal.asset_id,
         )
-        position = await self.open_from_signal(session, outcome)
-        if position is not None:
-            position.opened_at = signal.created_at
-            if position.fills:
-                position.fills[0].filled_at = signal.created_at
-        return position
+        return await self.open_from_signal(
+            session, outcome, opened_at=signal.created_at
+        )
 
     async def update_open_positions(
         self, session: AsyncSession, prices: dict[str, float]
