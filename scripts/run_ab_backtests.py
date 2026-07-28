@@ -70,6 +70,8 @@ async def main() -> int:
                         persist=False,
                         scale_out_enabled=scale_out,
                         move_stop_to_breakeven_after_tp1=scale_out,
+                        # Single-TF fuer Runtime; Exit-A/B bleibt fair (gleiche Signale).
+                        use_multi_timeframe=False,
                     )
                     overall = _pick(report.metrics.get("overall"))
                     long_m = _pick(report.metrics.get("long"))
