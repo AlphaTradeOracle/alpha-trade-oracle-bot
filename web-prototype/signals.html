@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signale — Alpha Trade Oracle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Public+Sans:wght@400;500;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="wrap">
+        <a class="brand-mark" href="index.html">Alpha Trade <span>Oracle</span></a>
+        <div class="nav-links">
+          <a href="signals.html" aria-current="page">Signale</a>
+          <a href="paper.html">Paper Desk</a>
+          <a class="nav-cta" href="signal.html?id=ub-long">Detail</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Discovery</p>
+          <h2>Signal Desk</h2>
+          <p>Stündlicher Scan der Top&nbsp;300 — hier zum Durchstöbern und Filtern.</p>
+        </div>
+
+        <div class="toolbar" role="toolbar" aria-label="Filter">
+          <button class="chip" type="button" data-filter="all" aria-pressed="true">Alle</button>
+          <button class="chip" type="button" data-filter="long" aria-pressed="false">Long</button>
+          <button class="chip" type="button" data-filter="short" aria-pressed="false">Short</button>
+          <button class="chip" type="button" data-filter="open" aria-pressed="false">Open</button>
+          <input class="search" id="q" type="search" placeholder="Symbol suchen…" />
+        </div>
+
+        <div class="signal-grid" id="list"></div>
+        <div class="empty" id="empty" hidden>Keine Treffer für diesen Filter.</div>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        Prototype · Beispieldaten
+        <p class="disclaimer">Keine Finanzberatung. Kryptowährungen sind hochriskant.</p>
+      </div>
+    </footer>
+
+    <script src="data.js"></script>
+    <script>
+      const list = document.getElementById("list");
+      const empty = document.getElementById("empty");
+      let filter = "all";
+      let query = "";
+
+      function scoreVisual(s) {
+        const longish = s.side === "long";
+        const shown = longish ? s.score : 100 - s.score;
+        const color = longish ? "var(--long)" : "var(--short)";
+        return { shown, color };
+      }
+
+      function render() {
+        const rows = ATO.signals.filter((s) => {
+          if (filter === "long" && s.side !== "long") return false;
+          if (filter === "short" && s.side !== "short") return false;
+          if (filter === "open" && s.status === "closed") return false;
+          if (query && !s.symbol.toLowerCase().includes(query)) return false;
+          return true;
+        });
+        empty.hidden = rows.length > 0;
+        list.innerHTML = rows
+          .map((s) => {
+            const { shown, color } = scoreVisual(s);
+            return `
+            <button class="signal-row" type="button" data-id="${s.id}">
+              <div>
+                <div class="sym">${s.base}<span style="color:var(--muted);font-weight:500"> / USDT</span></div>
+                <div class="meta-mini">${s.exchange} · ${s.opened}</div>
+              </div>
+              <div class="dir ${s.side}">${ATO.dirLabel(s.direction)}</div>
+              <div>
+                <div class="meta-mini">Score ${ATO.fmt(s.score, 1)}</div>
+                <div class="score-bar"><i style="width:${shown}%;background:${color}"></i></div>
+              </div>
+              <div class="meta-mini">Entry ${ATO.fmt(s.entry, s.entry < 1 ? 4 : 3)}</div>
+              <div class="meta-mini">${s.status === "closed" ? "Closed" : "Open"}</div>
+              <div class="meta-mini">öffnen →</div>
+            </button>`;
+          })
+          .join("");
+        list.querySelectorAll(".signal-row").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            location.href = `signal.html?id=${btn.dataset.id}`;
+          });
+        });
+      }
+
+      document.querySelectorAll("[data-filter]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          filter = chip.dataset.filter;
+          document.querySelectorAll("[data-filter]").forEach((c) =>
+            c.setAttribute("aria-pressed", String(c === chip))
+          );
+          render();
+        });
+      });
+      document.getElementById("q").addEventListener("input", (e) => {
+        query = e.target.value.trim().toLowerCase();
+        render();
+      });
+      render();
+    </script>
+  </body>
+</html>

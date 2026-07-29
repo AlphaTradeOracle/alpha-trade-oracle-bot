@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alpha Trade Oracle — Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Public+Sans:wght@400;500;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="wrap">
+        <a class="brand-mark" href="index.html">Alpha Trade <span>Oracle</span></a>
+        <div class="nav-links">
+          <a href="signals.html">Signale</a>
+          <a href="paper.html">Paper Desk</a>
+          <a class="nav-cta" href="signals.html">Live entdecken</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-plane" aria-hidden="true">
+        <canvas id="heroChart"></canvas>
+      </div>
+      <div class="hero-content">
+        <p class="hero-brand">Alpha Trade <em>Oracle</em></p>
+        <p class="hero-lead">
+          Strukturierte Krypto-Signale mit Chart, Levels und Begründung —
+          stündlich über die Top&nbsp;300, ohne Orderausführung.
+        </p>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="signals.html">Signale entdecken</a>
+          <a class="btn btn-ghost" href="signal.html?id=ub-long">Beispiel öffnen</a>
+        </div>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Warum Web</p>
+          <h2>Mehr Kontext als Telegram allein</h2>
+          <p>
+            Feed, Filter und interaktiver Chart — damit du Signale vergleichen,
+            Levels sehen und Paper-Performance nachvollziehen kannst.
+          </p>
+        </div>
+        <div class="feature-strip">
+          <article>
+            <h3>Signal Desk</h3>
+            <p>Filter nach Long/Short, Score und Status. Ein Klick öffnet den Chart.</p>
+          </article>
+          <article>
+            <h3>Chart mit Levels</h3>
+            <p>Entry, SL, TP1–3 als Linien — gleiche Logik wie im Bot (2/4/6R).</p>
+          </article>
+          <article>
+            <h3>Paper Glance</h3>
+            <p>Offene Bücher und Realized PnL auf einen Blick, parallel zu Telegram.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <strong>Alpha Trade Oracle</strong> · UX-Prototyp (lokal, klickbar)
+        <p class="disclaimer">
+          Keine Finanzberatung. Kryptowährungen sind hochriskant. Prototype mit
+          Beispieldaten — nicht live angebunden.
+        </p>
+      </div>
+    </footer>
+
+    <script src="data.js"></script>
+    <script src="charts.js"></script>
+    <script>
+      ATO.drawHeroMarket(document.getElementById("heroChart"));
+    </script>
+  </body>
+</html>

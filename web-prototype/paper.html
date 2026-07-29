@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper Desk — Alpha Trade Oracle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Public+Sans:wght@400;500;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="wrap">
+        <a class="brand-mark" href="index.html">Alpha Trade <span>Oracle</span></a>
+        <div class="nav-links">
+          <a href="signals.html">Signale</a>
+          <a href="paper.html" aria-current="page">Paper Desk</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Paper</p>
+          <h2>Paper Desk</h2>
+          <p>Snapshot der virtuellen Bücher — ergänzend zu Telegram.</p>
+        </div>
+        <div class="stat-row" id="stats"></div>
+        <p class="meta-mini" style="margin-top:1.25rem">
+          Prototype-Zahlen · Live-DB weicht ggf. ab · $100 Margin · 10x · TP 2/4/6R
+        </p>
+        <div class="btn-row" style="margin-top:1.5rem">
+          <a class="btn btn-primary" href="signals.html">Zu den Signalen</a>
+          <a class="btn btn-ghost" href="index.html">Landing</a>
+        </div>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="disclaimer">Keine Finanzberatung. Kryptowährungen sind hochriskant.</p>
+      </div>
+    </footer>
+
+    <script src="data.js"></script>
+    <script>
+      const p = ATO.paper;
+      document.getElementById("stats").innerHTML = `
+        <div class="stat"><div class="k">Equity approx</div><div class="v up">$${ATO.fmt(p.equity, 0)}</div></div>
+        <div class="stat"><div class="k">Cash</div><div class="v">$${ATO.fmt(p.cash, 0)}</div></div>
+        <div class="stat"><div class="k">Realized</div><div class="v ${p.realized >= 0 ? "up" : "down"}">$${ATO.fmt(p.realized, 2)}</div></div>
+        <div class="stat"><div class="k">Open / Closed</div><div class="v">${p.open} / ${p.closed}</div></div>
+      `;
+    </script>
+  </body>
+</html>

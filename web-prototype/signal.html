@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal Detail — Alpha Trade Oracle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Public+Sans:wght@400;500;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="wrap">
+        <a class="brand-mark" href="index.html">Alpha Trade <span>Oracle</span></a>
+        <div class="nav-links">
+          <a href="signals.html">← Alle Signale</a>
+          <a href="paper.html">Paper Desk</a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="section">
+      <div class="wrap" id="root">
+        <p class="empty">Signal wird geladen…</p>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="disclaimer">Keine Finanzberatung. Kryptowährungen sind hochriskant.</p>
+      </div>
+    </footer>
+
+    <script src="data.js"></script>
+    <script src="charts.js"></script>
+    <script>
+      const id = new URLSearchParams(location.search).get("id") || "ub-long";
+      const s = ATO.getById(id) || ATO.signals[0];
+      const scoreShown = s.side === "long" ? s.score : 100 - s.score;
+      const root = document.getElementById("root");
+      root.innerHTML = `
+        <div class="detail-top">
+          <div>
+            <p class="eyebrow">${s.exchange} · ${s.timeframe} · ${s.opened}</p>
+            <h1>${s.symbol}</h1>
+            <p class="dir ${s.side}" style="margin:0.4rem 0 0;font-family:var(--font-mono);font-weight:600">
+              ${ATO.dirLabel(s.direction)} · Phase ${s.phase}
+            </p>
+          </div>
+          <div class="score-ring" style="--score:${scoreShown}">
+            ${ATO.fmt(s.score, 0)}
+          </div>
+        </div>
+        <div class="detail-layout">
+          <div>
+            <div class="chart-shell">
+              <canvas id="chart"></canvas>
+            </div>
+            <p class="meta-mini" style="margin-top:0.75rem">
+              Chart-Prototype · Entry / SL / TP1–3 eingezeichnet · Scale-out 33/33/34 · R:R auf TP2 ≈ ${ATO.fmt(s.rr, 1)}
+            </p>
+          </div>
+          <div style="display:grid;gap:1rem">
+            <div class="panel">
+              <h3>Levels</h3>
+              <ul class="level-list">
+                <li><span class="lab">Entry</span><span>${ATO.fmt(s.entry, s.entry < 1 ? 5 : 4)}</span></li>
+                <li><span class="lab">Stop Loss</span><span>${ATO.fmt(s.sl, s.sl < 1 ? 5 : 4)}</span></li>
+                <li><span class="lab">TP1 (2R)</span><span>${ATO.fmt(s.tp1, s.tp1 < 1 ? 5 : 4)}</span></li>
+                <li><span class="lab">TP2 (4R)</span><span>${ATO.fmt(s.tp2, s.tp2 < 1 ? 5 : 4)}</span></li>
+                <li><span class="lab">TP3 (6R)</span><span>${ATO.fmt(s.tp3, s.tp3 < 1 ? 5 : 4)}</span></li>
+              </ul>
+            </div>
+            <div class="panel">
+              <h3>Bestätigungen</h3>
+              <ul class="confirm-list">
+                ${s.confirms.map((c) => `<li>${c}</li>`).join("")}
+              </ul>
+              <p class="meta-mini" style="margin-top:1rem">Ungültig: ${s.invalid}</p>
+              ${s.result ? `<p class="meta-mini">Ergebnis: ${s.result}</p>` : ""}
+            </div>
+            <a class="btn btn-primary" href="signals.html">Zurück zum Desk</a>
+          </div>
+        </div>`;
+      ATO.drawSignalChart(document.getElementById("chart"), s);
+    </script>
+  </body>
+</html>
