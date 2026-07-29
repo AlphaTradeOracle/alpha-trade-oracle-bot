@@ -57,7 +57,7 @@
     listEl.innerHTML = rows
       .map(
         (s) => `
-      <button type="button" class="item ${s.id === activeId ? "active" : ""}" data-id="${s.id}">
+      <button type="button" class="item ${s.id === activeId ? "active" : ""}" data-id="${s.id}" data-side="${s.side}">
         <span class="sym">${s.symbol}</span>
         <span class="side ${s.side}">${sideLabel(s)}</span>
         <span class="score">${ATO.fmt(s.score, 1)}</span>

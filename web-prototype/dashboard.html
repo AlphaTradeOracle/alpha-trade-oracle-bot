@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ATO Live Signals</title>
+    <title>Alpha Trade Oracle Bot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,8 +14,12 @@
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   </head>
   <body>
+    <div class="desk-bg" aria-hidden="true"></div>
     <aside class="rail">
-      <div class="rail-brand">ATO LIVE</div>
+      <div class="rail-brand">
+        <span class="rail-brand-mark">Alpha Trade Oracle Bot</span>
+        <span class="rail-brand-live" id="feedPulse">LIVE</span>
+      </div>
       <div class="rail-meta">
         <span>Top 300</span>
         <span>60s Feed</span>
