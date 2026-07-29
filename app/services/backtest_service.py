@@ -132,6 +132,20 @@ class BacktestService:
                     source="db" if prefer_db else "api",
                 )
                 continue
+            # Sekundaere TFs mit zu wenig Historie ueberspringen (MTF-Warmup),
+            # sonst scheitert der gesamte Lauf an z. B. kurzem 1d.
+            min_bars = WARMUP_CANDLES + 10
+            if tf != timeframe and len(series) < min_bars:
+                logger.warning(
+                    "backtest_timeframe_skipped",
+                    symbol=normalized,
+                    timeframe=tf,
+                    reason="insufficient_warmup",
+                    candles=len(series),
+                    required=min_bars,
+                    source="db" if prefer_db else "api",
+                )
+                continue
             mtf_frames[tf] = series.to_dataframe()
             candles_loaded += len(series)
 
