@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -67,29 +67,22 @@ class DataRetentionService:
         self._settings = settings or get_settings()
 
     async def prune(self, session: AsyncSession) -> PruneResult:
-        """Assets ausserhalb Top-N deaktivieren und ueberzaehlige Kerzen loeschen."""
+        """Top-N handelbare Paare nach MCAP behalten; Rest und alte Kerzen weg."""
         out = PruneResult()
+        target = self._settings.universe_target_count
         max_rank = self._settings.universe_max_rank
         retention_days = max(1, self._settings.candle_retention_days)
         cutoff = utc_now() - timedelta(days=retention_days)
 
-        if max_rank and max_rank > 0:
+        keep_ids = await self._keep_asset_ids(session, target=target, max_rank=max_rank)
+        if keep_ids:
             deactivate = await session.execute(
                 update(Asset)
-                .where(
-                    or_(
-                        Asset.market_cap_rank.is_(None),
-                        Asset.market_cap_rank > max_rank,
-                    )
-                )
+                .where(Asset.id.not_in(keep_ids))
                 .values(in_universe=False, is_active=False)
             )
             out.deactivated_assets = int(deactivate.rowcount or 0)
 
-            keep_ids = select(Asset.id).where(
-                Asset.market_cap_rank.is_not(None),
-                Asset.market_cap_rank <= max_rank,
-            )
             candles_out = await session.execute(
                 delete(MarketCandle).where(MarketCandle.asset_id.not_in(keep_ids))
             )
@@ -98,6 +91,8 @@ class DataRetentionService:
                 delete(IndicatorSnapshot).where(IndicatorSnapshot.asset_id.not_in(keep_ids))
             )
             out.deleted_snapshots_outside = int(snaps_out.rowcount or 0)
+        elif keep_ids is not None:
+            logger.warning("prune_keep_set_empty_skipping_asset_prune")
 
         candles_old = await session.execute(
             delete(MarketCandle).where(MarketCandle.open_time < cutoff)
@@ -109,8 +104,40 @@ class DataRetentionService:
         out.deleted_snapshots_old = int(snaps_old.rowcount or 0)
 
         await session.flush()
-        logger.info("data_pruned", **out.as_summary())
+        logger.info(
+            "data_pruned",
+            keep_count=len(keep_ids) if keep_ids is not None else None,
+            **out.as_summary(),
+        )
         return out
+
+    async def _keep_asset_ids(
+        self,
+        session: AsyncSession,
+        *,
+        target: int,
+        max_rank: int,
+    ) -> list[int] | None:
+        """IDs der Top-N mapped Assets nach MCAP (optional harter Rank-Ceiling)."""
+        filters = [
+            Asset.in_universe.is_(True),
+            Asset.market_cap_rank.is_not(None),
+        ]
+        if max_rank and max_rank > 0:
+            filters.append(Asset.market_cap_rank <= max_rank)
+
+        statement = (
+            select(Asset.id)
+            .where(*filters)
+            .order_by(Asset.market_cap_rank.asc(), Asset.symbol)
+        )
+        if target and target > 0:
+            statement = statement.limit(target)
+        elif not (max_rank and max_rank > 0):
+            return None
+
+        rows = (await session.execute(statement)).all()
+        return [row[0] for row in rows]
 
     async def backfill_history(
         self,
@@ -187,6 +214,7 @@ class DataRetentionService:
         start = utc_now() - timedelta(days=max(1, retention_days))
         tfs = timeframes or list(self._settings.timeframes)
         max_rank = self._settings.universe_max_rank or None
+        target = self._settings.universe_target_count or None
 
         statement = (
             select(Asset)
@@ -198,8 +226,9 @@ class DataRetentionService:
                 Asset.market_cap_rank.is_not(None),
                 Asset.market_cap_rank <= max_rank,
             )
-        if limit_assets and limit_assets > 0:
-            statement = statement.limit(limit_assets)
+        effective_limit = limit_assets if limit_assets and limit_assets > 0 else target
+        if effective_limit and effective_limit > 0:
+            statement = statement.limit(effective_limit)
 
         assets = list((await session.execute(statement)).scalars())
         out.assets = len(assets)

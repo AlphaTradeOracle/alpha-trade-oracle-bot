@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     candle_limit: int = 500
     min_candles_required: int = 210
     universe_size: int = 1000
-    #: Pro Stunden-Scan: Top-N Market-Cap-Coins (siehe universe_max_rank).
+    #: Pro Stunden-Scan: Batch-Groesse (sollte ~ universe_target_count sein).
     universe_scan_batch_size: int = 300
     universe_refresh_hours: int = 24
     universe_exchanges: str = "kucoin,binance,coinbase"
@@ -113,8 +113,11 @@ class Settings(BaseSettings):
     #: Begrenzt CoinGecko-Ticker-Lookups (Rate-Limits); Mapping laeuft primaer
     #: ueber KuCoin/Binance/Coinbase-Symbol-Listen.
     universe_ticker_fallback_max: int = 80
-    #: Nur Coins mit market_cap_rank <= diesem Wert scannen (0 = kein Limit).
-    universe_max_rank: int = 300
+    #: Top-N handelbare USD*/USDT/USDC-Paare nach MCAP behalten/scannen
+    #: (Rank kann dabei >N sein, wenn hoehere Ranks kein Pair haben).
+    universe_target_count: int = 300
+    #: Optionaler harter Rank-Ceiling (0 = aus; Prefer universe_target_count).
+    universe_max_rank: int = 0
     coinbase_quote_assets: str = "USD,USDC,USDT"
     #: Kerzen/Snapshots aelter als diese Tage werden beim Prune entfernt.
     candle_retention_days: int = 365

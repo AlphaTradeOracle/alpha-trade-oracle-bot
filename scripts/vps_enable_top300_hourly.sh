@@ -12,7 +12,9 @@ upsert_env() {
   fi
 }
 
-upsert_env UNIVERSE_MAX_RANK 300
+# Top-300 handelbare USD*/USDT/USDC-Paare nach MCAP (Rank kann >300 sein).
+upsert_env UNIVERSE_TARGET_COUNT 300
+upsert_env UNIVERSE_MAX_RANK 0
 upsert_env UNIVERSE_SCAN_BATCH_SIZE 300
 upsert_env UNIVERSE_TICKER_FALLBACK_MAX 80
 upsert_env UNIVERSE_EXCHANGES kucoin,binance,coinbase
@@ -34,19 +36,24 @@ sleep 8
 
 echo "=== Effective settings ==="
 docker compose exec -T worker python -c \
-  'from app.core.config import get_settings; s=get_settings(); print(s.universe_max_rank, s.universe_scan_batch_size, s.universe_exchanges, s.universe_ticker_fallback_max, s.scan_interval_minutes)'
+  'from app.core.config import get_settings; s=get_settings(); print(s.universe_target_count, s.universe_max_rank, s.universe_scan_batch_size, s.universe_exchanges, s.universe_ticker_fallback_max, s.scan_interval_minutes)'
 
 echo "=== Universe refresh ==="
 docker compose exec -T worker python -m app.cli universe refresh
 
+echo "=== Prune to top target_count by MCAP ==="
+docker compose exec -T worker python -m app.cli data prune
+
 set -a
 . ./.env
 set +a
-echo "=== Pool size rank<=300 ==="
+echo "=== Active scan pool ==="
 docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" postgres \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "SELECT count(*) FILTER (WHERE in_universe AND is_active AND market_cap_rank <= 300) AS scan_pool_300,
-          count(*) FILTER (WHERE exchange='kucoin' AND in_universe AND is_active AND market_cap_rank <= 300) AS kucoin_n,
-          count(*) FILTER (WHERE exchange='binance' AND in_universe AND is_active AND market_cap_rank <= 300) AS binance_n,
-          count(*) FILTER (WHERE exchange='coinbase' AND in_universe AND is_active AND market_cap_rank <= 300) AS coinbase_n
+  "SELECT count(*) FILTER (WHERE in_universe AND is_active) AS scan_pool,
+          min(market_cap_rank) FILTER (WHERE in_universe AND is_active) AS min_rank,
+          max(market_cap_rank) FILTER (WHERE in_universe AND is_active) AS max_rank,
+          count(*) FILTER (WHERE exchange='kucoin' AND in_universe AND is_active) AS kucoin_n,
+          count(*) FILTER (WHERE exchange='binance' AND in_universe AND is_active) AS binance_n,
+          count(*) FILTER (WHERE exchange='coinbase' AND in_universe AND is_active) AS coinbase_n
    FROM assets;"
