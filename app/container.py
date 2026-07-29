@@ -22,6 +22,7 @@ from app.monitoring.health import HealthService
 from app.sentiment.service import SentimentService
 from app.services.analysis_service import AnalysisService
 from app.services.backtest_service import BacktestService
+from app.services.data_retention_service import DataRetentionService
 from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 from app.services.universe_service import UniverseService
@@ -43,6 +44,7 @@ class ApplicationContainer:
     analysis_service: AnalysisService
     backtest_service: BacktestService
     universe_service: UniverseService
+    data_retention: DataRetentionService
     paper_trading: PaperTradingService
     deduplicator: SignalDeduplicator
     health_service: HealthService
@@ -100,6 +102,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     )
     backtest_service = BacktestService(provider, settings=cfg)
     universe_service = UniverseService(universe_providers, coingecko, settings=cfg)
+    data_retention = DataRetentionService(universe_providers, settings=cfg)
     paper_trading = PaperTradingService(settings=cfg)
 
     deduplicator = SignalDeduplicator(
@@ -131,6 +134,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         analysis_service=analysis_service,
         backtest_service=backtest_service,
         universe_service=universe_service,
+        data_retention=data_retention,
         paper_trading=paper_trading,
         deduplicator=deduplicator,
         health_service=health_service,

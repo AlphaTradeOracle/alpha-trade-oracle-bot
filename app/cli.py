@@ -8,6 +8,8 @@ Wichtigste Kommandos:
 - ``analyze``           einmalige Analyse auf der Konsole
 - ``scan``              einmaliger Marktscan
 - ``universe refresh``  Top-N Market Cap laden und mappen
+- ``data prune``        nur Top-N + Retention-Fenster behalten
+- ``data backfill``     Historie fuer Top-N nachladen
 - ``seed``              Grunddaten anlegen
 """
 
@@ -89,6 +91,31 @@ cli.add_typer(universe_app, name="universe")
 def universe_refresh() -> None:
     """Top-N Market Cap von CoinGecko laden und auf Boersen-Paare mappen."""
     asyncio.run(_run_universe_refresh())
+
+
+data_app = typer.Typer(help="Marktdaten-Hygiene und Historie.")
+cli.add_typer(data_app, name="data")
+
+
+@data_app.command("prune")
+def data_prune() -> None:
+    """Assets ausserhalb Top-N deaktivieren und alte/fremde Kerzen loeschen."""
+    asyncio.run(_run_data_prune())
+
+
+@data_app.command("backfill")
+def data_backfill(
+    days: Annotated[
+        int | None,
+        typer.Option("--days", help="Historie in Tagen (Default: CANDLE_RETENTION_DAYS)"),
+    ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", help="Max. Assets (Default: alle Top-N)"),
+    ] = None,
+) -> None:
+    """Kerzenhistorie fuer Top-N Assets nachladen (fuer Backtests)."""
+    asyncio.run(_run_data_backfill(days, limit))
 
 
 paper_app = typer.Typer(help="Paper-Trading verwalten.")
@@ -445,6 +472,36 @@ async def _run_universe_refresh() -> None:
         suffix = " ..." if len(result.symbols) > 15 else ""
         typer.echo(f"  examples: {preview}{suffix}")
 
+    await container.aclose()
+
+
+async def _run_data_prune() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+    async with session_scope() as session:
+        result = await container.data_retention.prune(session)
+    typer.echo("")
+    typer.secho("Data-Prune abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    for key, value in result.as_summary().items():
+        typer.echo(f"  {key}: {value}")
+    await container.aclose()
+
+
+async def _run_data_backfill(days: int | None, limit: int | None) -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+    async with session_scope() as session:
+        result = await container.data_retention.backfill_history(
+            session, days=days, limit_assets=limit
+        )
+    typer.echo("")
+    typer.secho("History-Backfill abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    for key, value in result.as_summary().items():
+        typer.echo(f"  {key}: {value}")
+    if result.failures:
+        typer.secho(f"  erste Fehler: {result.failures[:5]}", fg=typer.colors.YELLOW)
     await container.aclose()
 
 

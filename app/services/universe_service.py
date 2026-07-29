@@ -188,7 +188,13 @@ class UniverseService:
                 if item.strip()
             ]
             return tuple(configured or ("USD", "USDC", "USDT"))
-        return (default_quote.upper(),)
+        primary = default_quote.upper()
+        # USDC als Zweitquote hebt Coverage (viele Alts nur als *-USDC gelistet).
+        if primary == "USDT":
+            return ("USDT", "USDC")
+        if primary == "USDC":
+            return ("USDC", "USDT")
+        return (primary,)
 
     def _map_direct(
         self,
@@ -201,11 +207,19 @@ class UniverseService:
             return None
         for exchange in self._exchange_order:
             index = exchange_indices.get(exchange, {})
-            for candidate in self._quote_candidates(exchange, quote):
+            quotes = self._quote_candidates(exchange, quote)
+            for candidate in quotes:
                 symbol = f"{base}{candidate}"
                 info = index.get(symbol)
                 if info is not None:
                     return symbol, info, exchange
+            # Symbol-Mismatch: Boerse listet gleiches Base unter anderem Ticker.
+            for info in index.values():
+                if info.base_asset.upper() != base:
+                    continue
+                if info.quote_asset.upper() not in quotes:
+                    continue
+                return info.symbol.upper(), info, exchange
         return None
 
     async def _map_via_tickers(
