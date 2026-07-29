@@ -94,6 +94,9 @@ services:
       POSTGRES_HOST: postgres
       REDIS_URL: redis://redis:6379/0
     command: ["python", "-m", "app.cli", "worker"]
+    # Image-HEALTHCHECK prueft :8000 (API); Worker hat keinen HTTP-Server.
+    healthcheck:
+      disable: true
     depends_on:
       postgres:
         condition: service_healthy
