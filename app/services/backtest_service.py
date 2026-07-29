@@ -51,6 +51,7 @@ class BacktestService:
         slippage_percent: float = 0.05,
         initial_capital: float | None = None,
         persist: bool = True,
+        prefer_db: bool = False,
         **config_overrides: object,
     ) -> BacktestReport:
         """Backtest ausfuehren.
@@ -58,6 +59,9 @@ class BacktestService:
         Der Ladezeitraum beginnt bewusst vor ``start``, damit die Indikatoren
         aufgewaermt sind. Ohne diesen Vorlauf waeren die ersten Signale des
         Zeitraums nicht berechenbar.
+
+        ``prefer_db=True`` laedt Kerzen aus ``market_candles`` (Session noetig)
+        statt vom Exchange-API.
         """
         normalized = symbol.upper().strip()
         start_utc = ensure_utc(start)
@@ -67,6 +71,11 @@ class BacktestService:
             raise BacktestError(
                 "Das Enddatum muss nach dem Startdatum liegen.",
                 detail=f"start={start_utc.isoformat()} end={end_utc.isoformat()}",
+            )
+        if prefer_db and session is None:
+            raise BacktestError(
+                "DB-Backtest benoetigt eine offene Datenbank-Session.",
+                detail="prefer_db=True ohne session",
             )
 
         weights = DEFAULT_WEIGHTS
@@ -95,20 +104,32 @@ class BacktestService:
 
         for tf in timeframes:
             warmup_start = start_utc - timeframe_to_timedelta(tf) * WARMUP_CANDLES
-            series = await self._provider.get_candles(
-                normalized, tf, limit=100_000, start_time=warmup_start, end_time=end_utc
-            )
+            if prefer_db:
+                from app.repositories.asset_repository import AssetRepository
+
+                series = await AssetRepository(session).load_candle_series(
+                    normalized,
+                    tf,
+                    start_time=warmup_start,
+                    end_time=end_utc,
+                    limit=100_000,
+                )
+            else:
+                series = await self._provider.get_candles(
+                    normalized, tf, limit=100_000, start_time=warmup_start, end_time=end_utc
+                )
             if series.is_empty:
                 if tf == timeframe:
                     raise BacktestError(
                         f"Fuer {normalized} {tf} wurden im Zeitraum keine Kerzen gefunden.",
-                        detail=f"{start_utc.date()} bis {end_utc.date()}",
+                        detail=f"{start_utc.date()} bis {end_utc.date()} source={'db' if prefer_db else 'api'}",
                     )
                 logger.warning(
                     "backtest_timeframe_skipped",
                     symbol=normalized,
                     timeframe=tf,
                     reason="no_candles",
+                    source="db" if prefer_db else "api",
                 )
                 continue
             mtf_frames[tf] = series.to_dataframe()
@@ -117,7 +138,7 @@ class BacktestService:
         if timeframe not in mtf_frames:
             raise BacktestError(
                 f"Fuer {normalized} {timeframe} wurden im Zeitraum keine Kerzen gefunden.",
-                detail=f"{start_utc.date()} bis {end_utc.date()}",
+                detail=f"{start_utc.date()} bis {end_utc.date()} source={'db' if prefer_db else 'api'}",
             )
 
         repository = BacktestRepository(session) if session is not None and persist else None

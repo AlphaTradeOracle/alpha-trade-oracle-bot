@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import nulls_first, nulls_last, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.time import utc_now
+from app.core.time import ensure_utc, timeframe_to_timedelta, utc_now
 from app.database.dialects import insert_ignore_duplicates
 from app.indicators.engine import IndicatorSet
-from app.market_data.types import CandleSeries, SymbolInfo
+from app.market_data.types import Candle, CandleSeries, SymbolInfo
 from app.models.market import Asset, IndicatorSnapshot, MarketCandle
 
 
@@ -165,6 +166,62 @@ class AssetRepository:
             select(Asset).where(Asset.is_active.is_(True)).order_by(Asset.symbol)
         )
         return list(result.scalars())
+
+    async def load_candle_series(
+        self,
+        symbol: str,
+        timeframe: str,
+        *,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        limit: int = 100_000,
+    ) -> CandleSeries:
+        """OHLCV aus ``market_candles`` laden (fuer DB-Backtests)."""
+        asset = await self.get_by_symbol(symbol)
+        if asset is None:
+            return CandleSeries(symbol=symbol.upper(), timeframe=timeframe, candles=[], source="db")
+
+        filters = [
+            MarketCandle.asset_id == asset.id,
+            MarketCandle.timeframe == timeframe,
+            MarketCandle.is_closed.is_(True),
+        ]
+        if start_time is not None:
+            filters.append(MarketCandle.open_time >= ensure_utc(start_time))
+        if end_time is not None:
+            filters.append(MarketCandle.open_time <= ensure_utc(end_time))
+
+        result = await self._session.execute(
+            select(MarketCandle)
+            .where(*filters)
+            .order_by(MarketCandle.open_time.asc())
+            .limit(max(1, limit))
+        )
+        rows = list(result.scalars())
+        interval = timeframe_to_timedelta(timeframe)
+        candles = [
+            Candle(
+                open_time=ensure_utc(row.open_time),
+                close_time=ensure_utc(row.close_time)
+                if row.close_time is not None
+                else ensure_utc(row.open_time) + interval,
+                open=float(row.open),
+                high=float(row.high),
+                low=float(row.low),
+                close=float(row.close),
+                volume=float(row.volume),
+                quote_volume=float(row.quote_volume) if row.quote_volume is not None else None,
+                trade_count=row.trade_count,
+                is_closed=bool(row.is_closed),
+            )
+            for row in rows
+        ]
+        return CandleSeries(
+            symbol=symbol.upper(),
+            timeframe=timeframe,
+            candles=candles,
+            source="db",
+        )
 
     async def upsert_candles(self, asset_id: int, series: CandleSeries) -> int:
         """Kerzen idempotent schreiben.
