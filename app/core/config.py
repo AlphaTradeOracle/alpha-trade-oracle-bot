@@ -136,8 +136,10 @@ class Settings(BaseSettings):
     #: gehoert damit hinter einen Vergleichstest.
     universe_min_quote_volume_usd: float = 0.0
     coinbase_quote_assets: str = "USD,USDC,USDT"
-    #: Kerzen/Snapshots aelter als diese Tage werden beim Prune entfernt.
-    candle_retention_days: int = 365
+    #: Kerzen/Snapshots aelter als diese Tage werden beim Prune entfernt. Muss
+    #: ueber der tiefsten nachgeladenen Historie liegen, sonst macht der Prune
+    #: einen Backfill wieder zunichte.
+    candle_retention_days: int = 730
 
     # --- Paper-Trading -----------------------------------------------------
     enable_paper_trading: bool = True
