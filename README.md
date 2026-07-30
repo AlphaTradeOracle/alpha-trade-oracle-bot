@@ -159,10 +159,10 @@ python -m app.cli seed
 
 Makefile-Äquivalente: `make analyze`, `make scan`, `make backtest`, `make check`, `make seed`.
 
-## Top-1000 Market-Cap-Universe
+## Top-300 Market-Cap-Universe
 
-1. `python -m app.cli universe refresh` lädt das CoinGecko-Top-N und mappt auf
-   handelbare Paare des aktiven Providers (`MARKET_DATA_PROVIDER`).
+1. `python -m app.cli universe refresh` lädt CoinGecko Top-N (`UNIVERSE_SIZE`, Default 450)
+   und mappt auf handelbare Paare; `data prune` behält `UNIVERSE_TARGET_COUNT` (Default 300).
 2. Der Scheduler refreshed alle `UNIVERSE_REFRESH_HOURS` (Default 24) und scannt
    alle `SCAN_INTERVAL_MINUTES` eine Batch von `UNIVERSE_SCAN_BATCH_SIZE`
    Symbolen (Round-Robin über `last_scanned_at`).
@@ -211,7 +211,7 @@ vertikalen Analyse-/Scan-Ablauf ab.
 - Automatische Kalibrierung speichert Kandidatenversionen, aktiviert sie aber nie selbst
 - Performance-Endpunkt bewertet Signalproduktion, nicht Trade-Outcomes
 - Marktdaten-Provider: Binance und KuCoin (Umschalten via `MARKET_DATA_PROVIDER`)
-- Top-1000 Market-Cap-Universe via CoinGecko (`universe refresh` + Batch-Scan)
+- Top-300 Market-Cap-Universe via CoinGecko (`universe refresh` + Batch-Scan)
 - Docker Desktop muss auf dem Host installiert sein
 
 ## Roadmap
