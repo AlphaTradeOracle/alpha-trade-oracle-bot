@@ -26,9 +26,11 @@ import pandas as pd
 from app.core.enums import ExitReason, SignalDirection
 from app.core.errors import BacktestError
 from app.core.logging import get_logger
-from app.core.time import ensure_utc, timeframe_minutes
+from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta
 from app.indicators.engine import IndicatorEngine
+from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
+from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
@@ -76,6 +78,11 @@ class BacktestConfig:
     move_stop_to_breakeven_after_tp1: bool = True
     #: Take-Profit als Vielfache von R (Stop-Abstand).
     tp_multipliers: tuple[float, float, float] = (2.0, 4.0, 6.0)
+    #: Retest/Pullback-Entry statt naechster Primary-Open (IST).
+    retest_entry_enabled: bool = True
+    retest_zone_near: float = 0.35
+    retest_zone_far: float = 1.0
+    retest_pending_multiplier: int = 4
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -105,6 +112,10 @@ class BacktestConfig:
             "min_adx": settings.signal_min_adx,
             "rsi_long_max": settings.signal_rsi_long_max,
             "rsi_short_min": settings.signal_rsi_short_min,
+            "retest_entry_enabled": settings.backtest_retest_entry_enabled,
+            "retest_zone_near": settings.paper_retest_zone_near,
+            "retest_zone_far": settings.paper_retest_zone_far,
+            "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
             "weights": weights,
         }
         params.update(overrides)
@@ -280,7 +291,10 @@ class BacktestEngine:
                 continue
 
             outcome.signals_generated += 1
-            trade = self._open_trade(signal, df, i, equity)  # type: ignore[arg-type]
+            if self._config.retest_entry_enabled:
+                trade = self._open_trade_retest(signal, df, i, equity)  # type: ignore[arg-type]
+            else:
+                trade = self._open_trade(signal, df, i, equity)  # type: ignore[arg-type]
             if trade is not None:
                 open_trade = trade
                 last_entry_at = trade.entry_at
@@ -344,7 +358,12 @@ class BacktestEngine:
                 continue
 
             outcome.signals_generated += 1
-            trade = self._open_trade(signal, primary_df, i, equity)  # type: ignore[arg-type]
+            if self._config.retest_entry_enabled:
+                trade = self._open_trade_retest(
+                    signal, primary_df, i, equity  # type: ignore[arg-type]
+                )
+            else:
+                trade = self._open_trade(signal, primary_df, i, equity)  # type: ignore[arg-type]
             if trade is not None:
                 open_trade = trade
                 last_entry_at = trade.entry_at
@@ -502,7 +521,7 @@ class BacktestEngine:
         index: int,
         equity: float,
     ) -> SimulatedTrade | None:
-        """Trade auf der Eroeffnung der Folgekerze eroeffnen (kein Look-ahead)."""
+        """Trade auf der Eroeffnung der Folgekerze eroeffnen (kein Look-ahead / IST)."""
         if not signal.direction.is_actionable:
             return None
 
@@ -543,6 +562,74 @@ class BacktestEngine:
             remaining_quantity=quantity,
             current_stop=risk.stop_loss,
             risk_reward_planned=risk.risk_reward_ratio,
+            signal_score=signal.score,
+            expires_at=signal.expires_at,
+        )
+
+    def _open_trade_retest(
+        self,
+        signal: SignalResult,
+        df: pd.DataFrame,
+        index: int,
+        equity: float,
+    ) -> SimulatedTrade | None:
+        """Entry erst nach ATR-Pullback in die Retest-Zone (Winning Arm B)."""
+        if not signal.direction.is_actionable or signal.risk is None:
+            return None
+
+        arm_time = ensure_utc(_index_time(df, index))
+        reference = float(signal.risk.entry_mid or signal.reference_price)
+        candles = _df_to_candles(df, self._config.timeframe)
+        arm = arm_retest_entry(
+            direction=signal.direction,
+            arm_time=arm_time,
+            reference_entry=reference,
+            original_stop=float(signal.risk.stop_loss),
+            timeframe=self._config.timeframe,
+            candles=candles,
+            config=RetestEntryConfig(
+                zone_near=Decimal(str(self._config.retest_zone_near)),
+                zone_far=Decimal(str(self._config.retest_zone_far)),
+                pending_multiplier=self._config.retest_pending_multiplier,
+            ),
+        )
+        if not arm.filled or arm.fill_price is None or arm.fill_time is None or arm.stop is None:
+            return None
+
+        entry_price = self._apply_slippage(
+            float(arm.fill_price), is_long=signal.direction.is_long
+        )
+        stop = float(arm.stop)
+        tp1, tp2, tp3 = levels_from_entry_sl(
+            Decimal(str(entry_price)),
+            Decimal(str(stop)),
+            is_long=signal.direction.is_long,
+            multipliers=tuple(Decimal(str(m)) for m in self._config.tp_multipliers),
+        )
+        stop_distance = abs(entry_price - stop)
+        if stop_distance <= 0:
+            return None
+        risk_amount = equity * (signal.risk.risk_percent / 100.0)
+        quantity = risk_amount / stop_distance
+        max_quantity = equity / entry_price if entry_price > 0 else 0.0
+        quantity = min(quantity, max_quantity)
+        if quantity <= 0:
+            return None
+
+        return SimulatedTrade(
+            symbol=self._config.symbol,
+            timeframe=self._config.timeframe,
+            direction=signal.direction,
+            entry_at=ensure_utc(arm.fill_time),
+            entry_price=entry_price,
+            stop_loss=stop,
+            take_profit_1=float(tp1),
+            take_profit_2=float(tp2),
+            take_profit_3=float(tp3),
+            quantity=quantity,
+            remaining_quantity=quantity,
+            current_stop=stop,
+            risk_reward_planned=abs(float(tp2) - entry_price) / stop_distance,
             signal_score=signal.score,
             expires_at=signal.expires_at,
         )
@@ -774,3 +861,23 @@ class BacktestEngine:
 def _index_time(df: pd.DataFrame, position: int) -> datetime:
     value = df.index[position]
     return value if isinstance(value, datetime) else pd.Timestamp(value).to_pydatetime()
+
+
+def _df_to_candles(df: pd.DataFrame, timeframe: str) -> list[Candle]:
+    delta = timeframe_to_timedelta(timeframe)
+    out: list[Candle] = []
+    for ts, row in df.iterrows():
+        open_time = ensure_utc(ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts)
+        out.append(
+            Candle(
+                open_time=open_time,
+                close_time=open_time + delta,
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+                is_closed=True,
+            )
+        )
+    return out

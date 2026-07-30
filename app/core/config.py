@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     paper_fee_percent: float = 0.1
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
+    #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
+    paper_retest_entry_enabled: bool = True
+    paper_retest_zone_near: float = 0.35
+    paper_retest_zone_far: float = 1.0
+    paper_retest_pending_multiplier: int = 4
+    #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
+    backtest_retest_entry_enabled: bool = True
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

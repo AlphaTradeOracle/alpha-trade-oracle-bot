@@ -100,6 +100,8 @@ class ExitReason(StrEnum):
     STOP_LOSS = "stop_loss"
     EXPIRED = "expired"
     END_OF_DATA = "end_of_data"
+    #: Pending Retest-Entry nie gefuellt (Ablauf / SL vor Fill / keine Historie).
+    RETEST_SKIPPED = "retest_skipped"
 
 
 class LLMRequestStatus(StrEnum):

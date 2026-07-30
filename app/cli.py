@@ -151,9 +151,16 @@ def paper_rebuild(
         bool,
         typer.Option("--dispatched-only/--all-qualifying", help="Nur versendete Signale"),
     ] = False,
+    one_per_symbol: Annotated[
+        bool,
+        typer.Option(
+            "--one-per-symbol/--all-signals",
+            help="Nur juengstes Signal je Symbol (Default: alle chronologisch fuer Retest-Retro)",
+        ),
+    ] = False,
 ) -> None:
-    """Paper-Ledger zuruecksetzen und mit aktuellen TP-Multiples neu berechnen."""
-    asyncio.run(_run_paper_rebuild(since, dispatched_only))
+    """Paper-Ledger zuruecksetzen und mit Retest-Entry / aktuellen TP-Multiples neu berechnen."""
+    asyncio.run(_run_paper_rebuild(since, dispatched_only, one_per_symbol))
 
 
 @cli.command()
@@ -564,7 +571,9 @@ async def _run_paper_backfill(
     await container.aclose()
 
 
-async def _run_paper_rebuild(since: str, dispatched_only: bool) -> None:
+async def _run_paper_rebuild(
+    since: str, dispatched_only: bool, one_per_symbol: bool = False
+) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=False)
     container = build_container(settings)
@@ -582,7 +591,7 @@ async def _run_paper_rebuild(since: str, dispatched_only: bool) -> None:
             provider=container.provider,
             providers=container.universe_providers,
             dispatched_only=dispatched_only,
-            one_per_symbol=True,
+            one_per_symbol=one_per_symbol,
         )
         summary = await container.paper_trading.summary(session)
         opened = result.backfill.opened if result.backfill else 0
@@ -593,17 +602,24 @@ async def _run_paper_rebuild(since: str, dispatched_only: bool) -> None:
     typer.echo(f"  since:              {since_dt.isoformat()}")
     typer.echo(f"  reset_positions:    {result.reset_positions}")
     typer.echo(f"  opened:             {opened}")
+    typer.echo(f"  retest_filled:      {result.retest_filled}")
+    typer.echo(f"  retest_skipped:     {result.retest_skipped}")
+    typer.echo(f"  retest_still_pending: {result.retest_still_pending}")
     typer.echo(f"  replayed:           {result.replayed}")
     typer.echo(f"  still_open:         {result.still_open}")
     if symbols:
-        typer.echo(f"  symbols:            {', '.join(symbols)}")
+        typer.echo(
+            f"  symbols:            {', '.join(symbols[:40])}"
+            f"{'...' if len(symbols) > 40 else ''}"
+        )
     typer.echo(
         f"  equity:             ${summary.equity:,.2f}  "
         f"(cash ${summary.cash_balance:,.2f}, realized ${summary.realized_pnl:,.2f})"
     )
     typer.echo(
         f"  closed:             {summary.closed_trades}  "
-        f"win_rate {summary.win_rate * 100:.0f}%  PF {summary.profit_factor:.2f}"
+        f"win_rate {summary.win_rate * 100:.0f}%  PF {summary.profit_factor:.2f}  "
+        f"pending {summary.pending_positions}"
     )
 
     await container.aclose()

@@ -105,6 +105,7 @@ class TestPaperTrading:
             paper_leverage=5.0,
             paper_fee_percent=0.0,
             paper_move_stop_to_breakeven=True,
+            paper_retest_entry_enabled=False,
         )
         service = PaperTradingService(settings)
         result = make_result(
@@ -140,6 +141,37 @@ class TestPaperTrading:
         assert summary.open_positions == 0
 
     @pytest.mark.asyncio
+    async def test_retest_opens_as_pending_without_cash_lock(self, session: AsyncSession) -> None:
+        settings = Settings(
+            enable_paper_trading=True,
+            paper_initial_balance=2000.0,
+            paper_margin_per_trade=100.0,
+            paper_leverage=5.0,
+            paper_fee_percent=0.0,
+            paper_retest_entry_enabled=True,
+        )
+        service = PaperTradingService(settings)
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="paper-retest",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.risk = _tight_long_risk(100.0)
+        outcome = AnalysisOutcome(result=result, price_precision=2)
+
+        position = await service.open_from_signal(session, outcome)
+        assert position is not None
+        assert position.status == "pending"
+        account = await service.get_or_create_account(session)
+        assert float(account.cash_balance) == pytest.approx(2000.0)
+        assert float(position.margin_used) == pytest.approx(0.0)
+
+        second = await service.open_from_signal(session, outcome)
+        assert second is None
+
+    @pytest.mark.asyncio
     async def test_skips_duplicate_open_symbol(self, session: AsyncSession) -> None:
         settings = Settings(
             enable_paper_trading=True,
@@ -147,6 +179,7 @@ class TestPaperTrading:
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
             paper_fee_percent=0.0,
+            paper_retest_entry_enabled=False,
         )
         service = PaperTradingService(settings)
         outcome = AnalysisOutcome(

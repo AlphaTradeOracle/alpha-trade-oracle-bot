@@ -131,7 +131,8 @@ Berechnet in `app/signals/risk.py`, ausschließlich informativ.
 
 **Entry-Zone.** Um den Referenzkurs herum, halbe ATR-Breite:
 `entry_low = price − 0.25 × ATR`, `entry_high = price + 0.25 × ATR` für Long
-(spiegelbildlich für Short).
+(spiegelbildlich für Short). Die Zone ist die *Signal*-Referenz; der tatsächliche
+Paper-/Backtest-Fill folgt der Retest/Pullback-These (siehe Abschnitt 6b).
 
 **Stop-Loss.** Basis ist `ATR × ATR_MULTIPLIER` (Standard 1.5) unterhalb der
 Entry-Zone. Liegt ein Support innerhalb von `1.0 × ATR` darunter, wird der Stop
@@ -146,9 +147,9 @@ Anschließende Prüfungen:
 **Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|`:
 
 ```
-TP1 = entry + 1.5 × R
-TP2 = entry + 2.5 × R
-TP3 = entry + 4.0 × R
+TP1 = entry + 2 × R
+TP2 = entry + 4 × R
+TP3 = entry + 6 × R
 ```
 
 Liegt ein Widerstand vor einem TP-Ziel, wird das Ziel knapp darunter gezogen,
@@ -161,6 +162,32 @@ wird `NO_TRADE` gesetzt.
 **Positionsgröße.** Rein informativ, bezogen auf ein Referenzkapital von
 10 000 USDT und `MAX_RISK_PERCENT` (Standard 1 %):
 `size = (kapital × risiko%) / |entry − stop|`. Es werden keine Orders erzeugt.
+
+## 6b. Retest / Pullback-Entry (Paper + Backtest, Default ON)
+
+Kanonische Regeln in `app/signals/retest_entry.py` (Winning Arm B aus dem
+Paper-Sweep / historischen Top-100-SUPPORTS-Backtest). Schalter:
+
+| Env | Default | Wirkung |
+|---|---|---|
+| `PAPER_RETEST_ENTRY_ENABLED` | `true` | Paper wartet auf ATR-Pullback-Fill |
+| `BACKTEST_RETEST_ENTRY_ENABLED` | `true` | Backtest nutzt Retest statt IST |
+| `PAPER_RETEST_ZONE_NEAR` | `0.35` | Zone-Innenkante × ATR |
+| `PAPER_RETEST_ZONE_FAR` | `1.0` | Zone-Außenkante × ATR |
+| `PAPER_RETEST_PENDING_MULTIPLIER` | `4` | Pending-Fenster = N × Primary-TF |
+
+Ablauf:
+
+1. Signal entsteht wie bisher (Score, Gates, Entry-Zone, Signal-SL).
+2. Paper legt `status=pending` an (kein Cash-Lock). Pending blockiert das Symbol.
+3. Long: Fill wenn eine Folgekerze die Zone `[entry − 1.0×ATR, entry − 0.35×ATR]`
+   berührt. Short spiegelbildlich darüber.
+4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
+   TPs neu aus 2/4/6R. Management-Expiry bleibt am Signal-Fenster (4× TF).
+5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
+   Fenster abläuft oder keine ATR-Historie verfügbar ist (`exit_reason=retest_skipped`).
+
+Nicht aktiv: Delay+30m und HTF-4h-Breakout (bewusst verworfen / reverted).
 
 ## 7. Signalgültigkeit und Invalidierung
 

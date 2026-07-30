@@ -90,6 +90,15 @@ def format_signal_message(
     if result.risk is not None and result.direction.is_actionable:
         risk = result.risk
         quote = _quote_asset(result.symbol)
+        retest_note = ""
+        from app.core.config import get_settings
+
+        if get_settings().paper_retest_entry_enabled:
+            side = "Pullback unter Entry" if result.direction.is_long else "Pullback ueber Entry"
+            retest_note = (
+                f"Retest-Entry: pending bis ATR-Zone ({side}); "
+                f"Skip wenn kein Fill vor Ablauf / SL"
+            )
         lines += [
             "",
             escape_markdown_v2(
@@ -101,6 +110,8 @@ def format_signal_message(
             escape_markdown_v2(f"TP2    {format_price(risk.take_profit_2, price_precision)}"),
             escape_markdown_v2(f"TP3    {format_price(risk.take_profit_3, price_precision)}"),
         ]
+        if retest_note:
+            lines.append(escape_markdown_v2(retest_note))
 
     reasons = llm_analysis.reasons if llm_analysis else result.reasons
     if reasons:
