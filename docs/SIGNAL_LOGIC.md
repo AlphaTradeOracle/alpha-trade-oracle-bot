@@ -24,43 +24,39 @@ Strategieversion in der Datenbank persistiert. Die Summe muss exakt 1.0 ergeben;
 dies wird sowohl vom Pydantic-Modell als auch durch einen Test erzwungen
 (`tests/test_signal_weights.py`).
 
-| Kategorie | Standardgewicht | Was gemessen wird |
-|---|---|---|
-| `trend` | 0.25 | EMA-Stapelung, Preis vs. EMA200, Supertrend-Richtung, ADX-gestützte Trendstärke |
-| `momentum` | 0.20 | RSI-Position und -Neigung, MACD-Histogramm, Stochastic RSI, ROC |
-| `volume` | 0.15 | Volumen gegen Volume-MA20, OBV-Neigung, Volumenspitzen bei Ausbrüchen |
-| `market_structure` | 0.15 | HH/HL bzw. LH/LL, Nähe zu Support/Resistance, bestätigte Breakouts, Fehlausbrüche |
-| `multi_timeframe` | 0.15 | Übereinstimmung der Richtungen über alle Timeframes |
-| `volatility` | 0.04 | ATR-Prozent im Zielband, Bollinger-Breite (Squeeze/Expansion) |
-| `sentiment` | 0.03 | nur wenn `ENABLE_SENTIMENT=true`, sonst neutral (0) und Gewicht umverteilt |
-| `risk_reward` | 0.03 | erreichtes R:R gegenüber dem Minimum |
+| Kategorie | Standardgewicht (v2) | v1 (Baseline) | Was gemessen wird |
+|---|---|---|---|
+| `trend` | **0.273** | 0.258* | EMA-Stapelung, Preis vs. EMA200, Supertrend-Richtung, ADX-gestützte Trendstärke |
+| `momentum` | 0.218 | 0.206* | RSI-Position und -Neigung, MACD-Histogramm, Stochastic RSI, ROC |
+| `volume` | 0.164 | 0.155* | Volumen gegen Volume-MA20, OBV-Neigung, Volumenspitzen bei Ausbrüchen |
+| `market_structure` | 0.164 | 0.155* | HH/HL bzw. LH/LL, Nähe zu Support/Resistance, bestätigte Breakouts, Fehlausbrüche |
+| `multi_timeframe` | **0.105** | 0.155* | Übereinstimmung der Richtungen über alle Timeframes |
+| `volatility` | 0.044 | 0.041* | ATR-Prozent im Zielband, Bollinger-Breite (Squeeze/Expansion) |
+| `sentiment` | 0.00 | 0.00* | nur wenn `ENABLE_SENTIMENT=true`, sonst neutral (0) |
+| `risk_reward` | 0.033 | 0.031* | erreichtes R:R gegenüber dem Minimum |
 
-Standardgewichte:
+\* v1 effektive Werte mit `ENABLE_SENTIMENT=false` (Gewichtsredistribution aus
+0.25/0.20/0.15/0.15/0.15 + 0.04/0.03/0.03).
+
+Standardgewichte (v2, Paper-Forward ab 2026-07-30):
 
 ```python
-trend_weight            = 0.25
-momentum_weight         = 0.20
-volume_weight           = 0.15
-market_structure_weight = 0.15
-multi_timeframe_weight  = 0.15
-volatility_weight       = 0.04
-sentiment_weight        = 0.03
-risk_reward_weight      = 0.03
+# Simulation: reduce_multi_timeframe (+99 USD PnL vs Baseline auf Paper-Sample)
+trend_weight            = 0.273   # +1.5pp vs effektive Baseline
+momentum_weight         = 0.2184
+volume_weight           = 0.1638  # unveraendert relativ zur Baseline
+market_structure_weight = 0.1638  # unveraendert relativ zur Baseline
+multi_timeframe_weight  = 0.1046  # -5pp vs effektive Baseline
+volatility_weight       = 0.0437
+sentiment_weight        = 0.0
+risk_reward_weight      = 0.0327
 # Summe = 1.00
 ```
 
-> **Abweichung vom Auftrag, bewusst getroffen.** Der Auftrag nennt in §9 sieben
-> Gewichte, die zusammen 1.0 ergeben, listet Volatilität aber gleichzeitig als
-> Score-Bestandteil auf — ohne ihr ein Gewicht zuzuweisen. Ein zusätzliches
-> `volatility_weight` musste daher aus dem bestehenden Budget kommen.
->
-> Die fünf Hauptkategorien behalten exakt die vorgegebenen Werte
-> (0.25 / 0.20 / 0.15 / 0.15 / 0.15 = 0.90). Die verbleibenden 0.10 verteilen
-> sich auf `volatility` (0.04), `sentiment` (0.03) und `risk_reward` (0.03) —
-> statt der im Auftrag genannten 0.05 für die letzten beiden. Begründung: Diese
-> drei Kategorien modifizieren ein Signal, sie erzeugen es nicht. `sentiment`
-> ist zudem standardmäßig deaktiviert und wird dann ohnehin umverteilt.
->
+Aktivierung auf dem VPS: `python scripts/activate_strategy_weights.py` nach Deploy.
+Neue Versionen werden in `strategy_versions` persistiert; der Worker laedt die
+aktive Version bei jedem Scan.
+
 > `StrategyWeights` erzwingt die Summe 1.0 über einen Pydantic-Validator, die
 > Tabelle `strategy_versions` zusätzlich über einen CHECK-Constraint.
 

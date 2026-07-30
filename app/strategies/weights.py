@@ -15,12 +15,10 @@ WEIGHT_SUM_TOLERANCE = 1e-6
 class StrategyWeights(BaseModel):
     """Gewichtung der Score-Kategorien.
 
-    Die fuenf Hauptkategorien tragen die im Auftrag vorgegebenen Werte
-    (0.25/0.20/0.15/0.15/0.15 = 0.90). Die verbleibenden 0.10 verteilen sich auf
-    die drei modifizierenden Kategorien. ``volatility`` ist gegenueber dem
-    Auftrag ergaenzt, weil Volatilitaet dort als Score-Bestandteil genannt wird,
-    in der Gewichtsliste aber fehlt; ``sentiment`` und ``risk_reward`` wurden
-    dafuer von je 0.05 auf 0.03 reduziert, damit die Summe exakt 1.0 bleibt.
+    Paper-Forward-Test ab v2 (2026-07-30): MTF −5pp, Trend +1.5pp gegenueber der
+    effektiven Baseline (``without_sentiment``). Variantenname in der Simulation:
+    ``reduce_multi_timeframe``. Volume und Structure unveraendert relativ zur
+    Baseline; ``sentiment`` ist 0, weil standardmaessig deaktiviert.
 
     Die Klasse ist unveraenderlich. Eine geaenderte Gewichtung ist immer eine
     neue Instanz und wird als neue Strategieversion persistiert — nie als
@@ -29,14 +27,14 @@ class StrategyWeights(BaseModel):
 
     model_config = {"frozen": True}
 
-    trend: float = Field(default=0.25, ge=0.0, le=1.0)
-    momentum: float = Field(default=0.20, ge=0.0, le=1.0)
-    volume: float = Field(default=0.15, ge=0.0, le=1.0)
-    market_structure: float = Field(default=0.15, ge=0.0, le=1.0)
-    multi_timeframe: float = Field(default=0.15, ge=0.0, le=1.0)
-    volatility: float = Field(default=0.04, ge=0.0, le=1.0)
-    sentiment: float = Field(default=0.03, ge=0.0, le=1.0)
-    risk_reward: float = Field(default=0.03, ge=0.0, le=1.0)
+    trend: float = Field(default=0.273, ge=0.0, le=1.0)
+    momentum: float = Field(default=0.2184, ge=0.0, le=1.0)
+    volume: float = Field(default=0.1638, ge=0.0, le=1.0)
+    market_structure: float = Field(default=0.1638, ge=0.0, le=1.0)
+    multi_timeframe: float = Field(default=0.1046, ge=0.0, le=1.0)
+    volatility: float = Field(default=0.0437, ge=0.0, le=1.0)
+    sentiment: float = Field(default=0.0, ge=0.0, le=1.0)
+    risk_reward: float = Field(default=0.0327, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def _validate_sum(self) -> StrategyWeights:
