@@ -412,7 +412,9 @@ class BotHandlers:
                 f"Realisiert: ${summary.realized_pnl:,.2f}"
             ),
             escape_markdown_v2(
-                f"Offen: {summary.open_positions}  |  Margin: ${summary.open_margin:,.2f}"
+                f"Offen: {summary.open_positions}  |  "
+                f"Pending HTF: {summary.pending_positions}  |  "
+                f"Margin: ${summary.open_margin:,.2f}"
             ),
             escape_markdown_v2(
                 f"Geschlossen: {summary.closed_trades}  |  "

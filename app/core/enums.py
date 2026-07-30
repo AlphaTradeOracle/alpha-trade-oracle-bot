@@ -100,6 +100,8 @@ class ExitReason(StrEnum):
     STOP_LOSS = "stop_loss"
     EXPIRED = "expired"
     END_OF_DATA = "end_of_data"
+    #: Pending HTF-Entry nie bestaetigt (Ablauf / SL vor Confirm / keine Historie).
+    HTF_SKIPPED = "htf_skipped"
 
 
 class LLMRequestStatus(StrEnum):

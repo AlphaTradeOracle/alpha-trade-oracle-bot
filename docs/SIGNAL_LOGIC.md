@@ -131,7 +131,8 @@ Berechnet in `app/signals/risk.py`, ausschließlich informativ.
 
 **Entry-Zone.** Um den Referenzkurs herum, halbe ATR-Breite:
 `entry_low = price − 0.25 × ATR`, `entry_high = price + 0.25 × ATR` für Long
-(spiegelbildlich für Short).
+(spiegelbildlich für Short). Die Zone ist die *Signal*-Referenz; der tatsächliche
+Paper-/Backtest-Fill folgt der HTF-Breakout-These (siehe Abschnitt 6b).
 
 **Stop-Loss.** Basis ist `ATR × ATR_MULTIPLIER` (Standard 1.5) unterhalb der
 Entry-Zone. Liegt ein Support innerhalb von `1.0 × ATR` darunter, wird der Stop
@@ -146,9 +147,9 @@ Anschließende Prüfungen:
 **Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|`:
 
 ```
-TP1 = entry + 1.5 × R
-TP2 = entry + 2.5 × R
-TP3 = entry + 4.0 × R
+TP1 = entry + 2 × R
+TP2 = entry + 4 × R
+TP3 = entry + 6 × R
 ```
 
 Liegt ein Widerstand vor einem TP-Ziel, wird das Ziel knapp darunter gezogen,
@@ -161,6 +162,31 @@ wird `NO_TRADE` gesetzt.
 **Positionsgröße.** Rein informativ, bezogen auf ein Referenzkapital von
 10 000 USDT und `MAX_RISK_PERCENT` (Standard 1 %):
 `size = (kapital × risiko%) / |entry − stop|`. Es werden keine Orders erzeugt.
+
+## 6b. HTF-Breakout-Entry (Paper + Backtest, Default ON)
+
+Kanonische Regeln in `app/signals/htf_breakout.py` (von Paper, Backtest und
+Verifikationsskripten geteilt). Schalter:
+
+| Env | Default | Wirkung |
+|---|---|---|
+| `PAPER_HTF_BREAKOUT_ENABLED` | `true` | Paper wartet auf 4h-Confirm |
+| `BACKTEST_HTF_BREAKOUT_ENABLED` | `true` | MTF-Backtest nutzt HTF statt IST |
+| `PAPER_HTF_LOOKBACK_BARS` | `180` | ~30 Tage 4h-Lookback |
+| `PAPER_HTF_PENDING_DAYS` | `14` | Max. Wartefenster |
+
+Ablauf:
+
+1. Signal entsteht wie bisher (Score, Gates, Entry-Zone, Signal-SL).
+2. Paper legt `status=pending` an (kein Cash-Lock). Pending blockiert das Symbol.
+3. Long: erst nach **bestätigtem 4h-Close über** dem Lookback-High (ohne Signalbar).
+   Short: erst nach **4h-Close unter** dem Lookback-Low.
+4. Fill-Preis = Close der Bestätigungskerze. Stop nahe Struktur (Swing der letzten
+   ~8 4h-Bars bzw. Fail-Break ×0.995/1.005; ATR-Fallback). TPs neu aus 2/4/6R.
+5. Skip ohne Fill, wenn vor Confirm der Signal-SL getroffen wird, das Pending-
+   Fenster abläuft oder keine Historie verfügbar ist (`exit_reason=htf_skipped`).
+
+Der frühere IST-Fill (nächster 1h-Open / sofortiger Mid) ist damit bewusst ersetzt.
 
 ## 7. Signalgültigkeit und Invalidierung
 

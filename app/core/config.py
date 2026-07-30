@@ -130,6 +130,13 @@ class Settings(BaseSettings):
     paper_fee_percent: float = 0.1
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
+    #: HTF-Breakout-These: Entry erst nach bestaetigtem 4h-Close ueber/unter Level.
+    paper_htf_breakout_enabled: bool = True
+    paper_htf_confirm_timeframe: str = "4h"
+    paper_htf_lookback_bars: int = 180
+    paper_htf_pending_days: int = 14
+    #: Backtest nutzt dieselbe HTF-Entry-Regel (statt naechster 1h-Open / IST).
+    backtest_htf_breakout_enabled: bool = True
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

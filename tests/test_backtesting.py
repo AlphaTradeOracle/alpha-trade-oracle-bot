@@ -39,6 +39,8 @@ def make_config(**overrides: object) -> BacktestConfig:
         "min_adx": 0.0,
         "rsi_long_max": 100.0,
         "rsi_short_min": 0.0,
+        # Unit-Tests nutzen IST/next-open; HTF separat getestet.
+        "htf_breakout_enabled": False,
     }
     defaults.update(overrides)
     return BacktestConfig(**defaults)  # type: ignore[arg-type]
