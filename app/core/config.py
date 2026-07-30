@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     scan_interval_minutes: int = 60
     candle_limit: int = 500
     min_candles_required: int = 210
-    universe_size: int = 1000
+    universe_size: int = 450
     #: Pro Stunden-Scan: Batch-Groesse (sollte ~ universe_target_count sein).
     universe_scan_batch_size: int = 300
     universe_refresh_hours: int = 24
