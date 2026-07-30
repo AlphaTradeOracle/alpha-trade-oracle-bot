@@ -195,7 +195,7 @@ class TestPaperTrading:
         assert len(opens) == 1
 
     @pytest.mark.asyncio
-    async def test_notifies_on_open_and_close(self, session: AsyncSession) -> None:
+    async def test_notifies_on_open_only(self, session: AsyncSession) -> None:
         events: list[tuple[str, str]] = []
 
         class RecordingNotifier:
@@ -232,4 +232,4 @@ class TestPaperTrading:
         await service.update_open_positions(session, {"BTCUSDT": 105.0})
         await service.update_open_positions(session, {"BTCUSDT": 99.0})
 
-        assert events == [("open", "BTCUSDT"), ("close", "BTCUSDT")]
+        assert events == [("open", "BTCUSDT")]

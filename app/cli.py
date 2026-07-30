@@ -249,7 +249,11 @@ async def _run_worker() -> None:
     telegram_notifier = TelegramNotifier(telegram_bot, settings)
     if settings.enable_paper_trading:
         container.paper_trading.set_notifier(
-            TelegramPaperTradeNotifier(telegram_notifier, settings)
+            TelegramPaperTradeNotifier(
+                telegram_notifier,
+                container.provider,
+                settings,
+            )
         )
 
     # Der ScanService muss vor der Application existieren, weil die Handler ihn

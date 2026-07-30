@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from app.core.enums import Confidence, ExitReason, SignalDirection
-from app.core.time import format_display_time
+from app.core.enums import Confidence, ExitReason, MarketPhase, SignalDirection
+from app.core.time import format_display_time, utc_now
 from app.llm.schemas import LLMAnalysisResponse
-from app.signals.types import SignalResult
+from app.signals.types import RiskParameters, SignalResult
 
 if TYPE_CHECKING:
     from app.models.paper import PaperPosition
@@ -282,6 +282,65 @@ _EXIT_REASON_LABELS: dict[str, str] = {
     ExitReason.END_OF_DATA.value: "Ende der Daten",
     ExitReason.RETEST_SKIPPED.value: "Retest uebersprungen",
 }
+
+
+def infer_price_precision(price: float) -> int:
+    """Grobe Praezision fuer Telegram-Preisanzeige."""
+    absolute = abs(price)
+    if absolute >= 1000:
+        return 2
+    if absolute >= 1:
+        return 4
+    if absolute >= 0.01:
+        return 6
+    return 8
+
+
+def signal_result_from_paper_position(
+    position: PaperPosition,
+    *,
+    reasons: list[str] | None = None,
+) -> SignalResult:
+    """SignalResult aus einer eroeffneten Paper-Position fuer Telegram-Format."""
+    entry = float(position.entry_price)
+    spread = max(abs(entry) * 0.0005, 10 ** (-infer_price_precision(entry)))
+    try:
+        direction = SignalDirection(position.direction)
+    except ValueError:
+        direction = SignalDirection.LONG
+
+    opened_at = position.opened_at or utc_now()
+    expires_at = position.expires_at or opened_at
+
+    return SignalResult(
+        symbol=position.symbol,
+        created_at=opened_at,
+        expires_at=expires_at,
+        direction=direction,
+        score=float(position.signal_score or 0),
+        confidence=Confidence.MEDIUM,
+        market_phase=MarketPhase.RANGE,
+        primary_timeframe=position.timeframe or "1h",
+        analyzed_timeframes=[position.timeframe or "1h"],
+        reference_price=entry,
+        data_quality=100.0,
+        components=[],
+        assessments={},
+        risk=RiskParameters(
+            entry_low=entry - spread,
+            entry_high=entry + spread,
+            stop_loss=float(position.stop_loss),
+            take_profit_1=float(position.take_profit_1),
+            take_profit_2=float(position.take_profit_2),
+            take_profit_3=float(position.take_profit_3),
+            risk_reward_ratio=0.0,
+            risk_percent=0.0,
+            suggested_position_size=0.0,
+            stop_distance_percent=0.0,
+            invalidation_note="",
+        ),
+        reasons=list(reasons or []),
+    )
 
 
 def format_paper_trade_open_message(

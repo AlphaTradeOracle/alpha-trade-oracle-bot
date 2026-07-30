@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_allowed_chat_ids: str = ""
     telegram_admin_chat_ids: str = ""
-    #: Signal-Alerts (Chart + Analyse). False = nur Paper-Trade open/close.
+    #: Signal-Alerts (Chart + Analyse). False = nur Paper-Trade-Open mit Chart.
     telegram_signal_dispatch: bool = False
 
     # --- Marktdaten --------------------------------------------------------
@@ -139,6 +139,8 @@ class Settings(BaseSettings):
     paper_retest_pending_multiplier: int = 4
     #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
     backtest_retest_entry_enabled: bool = True
+    #: Paper-Trade-Telegram-Chart: leer = naechst hoeherer TF als Setup (z. B. 1h -> 4h).
+    paper_telegram_chart_timeframe: str = ""
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

@@ -12,15 +12,16 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 
 from app.bot.formatting import (
-    format_paper_trade_close_message,
-    format_paper_trade_open_message,
     format_signal_message,
+    infer_price_precision,
+    signal_result_from_paper_position,
     split_caption_and_body,
     split_message,
 )
-from app.charts.signal_chart import build_signal_chart
+from app.charts.signal_chart import build_paper_trade_chart, resolve_paper_chart_timeframe
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.market_data.base import MarketDataProvider
 from app.models.paper import PaperPosition
 from app.repositories.chat_repository import ChatRepository
 from app.services.analysis_service import AnalysisOutcome
@@ -86,15 +87,14 @@ class TelegramNotifier:
                 logger.warning("telegram_photo_failed", chat_id=chat_id, error=str(exc))
                 return None
 
-    async def send_analysis(
-        self, chat_id: int, outcome: AnalysisOutcome, text: str
+    async def send_with_chart(
+        self, chat_id: int, text: str, chart: bytes | None
     ) -> list[int]:
-        """Chart oben mit Caption wenn moeglich, sonst Chart + Text darunter."""
-        message_ids: list[int] = []
-        chart = build_signal_chart(outcome)
+        """Signal-Text mit optionalem Chart (Caption + Rest als Text)."""
         if chart is None:
             return await self.send(chat_id, text)
 
+        message_ids: list[int] = []
         caption, body = split_caption_and_body(text)
         photo_id = await self.send_photo(chat_id, chart, caption=caption)
         if photo_id is not None:
@@ -103,8 +103,16 @@ class TelegramNotifier:
                 message_ids.extend(await self.send(chat_id, body))
             return message_ids
 
-        # Foto fehlgeschlagen → nur Text.
         return await self.send(chat_id, text)
+
+    async def send_analysis(
+        self, chat_id: int, outcome: AnalysisOutcome, text: str
+    ) -> list[int]:
+        """Chart oben mit Caption wenn moeglich, sonst Chart + Text darunter."""
+        from app.charts.signal_chart import build_signal_chart
+
+        chart = build_signal_chart(outcome)
+        return await self.send_with_chart(chat_id, text, chart)
 
     async def _send_part(self, chat_id: int, text: str) -> int | None:
         """Einen Nachrichtenteil senden.
@@ -243,10 +251,16 @@ class PaperTradeNotifier(Protocol):
 
 
 class TelegramPaperTradeNotifier:
-    """Paper-Trade-Meldungen an TELEGRAM_ALLOWED_CHAT_IDS."""
+    """Paper-Trade-Open wie Signal (Chart + Levels) an TELEGRAM_ALLOWED_CHAT_IDS."""
 
-    def __init__(self, notifier: TelegramNotifier, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        notifier: TelegramNotifier,
+        market_data: MarketDataProvider,
+        settings: Settings | None = None,
+    ) -> None:
         self._notifier = notifier
+        self._market_data = market_data
         self._settings = settings or get_settings()
 
     async def notify_open(
@@ -261,20 +275,49 @@ class TelegramPaperTradeNotifier:
             logger.debug("paper_trade_notify_skipped_no_chats", symbol=position.symbol)
             return
 
-        text = format_paper_trade_open_message(
-            position,
+        result = signal_result_from_paper_position(position, reasons=reasons)
+        price_precision = infer_price_precision(float(position.entry_price))
+        text = format_signal_message(
+            result,
+            price_precision=price_precision,
             display_timezone=self._settings.display_timezone,
-            retest_fill=retest_fill,
-            reasons=reasons,
         )
+
+        chart_tf = resolve_paper_chart_timeframe(
+            position.timeframe or self._settings.primary_timeframe,
+            self._settings,
+        )
+        chart: bytes | None = None
+        try:
+            series = await self._market_data.get_candles(
+                position.symbol,
+                chart_tf,
+                limit=self._settings.candle_limit,
+            )
+            if series is not None:
+                chart = build_paper_trade_chart(
+                    position,
+                    series,
+                    price_precision=price_precision,
+                )
+        except Exception as exc:
+            logger.warning(
+                "paper_trade_chart_fetch_failed",
+                symbol=position.symbol,
+                timeframe=chart_tf,
+                error=str(exc),
+            )
+
         for chat_id in chat_ids:
             try:
-                await self._notifier.send(chat_id, text)
+                await self._notifier.send_with_chart(chat_id, text, chart)
                 logger.info(
                     "paper_trade_open_notified",
                     chat_id=chat_id,
                     symbol=position.symbol,
                     retest_fill=retest_fill,
+                    chart_timeframe=chart_tf,
+                    chart_sent=chart is not None,
                 )
             except Exception as exc:
                 logger.warning(
@@ -285,31 +328,8 @@ class TelegramPaperTradeNotifier:
                 )
 
     async def notify_close(self, position: PaperPosition) -> None:
-        chat_ids = sorted(self._settings.allowed_chat_ids)
-        if not chat_ids:
-            logger.debug("paper_trade_notify_skipped_no_chats", symbol=position.symbol)
-            return
-
-        text = format_paper_trade_close_message(
-            position,
-            display_timezone=self._settings.display_timezone,
-        )
-        for chat_id in chat_ids:
-            try:
-                await self._notifier.send(chat_id, text)
-                logger.info(
-                    "paper_trade_close_notified",
-                    chat_id=chat_id,
-                    symbol=position.symbol,
-                    reason=position.exit_reason,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "paper_trade_close_notify_failed",
-                    chat_id=chat_id,
-                    symbol=position.symbol,
-                    error=str(exc),
-                )
+        """Close-Meldungen sind deaktiviert — nur Open wird an Telegram gesendet."""
+        return
 
 
 def _strip_markdown(text: str) -> str:

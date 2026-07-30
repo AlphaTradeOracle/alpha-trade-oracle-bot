@@ -129,18 +129,6 @@ class PaperTradingService:
                 error=str(exc),
             )
 
-    async def _notify_close(self, position: PaperPosition) -> None:
-        if not self._notify_enabled or self._notifier is None:
-            return
-        try:
-            await self._notifier.notify_close(position)
-        except Exception as exc:
-            logger.warning(
-                "paper_trade_close_notify_error",
-                symbol=position.symbol,
-                error=str(exc),
-            )
-
     @property
     def enabled(self) -> bool:
         return self._settings.enable_paper_trading
@@ -1208,7 +1196,6 @@ class PaperTradingService:
                 reason=reason.value,
                 pnl=float(position.realized_pnl),
             )
-            await self._notify_close(position)
 
     async def _close_remaining(
         self,

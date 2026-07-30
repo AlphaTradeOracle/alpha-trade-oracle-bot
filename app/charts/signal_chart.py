@@ -12,8 +12,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from app.core.logging import get_logger
+from app.core.time import next_higher_timeframe
+from app.market_data.types import CandleSeries
 
 if TYPE_CHECKING:
+    from app.core.config import Settings
+    from app.models.paper import PaperPosition
     from app.services.analysis_service import AnalysisOutcome
 
 logger = get_logger(__name__)
@@ -34,6 +38,14 @@ _SL = "#ff5c6a"
 _TP = ("#6bcf8e", "#4caf75", "#2f9e5f")
 
 
+def resolve_paper_chart_timeframe(primary_timeframe: str, settings: Settings) -> str:
+    """Chart-Timeframe fuer Paper-Trades (Setup-TF oder naechst hoeherer)."""
+    override = (settings.paper_telegram_chart_timeframe or "").strip()
+    if override:
+        return override
+    return next_higher_timeframe(primary_timeframe, settings.timeframes)
+
+
 def build_signal_chart(outcome: AnalysisOutcome) -> bytes | None:
     """PNG-Bytes fuer Telegram erzeugen, falls Trade-Levels vorhanden sind."""
     result = outcome.result
@@ -50,7 +62,7 @@ def build_signal_chart(outcome: AnalysisOutcome) -> bytes | None:
         return None
 
     try:
-        return _render_png(
+        return build_trade_levels_chart(
             symbol=result.symbol,
             timeframe=series.timeframe,
             direction=result.direction.value,
@@ -67,6 +79,74 @@ def build_signal_chart(outcome: AnalysisOutcome) -> bytes | None:
     except Exception as exc:
         logger.warning("signal_chart_render_failed", symbol=result.symbol, error=str(exc))
         return None
+
+
+def build_paper_trade_chart(
+    position: PaperPosition,
+    series: CandleSeries,
+    *,
+    price_precision: int = 2,
+) -> bytes | None:
+    """Chart fuer einen eroeffneten Paper-Trade (Entry/SL/TP-Linien)."""
+    if series.is_empty:
+        return None
+
+    candles = series.candles[-CHART_CANDLES:]
+    if len(candles) < 5:
+        return None
+
+    entry = float(position.entry_price)
+    spread = max(abs(entry) * 0.0005, 10 ** (-price_precision))
+
+    try:
+        return build_trade_levels_chart(
+            symbol=position.symbol,
+            timeframe=series.timeframe,
+            direction=position.direction,
+            score=float(position.signal_score or 0),
+            candles=candles,
+            entry_low=entry - spread,
+            entry_high=entry + spread,
+            stop_loss=float(position.stop_loss),
+            tp1=float(position.take_profit_1),
+            tp2=float(position.take_profit_2),
+            tp3=float(position.take_profit_3),
+            price_precision=price_precision,
+        )
+    except Exception as exc:
+        logger.warning("paper_trade_chart_render_failed", symbol=position.symbol, error=str(exc))
+        return None
+
+
+def build_trade_levels_chart(
+    *,
+    symbol: str,
+    timeframe: str,
+    direction: str,
+    score: float,
+    candles: list,
+    entry_low: float,
+    entry_high: float,
+    stop_loss: float,
+    tp1: float,
+    tp2: float,
+    tp3: float,
+    price_precision: int,
+) -> bytes:
+    return _render_png(
+        symbol=symbol,
+        timeframe=timeframe,
+        direction=direction,
+        score=score,
+        candles=candles,
+        entry_low=entry_low,
+        entry_high=entry_high,
+        stop_loss=stop_loss,
+        tp1=tp1,
+        tp2=tp2,
+        tp3=tp3,
+        price_precision=price_precision,
+    )
 
 
 def _render_png(

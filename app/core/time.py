@@ -50,6 +50,18 @@ def timeframe_minutes(timeframe: str) -> int:
     return int(timeframe_to_timedelta(timeframe).total_seconds() // 60)
 
 
+def next_higher_timeframe(timeframe: str, available: list[str]) -> str:
+    """Naechst groesseren Timeframe aus ``available`` waehlen, sonst ``timeframe``."""
+    current = TIMEFRAME_MINUTES.get(timeframe)
+    if current is None:
+        return timeframe
+    candidates = sorted(
+        (tf for tf in available if TIMEFRAME_MINUTES.get(tf, 0) > current),
+        key=lambda tf: TIMEFRAME_MINUTES[tf],
+    )
+    return candidates[0] if candidates else timeframe
+
+
 def ms_to_datetime(milliseconds: int | float) -> datetime:
     """Millisekunden-Epoch (Binance-Format) in UTC-datetime umwandeln."""
     return datetime.fromtimestamp(float(milliseconds) / 1000.0, tz=UTC)
