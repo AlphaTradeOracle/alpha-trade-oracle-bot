@@ -94,35 +94,12 @@ class PaperRepository:
         )
         return list(result.scalars())
 
-    async def list_pending_positions(self, account_id: int) -> list[PaperPosition]:
-        result = await self._session.execute(
-            select(PaperPosition)
-            .where(
-                PaperPosition.account_id == account_id,
-                PaperPosition.status == "pending",
-            )
-            .options(selectinload(PaperPosition.fills))
-            .order_by(PaperPosition.opened_at.asc())
-        )
-        return list(result.scalars())
-
     async def get_open_by_symbol(self, account_id: int, symbol: str) -> PaperPosition | None:
         result = await self._session.execute(
             select(PaperPosition).where(
                 PaperPosition.account_id == account_id,
                 PaperPosition.symbol == symbol.upper(),
                 PaperPosition.status == "open",
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def get_active_by_symbol(self, account_id: int, symbol: str) -> PaperPosition | None:
-        """Offene oder pending Position fuer Symbol (Symbol-Sperre)."""
-        result = await self._session.execute(
-            select(PaperPosition).where(
-                PaperPosition.account_id == account_id,
-                PaperPosition.symbol == symbol.upper(),
-                PaperPosition.status.in_(("open", "pending")),
             )
         )
         return result.scalar_one_or_none()

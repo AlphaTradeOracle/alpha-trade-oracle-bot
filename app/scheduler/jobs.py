@@ -159,7 +159,7 @@ async def run_paper_update(
     *,
     providers: dict[str, MarketDataProvider] | None = None,
 ) -> None:
-    """Pending HTF-Entries aufloesen und offene Positionen gegen Kurse pruefen."""
+    """Offene Paper-Positionen gegen aktuelle Kurse pruefen (SL/TP Scale-out)."""
     set_correlation_id()
 
     async with session_scope() as session:
@@ -173,24 +173,11 @@ async def run_paper_update(
 
     try:
         async with session_scope() as session:
-            pending_summary: dict[str, int] = {"filled": 0, "skipped": 0, "still_pending": 0}
-            if paper.htf_enabled:
-                resolve = await paper.resolve_pending_htf(session, provider)
-                pending_summary = {
-                    "filled": resolve.filled,
-                    "skipped": resolve.skipped,
-                    "still_pending": resolve.still_pending,
-                }
-
             account = await paper.get_or_create_account(session)
             open_positions = await PaperRepository(session).list_open_positions(account.id)
             symbols = [position.symbol for position in open_positions]
             if not symbols:
-                summary: dict[str, int] = {
-                    "open_positions": 0,
-                    "updated": 0,
-                    **{f"htf_{k}": v for k, v in pending_summary.items()},
-                }
+                summary: dict[str, int] = {"open_positions": 0, "updated": 0}
             else:
                 prices = await _collect_prices(provider, symbols, providers=providers)
                 updated = await paper.update_open_positions(session, prices)
@@ -198,7 +185,6 @@ async def run_paper_update(
                     "open_positions": len(open_positions),
                     "prices": len(prices),
                     "updated": len(updated),
-                    **{f"htf_{k}": v for k, v in pending_summary.items()},
                 }
         success = True
         error: str | None = None

@@ -26,11 +26,9 @@ import pandas as pd
 from app.core.enums import ExitReason, SignalDirection
 from app.core.errors import BacktestError
 from app.core.logging import get_logger
-from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta
+from app.core.time import ensure_utc, timeframe_minutes
 from app.indicators.engine import IndicatorEngine
-from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
-from app.signals.htf_breakout import HtfBreakoutConfig, arm_htf_breakout, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
@@ -78,11 +76,6 @@ class BacktestConfig:
     move_stop_to_breakeven_after_tp1: bool = True
     #: Take-Profit als Vielfache von R (Stop-Abstand).
     tp_multipliers: tuple[float, float, float] = (2.0, 4.0, 6.0)
-    #: HTF-Breakout-Entry statt naechster Primary-Open (IST).
-    htf_breakout_enabled: bool = True
-    htf_confirm_timeframe: str = "4h"
-    htf_lookback_bars: int = 180
-    htf_pending_days: int = 14
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -112,10 +105,6 @@ class BacktestConfig:
             "min_adx": settings.signal_min_adx,
             "rsi_long_max": settings.signal_rsi_long_max,
             "rsi_short_min": settings.signal_rsi_short_min,
-            "htf_breakout_enabled": settings.backtest_htf_breakout_enabled,
-            "htf_confirm_timeframe": settings.paper_htf_confirm_timeframe,
-            "htf_lookback_bars": settings.paper_htf_lookback_bars,
-            "htf_pending_days": settings.paper_htf_pending_days,
             "weights": weights,
         }
         params.update(overrides)
@@ -355,12 +344,7 @@ class BacktestEngine:
                 continue
 
             outcome.signals_generated += 1
-            if self._config.htf_breakout_enabled:
-                trade = self._open_trade_htf(
-                    signal, primary_df, i, equity, mtf_frames  # type: ignore[arg-type]
-                )
-            else:
-                trade = self._open_trade(signal, primary_df, i, equity)  # type: ignore[arg-type]
+            trade = self._open_trade(signal, primary_df, i, equity)  # type: ignore[arg-type]
             if trade is not None:
                 open_trade = trade
                 last_entry_at = trade.entry_at
@@ -518,7 +502,7 @@ class BacktestEngine:
         index: int,
         equity: float,
     ) -> SimulatedTrade | None:
-        """Trade auf der Eroeffnung der Folgekerze eroeffnen (kein Look-ahead / IST)."""
+        """Trade auf der Eroeffnung der Folgekerze eroeffnen (kein Look-ahead)."""
         if not signal.direction.is_actionable:
             return None
 
@@ -561,81 +545,6 @@ class BacktestEngine:
             risk_reward_planned=risk.risk_reward_ratio,
             signal_score=signal.score,
             expires_at=signal.expires_at,
-        )
-
-    def _open_trade_htf(
-        self,
-        signal: SignalResult,
-        primary_df: pd.DataFrame,
-        index: int,
-        equity: float,
-        mtf_frames: dict[str, pd.DataFrame],
-    ) -> SimulatedTrade | None:
-        """Entry erst nach bestaetigtem HTF-Close jenseits Lookback-Level."""
-        if not signal.direction.is_actionable or signal.risk is None:
-            return None
-        confirm_tf = self._config.htf_confirm_timeframe
-        confirm_df = mtf_frames.get(confirm_tf)
-        if confirm_df is None or confirm_df.empty:
-            return None
-
-        arm_time = ensure_utc(_index_time(primary_df, index))
-        candles = _df_to_candles(confirm_df, confirm_tf)
-        arm = arm_htf_breakout(
-            direction=signal.direction,
-            arm_time=arm_time,
-            original_stop=float(signal.risk.stop_loss),
-            candles_4h=candles,
-            config=HtfBreakoutConfig(
-                confirm_timeframe=confirm_tf,
-                lookback_bars=self._config.htf_lookback_bars,
-                pending_days=self._config.htf_pending_days,
-            ),
-        )
-        if not arm.filled or arm.fill_price is None or arm.fill_time is None or arm.stop is None:
-            return None
-
-        entry_price = self._apply_slippage(
-            float(arm.fill_price), is_long=signal.direction.is_long
-        )
-        stop = float(arm.stop)
-        from decimal import Decimal
-
-        tp1, tp2, tp3 = levels_from_entry_sl(
-            Decimal(str(entry_price)),
-            Decimal(str(stop)),
-            is_long=signal.direction.is_long,
-            multipliers=tuple(Decimal(str(m)) for m in self._config.tp_multipliers),  # type: ignore[arg-type]
-        )
-        stop_distance = abs(entry_price - stop)
-        if stop_distance <= 0:
-            return None
-        risk_amount = equity * (signal.risk.risk_percent / 100.0)
-        quantity = risk_amount / stop_distance
-        max_quantity = equity / entry_price if entry_price > 0 else 0.0
-        quantity = min(quantity, max_quantity)
-        if quantity <= 0:
-            return None
-
-        return SimulatedTrade(
-            symbol=self._config.symbol,
-            timeframe=self._config.timeframe,
-            direction=signal.direction,
-            entry_at=ensure_utc(arm.fill_time),
-            entry_price=entry_price,
-            stop_loss=stop,
-            take_profit_1=float(tp1),
-            take_profit_2=float(tp2),
-            take_profit_3=float(tp3),
-            quantity=quantity,
-            remaining_quantity=quantity,
-            current_stop=stop,
-            risk_reward_planned=abs(float(tp2) - entry_price) / stop_distance,
-            signal_score=signal.score,
-            expires_at=ensure_utc(arm.fill_time)
-            + timeframe_to_timedelta(self._config.timeframe)
-            * self._config.expiry_multiplier
-            * max(1, self._config.htf_pending_days),
         )
 
     def _process_open_trade(
@@ -865,23 +774,3 @@ class BacktestEngine:
 def _index_time(df: pd.DataFrame, position: int) -> datetime:
     value = df.index[position]
     return value if isinstance(value, datetime) else pd.Timestamp(value).to_pydatetime()
-
-
-def _df_to_candles(df: pd.DataFrame, timeframe: str) -> list[Candle]:
-    delta = timeframe_to_timedelta(timeframe)
-    out: list[Candle] = []
-    for ts, row in df.iterrows():
-        open_time = ensure_utc(ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts)
-        out.append(
-            Candle(
-                open_time=open_time,
-                close_time=open_time + delta,
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
-                is_closed=True,
-            )
-        )
-    return out

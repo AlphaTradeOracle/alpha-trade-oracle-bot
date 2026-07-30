@@ -90,16 +90,6 @@ def format_signal_message(
     if result.risk is not None and result.direction.is_actionable:
         risk = result.risk
         quote = _quote_asset(result.symbol)
-        htf_note = ""
-        # Hinweis auf HTF-Bestaetigung, wenn Paper/Live die These aktiv hat.
-        from app.core.config import get_settings
-
-        if get_settings().paper_htf_breakout_enabled:
-            side = "ueber Widerstand" if result.direction.is_long else "unter Support"
-            htf_note = (
-                f"HTF-Entry: erst nach bestaetigtem 4h-Close {side} "
-                f"(nicht sofort / nicht naechster 1h-Open)"
-            )
         lines += [
             "",
             escape_markdown_v2(
@@ -111,8 +101,6 @@ def format_signal_message(
             escape_markdown_v2(f"TP2    {format_price(risk.take_profit_2, price_precision)}"),
             escape_markdown_v2(f"TP3    {format_price(risk.take_profit_3, price_precision)}"),
         ]
-        if htf_note:
-            lines.append(escape_markdown_v2(htf_note))
 
     reasons = llm_analysis.reasons if llm_analysis else result.reasons
     if reasons:
