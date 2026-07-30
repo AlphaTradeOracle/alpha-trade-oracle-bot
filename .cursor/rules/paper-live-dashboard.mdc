@@ -1,0 +1,32 @@
+# Paper Live Dashboard Refresh
+
+When refreshing the paper trading live dashboard, follow this pipeline:
+
+## 1. Fetch live KPIs from VPS
+
+Use Hermes VPS to run:
+
+```bash
+cd /opt/alpha-trade-oracle-bot && bash scripts/vps_export_paper_live.sh
+```
+
+Return only the raw pipe-delimited output (lines starting with META|, ACCOUNT|, STATUS|, WR|, EXIT|, TOP|, BOT|, OPEN|, PEND|).
+
+## 2. Save snapshot
+
+Write the output to `exports/paper_live_snapshot.txt` in the repo root.
+
+## 3. Rebuild canvas
+
+```bash
+python scripts/build_paper_live_canvas.py
+```
+
+This updates:
+`C:\Users\Admin\.cursor\projects\c-Users-Admin-Projects-alpha-trade-oracle-bot\canvases\paper-live-dashboard.canvas.tsx`
+
+## 4. Confirm
+
+Report the GENERATED timestamp and key KPIs (Equity, Realized PnL, Win Rate, Open/Closed counts).
+
+Do not modify the canvas template manually unless the dashboard layout itself needs to change — always go through the build script.
