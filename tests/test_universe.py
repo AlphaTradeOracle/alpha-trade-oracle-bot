@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import MarketDataError
+from app.core.errors import MarketDataError, SymbolNotFoundError
 from app.market_data.coingecko import (
     CoinGeckoClient,
     CoinGeckoMarket,
@@ -223,14 +223,18 @@ class TradabilityStubProvider(MultiSymbolStubProvider):
         infos: list[SymbolInfo],
         *,
         without_candles: set[str] | None = None,
+        unknown: set[str] | None = None,
         thin: set[str] | None = None,
     ) -> None:
         super().__init__(frames, infos)
         self._without_candles = without_candles or set()
+        self._unknown = unknown or set()
         self._thin = thin or set()
 
     async def get_candles(self, symbol: str, timeframe: str, **kwargs: object) -> CandleSeries:
         upper = symbol.upper()
+        if upper in self._unknown:
+            raise SymbolNotFoundError(upper)
         if upper in self._without_candles:
             return CandleSeries(symbol=upper, timeframe=timeframe, candles=[])
         if upper in self._thin:
@@ -277,6 +281,62 @@ class TestUniverseTradabilityGate:
         assert result.mapped == 1
         assert result.skipped_no_candles == 1
         assert await AssetRepository(session).get_by_symbol("ETHUSDT") is None
+
+    @pytest.mark.asyncio
+    async def test_symbol_unknown_to_candle_endpoint_is_not_activated(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        provider = TradabilityStubProvider(uptrend_frames, [BTC, ETH], unknown={"ETHUSDT"})
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2),
+            ]
+        )
+        service = UniverseService(
+            provider,
+            gecko,
+            settings=service_settings(universe_size=10, universe_verify_candles=True),
+        )
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        assert result.skipped_no_candles == 1
+        assert await AssetRepository(session).get_by_symbol("ETHUSDT") is None
+
+    @pytest.mark.asyncio
+    async def test_provider_outage_keeps_symbol(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        """Ein API-Aussetzer darf nicht das halbe Universe deaktivieren."""
+
+        class FlakyProvider(TradabilityStubProvider):
+            async def get_candles(
+                self, symbol: str, timeframe: str, **kwargs: object
+            ) -> CandleSeries:
+                if symbol.upper() == "ETHUSDT":
+                    raise MarketDataError("KuCoin antwortet nicht")
+                return await super().get_candles(symbol, timeframe, **kwargs)
+
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2),
+            ]
+        )
+        service = UniverseService(
+            FlakyProvider(uptrend_frames, [BTC, ETH]),
+            gecko,
+            settings=service_settings(universe_size=10, universe_verify_candles=True),
+        )
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 2
+        assert result.skipped_no_candles == 0
 
     @pytest.mark.asyncio
     async def test_thinly_traded_symbol_is_filtered(

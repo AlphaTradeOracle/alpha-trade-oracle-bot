@@ -8,6 +8,7 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.errors import SymbolNotFoundError
 from app.core.logging import get_logger
 from app.market_data.base import MarketDataProvider
 from app.market_data.coingecko import (
@@ -225,6 +226,11 @@ class UniverseService:
         timeframe = self._settings.primary_timeframe
         try:
             series = await provider.get_candles(symbol, timeframe, limit=24)
+        except SymbolNotFoundError:
+            # Genau der ``skipped_no_history``-Fall: das Paar steht im
+            # Symbolindex, der Kerzen-Endpunkt kennt es aber nicht.
+            logger.info("universe_symbol_without_candles", symbol=symbol, exchange=exchange)
+            return "no_candles"
         except Exception as exc:
             logger.warning(
                 "universe_verify_failed", symbol=symbol, exchange=exchange, error=str(exc)

@@ -130,7 +130,11 @@ class Settings(BaseSettings):
     #: jedem Retest-Fill als ``skipped_no_history`` verpuffen.
     universe_verify_candles: bool = True
     #: Mindest-24h-Quotevolumen aus der Verifikationsabfrage (0 = aus).
-    universe_min_quote_volume_usd: float = 1_000_000.0
+    #: Default aus, weil das Volumen der *gemappten Boerse* gemessen wird und
+    #: KuCoin-Spot duenn ist: bei 1 Mio USD fielen 462 von 516 Paaren raus,
+    #: darunter THETA, IMX und PEPE. Ein Wert > 0 veraendert das Universe und
+    #: gehoert damit hinter einen Vergleichstest.
+    universe_min_quote_volume_usd: float = 0.0
     coinbase_quote_assets: str = "USD,USDC,USDT"
     #: Kerzen/Snapshots aelter als diese Tage werden beim Prune entfernt.
     candle_retention_days: int = 365
