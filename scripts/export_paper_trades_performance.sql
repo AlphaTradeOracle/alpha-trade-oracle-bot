@@ -1,5 +1,5 @@
--- Pipe-delimited snapshot for paper-live-dashboard canvas refresh.
--- Run on VPS: docker exec ... psql -f scripts/export_paper_live_snapshot.sql
+-- Pipe-delimited export for paper-trades-performance canvas (all positions + KPIs).
+-- Run on VPS: bash scripts/vps_export_paper_trades_performance.sh
 \pset tuples_only on
 \pset format unaligned
 SELECT 'META|' || TO_CHAR(NOW() AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD HH24:MI') || ' Europe/Berlin';
@@ -28,16 +28,23 @@ FROM (
 ) s;
 SELECT 'EXIT|' || COALESCE(exit_reason, 'unknown') || '|' || COUNT(*) || '|' || COALESCE(ROUND(SUM(realized_pnl)::numeric, 2), 0)
 FROM paper_positions WHERE status = 'closed' GROUP BY exit_reason ORDER BY COUNT(*) DESC;
-SELECT 'TOP|' || id || '|' || symbol || '|' || direction || '|' || ROUND(realized_pnl::numeric, 2) || '|' || COALESCE(exit_reason, '')
-  || '|' || TO_CHAR(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI')
-  || '|' || COALESCE(TO_CHAR(closed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), '')
-FROM paper_positions WHERE status = 'closed' ORDER BY realized_pnl DESC LIMIT 10;
-SELECT 'BOT|' || id || '|' || symbol || '|' || direction || '|' || ROUND(realized_pnl::numeric, 2) || '|' || COALESCE(exit_reason, '')
-FROM paper_positions WHERE status = 'closed' ORDER BY realized_pnl ASC LIMIT 5;
-SELECT 'OPEN|' || id || '|' || symbol || '|' || direction || '|' || ROUND(entry_price::numeric, 8)
-  || '|' || ROUND(COALESCE(realized_pnl, 0)::numeric, 2)
-  || '|' || TO_CHAR(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI')
-FROM paper_positions WHERE status = 'open' ORDER BY opened_at DESC;
-SELECT 'PEND|' || id || '|' || symbol || '|' || direction || '|' || ROUND(entry_price::numeric, 8)
-  || '|' || TO_CHAR(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI')
-FROM paper_positions WHERE status = 'pending' ORDER BY opened_at DESC;
+SELECT 'TRADE|'
+  || id || '|'
+  || symbol || '|'
+  || direction || '|'
+  || status || '|'
+  || ROUND(entry_price::numeric, 8) || '|'
+  || ROUND(stop_loss::numeric, 8) || '|'
+  || ROUND(current_stop::numeric, 8) || '|'
+  || ROUND(take_profit_1::numeric, 8) || '|'
+  || ROUND(take_profit_2::numeric, 8) || '|'
+  || ROUND(take_profit_3::numeric, 8) || '|'
+  || CASE WHEN tp1_filled THEN '1' ELSE '0' END || '|'
+  || CASE WHEN tp2_filled THEN '1' ELSE '0' END || '|'
+  || CASE WHEN tp3_filled THEN '1' ELSE '0' END || '|'
+  || COALESCE(ROUND(realized_pnl::numeric, 2), 0) || '|'
+  || COALESCE(exit_reason, '') || '|'
+  || TO_CHAR(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') || '|'
+  || COALESCE(TO_CHAR(closed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), '')
+FROM paper_positions
+ORDER BY opened_at ASC;

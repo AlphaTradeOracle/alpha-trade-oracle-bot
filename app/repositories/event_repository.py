@@ -70,6 +70,11 @@ class ScheduledJobRepository:
         if existing is not None:
             if existing.interval_seconds != interval_seconds:
                 existing.interval_seconds = interval_seconds
+                # Neues Intervall soll nicht hinter einem alten next_run_at blockieren.
+                existing.next_run_at = utc_now()
+            elif existing.last_run_at is None:
+                # Job nie gelaufen (z. B. nach Intervall-Wechsel 60m -> 30m): sofort faehig machen.
+                existing.next_run_at = utc_now()
             return existing
 
         job = ScheduledJob(

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy SIGNAL_MIN_ADX=35, rebuild paper ledger since 2026-07-28, print KPIs.
+# DEPRECATED: ADX=35 rejected after live rebuild (15 closed, PF 0.41). Use vps_mtf_paper_rebuild.sh.
+# Kept for reference only — do not run in production.
 set -euo pipefail
 cd /opt/alpha-trade-oracle-bot
 
