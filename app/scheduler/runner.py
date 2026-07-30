@@ -22,6 +22,7 @@ from app.scheduler.jobs import (
     run_universe_refresh,
     universe_refresh_job,
 )
+from app.services.data_retention_service import DataRetentionService
 from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 from app.services.universe_service import UniverseService
@@ -39,6 +40,7 @@ class SchedulerRunner:
         settings: Settings | None = None,
         *,
         universe_service: UniverseService | None = None,
+        data_retention: DataRetentionService | None = None,
         paper_trading: PaperTradingService | None = None,
         provider: MarketDataProvider | None = None,
         providers: dict[str, MarketDataProvider] | None = None,
@@ -46,6 +48,7 @@ class SchedulerRunner:
         self._settings = settings or get_settings()
         self._scan_service = scan_service
         self._universe_service = universe_service
+        self._data_retention = data_retention
         self._paper = paper_trading
         self._provider = provider
         self._providers = providers or {}
@@ -94,7 +97,11 @@ class SchedulerRunner:
             self._scheduler.add_job(
                 run_universe_refresh,
                 trigger=IntervalTrigger(seconds=refresh_definition.interval_seconds),
-                args=[self._universe_service, refresh_definition.key],
+                kwargs={
+                    "universe_service": self._universe_service,
+                    "job_key": refresh_definition.key,
+                    "data_retention": self._data_retention,
+                },
                 id=refresh_definition.key,
                 name=refresh_definition.description,
                 coalesce=True,

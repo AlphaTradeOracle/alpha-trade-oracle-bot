@@ -284,6 +284,7 @@ async def _run_worker() -> None:
         scan_service,
         settings,
         universe_service=container.universe_service,
+        data_retention=container.data_retention,
         paper_trading=container.paper_trading,
         provider=container.provider,
         providers=container.universe_providers,
@@ -488,6 +489,8 @@ async def _run_universe_refresh() -> None:
     try:
         async with session_scope() as session:
             result = await container.universe_service.refresh(session)
+        async with session_scope() as session:
+            prune_result = await container.data_retention.prune(session)
     except AlphaTradeOracleError as exc:
         typer.secho(f"Universe-Refresh fehlgeschlagen: {exc}", fg=typer.colors.RED)
         await container.aclose()
@@ -496,6 +499,9 @@ async def _run_universe_refresh() -> None:
     typer.echo("")
     typer.secho("Universe-Refresh abgeschlossen", fg=typer.colors.GREEN, bold=True)
     for key, value in result.as_summary().items():
+        typer.echo(f"  {key}: {value}")
+    typer.secho("Data-Prune abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    for key, value in prune_result.as_summary().items():
         typer.echo(f"  {key}: {value}")
     if result.symbols:
         preview = ", ".join(result.symbols[:15])

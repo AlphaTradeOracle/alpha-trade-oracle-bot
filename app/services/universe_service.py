@@ -99,10 +99,18 @@ class UniverseService:
         return ordered
 
     async def refresh(self, session: AsyncSession) -> UniverseRefreshResult:
-        """Universe aus CoinGecko neu aufbauen und mit der Boerse abgleichen."""
+        """Universe aus CoinGecko neu aufbauen und mit der Boerse abgleichen.
+
+        Mappt CoinGecko-Maerkte in Rank-Reihenfolge auf handelbare Paare und
+        stoppt bei ``universe_target_count`` (Default 300). Das Universe bleibt
+        stabil: dieselben Top-Coins nach MCAP, solange sie ein Pair haben;
+        Ausfaelle tieferer Ranks werden durch den naechsten mappbaren Coin
+        ersetzt (Rank kann dabei >300 sein).
+        """
         result = UniverseRefreshResult()
         quote = self._settings.default_quote_asset.upper()
         limit = self._settings.universe_size
+        target = max(0, self._settings.universe_target_count)
         ticker_budget = max(0, self._settings.universe_ticker_fallback_max)
 
         markets = await self._coingecko.fetch_top_markets(limit)
@@ -113,6 +121,9 @@ class UniverseService:
         active_symbols: set[str] = set()
 
         for market in markets:
+            if target > 0 and result.mapped >= target:
+                break
+
             base = market.symbol.upper().strip()
             if not base or base in SKIP_BASE_ASSETS or base == quote:
                 result.skipped_stable += 1
@@ -156,10 +167,21 @@ class UniverseService:
 
         result.deactivated = await assets.deactivate_stale_universe(active_symbols)
 
+        if target > 0 and result.mapped < target:
+            logger.warning(
+                "universe_target_not_reached",
+                mapped=result.mapped,
+                target=target,
+                pool_size=limit,
+                skipped_no_pair=result.skipped_no_pair,
+                ticker_fallback=self._settings.universe_ticker_fallback,
+            )
+
         logger.info(
             "universe_refreshed",
             exchanges=self._exchange_order,
             quote=quote,
+            target=target or None,
             **result.as_summary(),
         )
         return result

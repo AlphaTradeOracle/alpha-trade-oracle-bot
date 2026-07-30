@@ -106,7 +106,7 @@ class Settings(BaseSettings):
     scan_interval_minutes: int = 30
     candle_limit: int = 500
     min_candles_required: int = 210
-    universe_size: int = 450
+    universe_size: int = 1000
     #: Pro Scan-Zyklus: Batch-Groesse (sollte >= universe_target_count sein).
     universe_scan_batch_size: int = 300
     universe_refresh_hours: int = 24
@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     universe_ticker_fallback: bool = True
     #: Begrenzt CoinGecko-Ticker-Lookups (Rate-Limits); Mapping laeuft primaer
     #: ueber KuCoin/Binance/Coinbase-Symbol-Listen.
-    universe_ticker_fallback_max: int = 80
+    universe_ticker_fallback_max: int = 150
     #: Top-N handelbare USD*/USDT/USDC-Paare nach MCAP behalten/scannen
     #: (Rank kann dabei >N sein, wenn hoehere Ranks kein Pair haben).
     universe_target_count: int = 300

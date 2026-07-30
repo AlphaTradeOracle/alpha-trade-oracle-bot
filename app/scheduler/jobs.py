@@ -16,6 +16,7 @@ from app.database.session import session_scope
 from app.market_data.base import MarketDataProvider
 from app.repositories.event_repository import EventRepository, ScheduledJobRepository
 from app.repositories.paper_repository import PaperRepository
+from app.services.data_retention_service import DataRetentionService
 from app.services.paper_trading_service import PaperTradingService
 from app.services.scan_service import ScanService
 from app.services.universe_service import UniverseService
@@ -99,7 +100,12 @@ async def run_market_scan(scan_service: ScanService, job_key: str) -> None:
         logger.info("job_completed", job_key=job_key, **summary)
 
 
-async def run_universe_refresh(universe_service: UniverseService, job_key: str) -> None:
+async def run_universe_refresh(
+    universe_service: UniverseService,
+    job_key: str,
+    *,
+    data_retention: DataRetentionService | None = None,
+) -> None:
     """Universe-Refresh ausfuehren, sofern das Ausfuehrungsrecht beansprucht werden kann."""
     set_correlation_id()
 
@@ -115,6 +121,9 @@ async def run_universe_refresh(universe_service: UniverseService, job_key: str) 
     try:
         async with session_scope() as session:
             result = await universe_service.refresh(session)
+        if data_retention is not None:
+            async with session_scope() as session:
+                await data_retention.prune(session)
         success = True
         error: str | None = None
         summary = result.as_summary()
