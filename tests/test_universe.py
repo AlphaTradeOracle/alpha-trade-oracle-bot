@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -18,7 +19,7 @@ from app.market_data.coingecko import (
     CoinGeckoTicker,
     exchange_matches_provider,
 )
-from app.market_data.types import SymbolInfo
+from app.market_data.types import Candle, CandleSeries, SymbolInfo
 from app.models.market import Asset
 from app.repositories.asset_repository import AssetRepository
 from app.services.analysis_service import AnalysisService
@@ -211,6 +212,99 @@ class NamedStubProvider(MultiSymbolStubProvider):
     def __init__(self, name: str, frames: dict[str, pd.DataFrame], infos: list[SymbolInfo]) -> None:
         super().__init__(frames, infos)
         self.name = name
+
+
+class TradabilityStubProvider(MultiSymbolStubProvider):
+    """Liefert fuer ausgewaehlte Symbole keine bzw. nur duenne Kerzen."""
+
+    def __init__(
+        self,
+        frames: dict[str, pd.DataFrame],
+        infos: list[SymbolInfo],
+        *,
+        without_candles: set[str] | None = None,
+        thin: set[str] | None = None,
+    ) -> None:
+        super().__init__(frames, infos)
+        self._without_candles = without_candles or set()
+        self._thin = thin or set()
+
+    async def get_candles(self, symbol: str, timeframe: str, **kwargs: object) -> CandleSeries:
+        upper = symbol.upper()
+        if upper in self._without_candles:
+            return CandleSeries(symbol=upper, timeframe=timeframe, candles=[])
+        if upper in self._thin:
+            start = datetime(2024, 1, 1, tzinfo=UTC)
+            candles = [
+                Candle(
+                    open_time=start + timedelta(hours=i),
+                    close_time=start + timedelta(hours=i + 1),
+                    open=1.0,
+                    high=1.0,
+                    low=1.0,
+                    close=1.0,
+                    volume=100.0,
+                )
+                for i in range(24)
+            ]
+            return CandleSeries(symbol=upper, timeframe=timeframe, candles=candles)
+        return await super().get_candles(symbol, timeframe, **kwargs)  # type: ignore[arg-type]
+
+
+class TestUniverseTradabilityGate:
+    @pytest.mark.asyncio
+    async def test_symbol_without_candles_is_not_activated(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        provider = TradabilityStubProvider(
+            uptrend_frames, [BTC, ETH], without_candles={"ETHUSDT"}
+        )
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2),
+            ]
+        )
+        service = UniverseService(
+            provider,
+            gecko,
+            settings=service_settings(universe_size=10, universe_verify_candles=True),
+        )
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        assert result.skipped_no_candles == 1
+        assert await AssetRepository(session).get_by_symbol("ETHUSDT") is None
+
+    @pytest.mark.asyncio
+    async def test_thinly_traded_symbol_is_filtered(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        provider = TradabilityStubProvider(uptrend_frames, [BTC, ETH], thin={"ETHUSDT"})
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2),
+            ]
+        )
+        service = UniverseService(
+            provider,
+            gecko,
+            settings=service_settings(
+                universe_size=10,
+                universe_verify_candles=True,
+                universe_min_quote_volume_usd=1_000_000.0,
+            ),
+        )
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 1
+        assert result.skipped_illiquid == 1
+        assert await AssetRepository(session).get_by_symbol("ETHUSDT") is None
 
 
 class TrackingAnalysisService(AnalysisService):

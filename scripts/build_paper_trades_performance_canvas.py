@@ -47,6 +47,17 @@ def parse_export(text: str) -> dict[str, object]:
     account: dict[str, float] = {}
     status_counts: dict[str, tuple[int, float]] = {}
     wr = {"wins": 0, "losses": 0, "wr": 0.0, "pf": 0.0}
+    rkpi = {
+        "n": 0,
+        "totalR": 0.0,
+        "expectancyR": 0.0,
+        "feesR": 0.0,
+        "wrR": 0.0,
+        "pfR": 0.0,
+        "avgWinR": 0.0,
+        "avgLossR": 0.0,
+    }
+    conc = {"entries": 0, "maxOpen": 0}
     exits: list[dict[str, object]] = []
     trades: list[dict[str, object]] = []
 
@@ -75,8 +86,28 @@ def parse_export(text: str) -> dict[str, object]:
                 "wr": float(parts[3]),
                 "pf": float(parts[4]),
             }
+        elif tag == "RKPI":
+            rkpi = {
+                "n": int(parts[1]),
+                "totalR": float(parts[2]),
+                "expectancyR": float(parts[3]),
+                "feesR": float(parts[4]),
+                "wrR": float(parts[5]),
+                "pfR": float(parts[6]),
+                "avgWinR": float(parts[7]),
+                "avgLossR": float(parts[8]),
+            }
+        elif tag == "CONC":
+            conc = {"entries": int(parts[1]), "maxOpen": int(parts[2])}
         elif tag == "EXIT":
-            exits.append({"reason": parts[1], "n": int(parts[2]), "pnl": float(parts[3])})
+            exits.append(
+                {
+                    "reason": parts[1],
+                    "n": int(parts[2]),
+                    "pnl": float(parts[3]),
+                    "r": float(parts[4]) if len(parts) > 4 else 0.0,
+                }
+            )
         elif tag == "TRADE":
             trades.append(
                 {
@@ -97,6 +128,9 @@ def parse_export(text: str) -> dict[str, object]:
                     "exit": parts[15],
                     "opened": parts[16],
                     "closed": parts[17],
+                    "risk": float(parts[18]) if len(parts) > 18 and parts[18] else 0.0,
+                    "r": float(parts[19]) if len(parts) > 19 and parts[19] else None,
+                    "feeR": float(parts[20]) if len(parts) > 20 and parts[20] else None,
                 }
             )
 
@@ -130,6 +164,16 @@ def parse_export(text: str) -> dict[str, object]:
             "wins": wr["wins"],
             "losses": wr["losses"],
             "pf": wr["pf"],
+            "rTrades": rkpi["n"],
+            "totalR": rkpi["totalR"],
+            "expectancyR": rkpi["expectancyR"],
+            "feesR": rkpi["feesR"],
+            "wrR": rkpi["wrR"],
+            "pfR": rkpi["pfR"],
+            "avgWinR": rkpi["avgWinR"],
+            "avgLossR": rkpi["avgLossR"],
+            "entries": conc["entries"],
+            "maxOpen": conc["maxOpen"],
         },
         "exits": exits,
         "trades": trades,
@@ -164,6 +208,8 @@ def render_canvas(data: dict[str, object]) -> str:
         "TP2",
         "TP3",
         "Hits",
+        "R",
+        "Risiko 1R",
         "RPnL",
         "Exit",
         "Opened",
@@ -181,6 +227,8 @@ def render_canvas(data: dict[str, object]) -> str:
             t["tp2"],
             t["tp3"],
             _hit_flags(t),
+            f"{t['r']:+.2f}R" if t["r"] is not None else "—",
+            f"${t['risk']:.2f}" if t["risk"] else "—",
             f"${t['rpnl']:+.2f}",
             t["exit"] or "—",
             t["opened"],
@@ -193,7 +241,7 @@ def render_canvas(data: dict[str, object]) -> str:
     open_rows = [r for r in trade_rows if r[3] == "open"]
     pending_rows = [r for r in trade_rows if r[3] == "pending"]
 
-    timeline_headers = ["Phase", "Date", "Closed", "WR", "PF", "Closed RPnL", "Note"]
+    timeline_headers = ["Phase", "Date", "Closed", "WR", "PF", "Total R", "Closed RPnL", "Note"]
     timeline_rows = [
         [
             p["phase"],
@@ -201,6 +249,7 @@ def render_canvas(data: dict[str, object]) -> str:
             str(p["closed"]),
             f"{p['wr']}%",
             str(p["pf"]),
+            "—",
             f"${p['rpnl']:+.2f}",
             p["note"],
         ]
@@ -213,6 +262,7 @@ def render_canvas(data: dict[str, object]) -> str:
             str(kpi["closedN"]),
             f"{kpi['wr']}%",
             str(kpi["pf"]),
+            f"{kpi['totalR']:+.2f}R",
             f"${kpi['closedRpnl']:+.2f}",
             "Live VPS ledger after revert + rebuild",
         ]

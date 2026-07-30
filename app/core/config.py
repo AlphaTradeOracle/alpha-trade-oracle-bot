@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     atr_multiplier: float = 1.5
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
+    #: true = Setups jenseits von ``max_stop_distance_percent`` werden verworfen.
+    #: false = sie bleiben handelbar, das risikonormierte Sizing verkleinert die
+    #: Position stattdessen automatisch (Default, weil ein Reject die Signalmenge
+    #: aendert und damit eine Strategieentscheidung waere).
+    reject_wide_stops: bool = False
     max_atr_percent: float = 12.0
     reference_capital: float = 10_000.0
 
@@ -120,6 +125,12 @@ class Settings(BaseSettings):
     universe_target_count: int = 300
     #: Optionaler harter Rank-Ceiling (0 = aus; Prefer universe_target_count).
     universe_max_rank: int = 0
+    #: Vor der Aufnahme pruefen, ob der Provider fuer das Paar ueberhaupt Kerzen
+    #: liefert. Ohne diese Pruefung landen Symbole im Universe, die spaeter bei
+    #: jedem Retest-Fill als ``skipped_no_history`` verpuffen.
+    universe_verify_candles: bool = True
+    #: Mindest-24h-Quotevolumen aus der Verifikationsabfrage (0 = aus).
+    universe_min_quote_volume_usd: float = 1_000_000.0
     coinbase_quote_assets: str = "USD,USDC,USDT"
     #: Kerzen/Snapshots aelter als diese Tage werden beim Prune entfernt.
     candle_retention_days: int = 365
@@ -129,7 +140,16 @@ class Settings(BaseSettings):
     paper_initial_balance: float = 5_000.0
     paper_margin_per_trade: float = 100.0
     paper_leverage: float = 10.0
-    paper_fee_percent: float = 0.1
+    #: Risikobetrag je Trade in USD. Die Stueckzahl folgt daraus und dem
+    #: Stop-Abstand, damit ein Stop-Treffer immer gleich viel kostet.
+    #: 0 = altes Verhalten (fixe Margin x Hebel, Risiko haengt am Stop-Abstand).
+    paper_risk_per_trade_usd: float = 50.0
+    #: Obergrenze fuer das Nominal, damit sehr enge Stops keinen absurden Hebel
+    #: erzeugen (0 = keine Grenze).
+    paper_max_notional_usd: float = 1_500.0
+    #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
+    #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
+    paper_fee_percent: float = 0.05
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.

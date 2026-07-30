@@ -84,6 +84,8 @@ class PaperPosition(Base, TimestampMixin):
 
     realized_pnl: Mapped[Decimal] = mapped_column(PRICE, nullable=False, default=Decimal("0"))
     fees: Mapped[Decimal] = mapped_column(PRICE, nullable=False, default=Decimal("0"))
+    #: Dollar-Risiko der Position beim Entry (1R). Basis jeder R-Auswertung.
+    risk_amount: Mapped[Decimal] = mapped_column(PRICE, nullable=False, default=Decimal("0"))
     signal_score: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     exit_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

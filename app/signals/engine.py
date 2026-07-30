@@ -254,8 +254,10 @@ class SignalEngine:
             ),
         ]
 
-        sentiment_weight = weights[ScoreCategory.SENTIMENT]
-        if sentiment_weight > 0:
+        # Auch bei Gewicht 0 auffuehren, damit das Breakdown zeigt, dass Sentiment
+        # aktiv, aber ungewichtet ist. Der Beitrag zum Score bleibt 0.
+        if self._config.enable_sentiment:
+            sentiment_weight = weights[ScoreCategory.SENTIMENT]
             if sentiment_score is None:
                 # Keine Daten: neutral bewerten, aber transparent benennen.
                 components.append(

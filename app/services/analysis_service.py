@@ -266,6 +266,7 @@ class AnalysisService:
                 max_risk_percent=self._settings.max_risk_percent,
                 min_stop_distance_percent=self._settings.min_stop_distance_percent,
                 max_stop_distance_percent=self._settings.max_stop_distance_percent,
+                reject_wide_stops=self._settings.reject_wide_stops,
                 reference_capital=self._settings.reference_capital,
                 tp_multipliers=DEFAULT_TP_MULTIPLIERS,
             )

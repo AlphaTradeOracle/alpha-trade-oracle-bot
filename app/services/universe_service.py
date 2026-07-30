@@ -57,6 +57,8 @@ class UniverseRefreshResult:
     skipped_stable: int = 0
     skipped_no_pair: int = 0
     skipped_duplicate: int = 0
+    skipped_no_candles: int = 0
+    skipped_illiquid: int = 0
     deactivated: int = 0
     symbols: list[str] = field(default_factory=list)
 
@@ -70,6 +72,8 @@ class UniverseRefreshResult:
             "skipped_stable": self.skipped_stable,
             "skipped_no_pair": self.skipped_no_pair,
             "skipped_duplicate": self.skipped_duplicate,
+            "skipped_no_candles": self.skipped_no_candles,
+            "skipped_illiquid": self.skipped_illiquid,
             "deactivated": self.deactivated,
         }
 
@@ -150,6 +154,14 @@ class UniverseService:
                 result.skipped_duplicate += 1
                 continue
 
+            verdict = await self._verify_tradability(symbol, exchange)
+            if verdict == "no_candles":
+                result.skipped_no_candles += 1
+                continue
+            if verdict == "illiquid":
+                result.skipped_illiquid += 1
+                continue
+
             await assets.upsert_universe_entry(
                 symbol=symbol,
                 base_asset=info.base_asset,
@@ -193,6 +205,56 @@ class UniverseService:
             **result.as_summary(),
         )
         return result
+
+    async def _verify_tradability(self, symbol: str, exchange: str) -> str:
+        """Pruefen, ob der Provider Kerzen liefert und das Paar liquide genug ist.
+
+        Ein Symbol, das in der Symbolliste steht, aber keine Kerzen liefert,
+        erzeugt spaeter nur Signale ohne Historie. Duenn gehandelte Paare
+        wiederum liefern die extremen ATR-Ausreisser. Beides wird hier
+        aussortiert. Ein Provider-*Fehler* laesst das Symbol drin — sonst wuerde
+        ein API-Aussetzer das halbe Universe deaktivieren.
+        """
+        if not self._settings.universe_verify_candles:
+            return "ok"
+
+        provider = self._providers.get(exchange)
+        if provider is None:
+            return "ok"
+
+        timeframe = self._settings.primary_timeframe
+        try:
+            series = await provider.get_candles(symbol, timeframe, limit=24)
+        except Exception as exc:
+            logger.warning(
+                "universe_verify_failed", symbol=symbol, exchange=exchange, error=str(exc)
+            )
+            return "ok"
+
+        if series is None or series.is_empty:
+            logger.info("universe_symbol_without_candles", symbol=symbol, exchange=exchange)
+            return "no_candles"
+
+        minimum = self._settings.universe_min_quote_volume_usd
+        if minimum <= 0:
+            return "ok"
+
+        quote_volume = sum(
+            candle.quote_volume
+            if candle.quote_volume is not None
+            else candle.volume * candle.close
+            for candle in series.candles
+        )
+        if quote_volume < minimum:
+            logger.info(
+                "universe_symbol_illiquid",
+                symbol=symbol,
+                exchange=exchange,
+                quote_volume=round(quote_volume, 2),
+                minimum=minimum,
+            )
+            return "illiquid"
+        return "ok"
 
     async def _load_exchange_indices(self, quote: str) -> dict[str, dict[str, SymbolInfo]]:
         indices: dict[str, dict[str, SymbolInfo]] = {}

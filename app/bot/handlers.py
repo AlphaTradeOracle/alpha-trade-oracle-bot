@@ -420,8 +420,14 @@ class BotHandlers:
                 f"PF: {summary.profit_factor:.2f}"
             ),
             escape_markdown_v2(
-                f"Je Trade: ${self._settings.paper_margin_per_trade:.0f} × "
-                f"{self._settings.paper_leverage:.0f}x"
+                f"Gesamt: {summary.total_r:+.2f}R  |  "
+                f"Erwartung: {summary.expectancy_r:+.3f}R/Trade  |  "
+                f"Gebuehren: {summary.fees_r:.2f}R  ({summary.r_trades} Trades mit 1R)"
+            ),
+            escape_markdown_v2(
+                f"Risiko je Trade: ${self._settings.paper_risk_per_trade_usd:.0f} "
+                f"| Hebel {self._settings.paper_leverage:.0f}x "
+                f"| Notional-Cap ${self._settings.paper_max_notional_usd:.0f}"
             ),
         ]
 

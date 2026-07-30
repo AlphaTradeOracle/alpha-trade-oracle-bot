@@ -41,6 +41,8 @@ class RiskConfig:
     max_risk_percent: float = 1.0
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
+    #: Verwerfen statt nur kennzeichnen, wenn der Stop zu weit ist.
+    reject_wide_stops: bool = False
     reference_capital: float = 10_000.0
     tp_multipliers: tuple[float, float, float] = DEFAULT_TP_MULTIPLIERS
 
@@ -88,6 +90,12 @@ class RiskManager:
             return None
 
         stop_distance_percent = stop_distance / entry_reference * 100.0
+        if (
+            self._config.reject_wide_stops
+            and stop_distance_percent > self._config.max_stop_distance_percent
+        ):
+            return None
+
         stop_loss, stop_distance, stop_distance_percent, clamp_note = self._enforce_stop_bounds(
             entry_reference, stop_loss, stop_distance, stop_distance_percent, is_long=is_long
         )
@@ -198,7 +206,9 @@ class RiskManager:
 
         if stop_distance_percent > self._config.max_stop_distance_percent:
             # Nicht verschieben, sondern kennzeichnen: ein kuenstlich enger Stop
-            # waere in einem volatilen Markt gefaehrlicher als ein weiter.
+            # waere in einem volatilen Markt gefaehrlicher als ein weiter. Das
+            # Dollar-Risiko begrenzt das risikonormierte Sizing; ein harter
+            # Reject laeuft ueber ``RiskConfig.reject_wide_stops``.
             return (
                 stop_loss,
                 stop_distance,
@@ -284,15 +294,20 @@ class RiskManager:
 
         return targets[0], targets[1], targets[2]
 
+    @staticmethod
+    def position_size_for_risk(risk_amount: float, stop_distance: float) -> float:
+        """Stueckzahl, bei der ein Stop-Treffer genau ``risk_amount`` kostet."""
+        if stop_distance <= 0 or risk_amount <= 0:
+            return 0.0
+        return risk_amount / stop_distance
+
     def _position_size(self, stop_distance: float) -> float:
         """Informative Positionsgroesse bezogen auf das Referenzkapital.
 
         Es wird kein Kontostand abgefragt und keine Order erzeugt.
         """
-        if stop_distance <= 0:
-            return 0.0
         risk_amount = self._config.reference_capital * self._config.max_risk_percent / 100.0
-        return risk_amount / stop_distance
+        return self.position_size_for_risk(risk_amount, stop_distance)
 
     @staticmethod
     def _invalidation_note(stop_loss: float, timeframe: str, *, is_long: bool) -> str:

@@ -650,6 +650,11 @@ async def _run_paper_rebuild(
         f"win_rate {summary.win_rate * 100:.0f}%  PF {summary.profit_factor:.2f}  "
         f"pending {summary.pending_positions}"
     )
+    typer.echo(
+        f"  total_r:            {summary.total_r:+.2f}R  "
+        f"expectancy {summary.expectancy_r:+.3f}R  "
+        f"fees {summary.fees_r:.2f}R  ({summary.r_trades} Trades)"
+    )
 
     await container.aclose()
 

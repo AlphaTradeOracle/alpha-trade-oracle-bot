@@ -29,6 +29,7 @@ from app.market_data.types import Candle
 from app.models.market import Asset, IndicatorSnapshot, MarketCandle
 from app.models.signal import Signal
 from app.repositories.paper_repository import PaperRepository
+from app.signals.retest_entry import zone_fill_price
 from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskManager
 
 FEE = Decimal("0.001")
@@ -214,7 +215,9 @@ def _arm_retest(trade: TradeInput, candles: list[Candle]) -> tuple[float | None,
         if (not is_long) and high >= stop:
             return None, None, "sl_before_retest"
         if low <= zone_hi and high >= zone_lo:
-            fill = (zone_lo + zone_hi) / Decimal("2")
+            fill = zone_fill_price(
+                low=low, high=high, zone_lo=zone_lo, zone_hi=zone_hi, is_long=is_long
+            )
             return float(fill), when, None
     return None, None, "data_ended_before_fill"
 

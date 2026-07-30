@@ -17,6 +17,10 @@ class PaperSummaryResponse(BaseModel):
     win_rate: float
     closed_trades: int
     profit_factor: float
+    total_r: float = 0.0
+    expectancy_r: float = 0.0
+    fees_r: float = 0.0
+    r_trades: int = 0
 
 
 class PaperPositionResponse(BaseModel):
@@ -43,6 +47,8 @@ class PaperPositionResponse(BaseModel):
     tp3_filled: bool
     realized_pnl: float
     fees: float
+    risk_amount: float = 0.0
+    r_multiple: float | None = None
     signal_score: float | None = None
     exit_reason: str | None = None
     opened_at: datetime

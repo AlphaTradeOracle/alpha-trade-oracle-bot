@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.enums import Confidence, ScoreCategory, SignalDirection
+from app.core.enums import Confidence, ScoreCategory, SignalDirection, TrendDirection
 from app.indicators.engine import IndicatorSet
 from app.signals.engine import SignalEngine, SignalEngineConfig
 from app.signals.multi_timeframe import (
@@ -15,6 +15,7 @@ from app.signals.multi_timeframe import (
     assess_timeframes,
     multi_timeframe_agreement,
 )
+from app.signals.scoring import score_volatility
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
 NOW = datetime(2024, 6, 1, 12, tzinfo=UTC)
@@ -80,6 +81,34 @@ class TestScoreComposition:
         assert engine.weights.total() == pytest.approx(1.0)
         result = engine.generate("BTCUSDT", uptrend_indicators, now=NOW)
         assert all(c.category is not ScoreCategory.SENTIMENT for c in result.components)
+
+
+class TestVolatilityScoreDirection:
+    """Volatilitaet darf den Score nicht richtungslos nach unten ziehen."""
+
+    def test_penalty_follows_trend_direction(
+        self,
+        uptrend_indicators: dict[str, IndicatorSet],
+        downtrend_indicators: dict[str, IndicatorSet],
+    ) -> None:
+        bullish = replace(uptrend_indicators["1h"], atr_percent=9.0)
+        bearish = replace(downtrend_indicators["1h"], atr_percent=9.0)
+
+        bullish_score, _ = score_volatility(bullish)
+        bearish_score, _ = score_volatility(bearish)
+
+        assert bullish.trend_direction.value == "BULLISH"
+        assert bearish.trend_direction.value == "BEARISH"
+        assert bullish_score < 0
+        assert bearish_score > 0
+
+    def test_neutral_trend_yields_no_volatility_bias(
+        self, uptrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        indicators = replace(uptrend_indicators["1h"], atr_percent=9.0, bb_width=None)
+        indicators = replace(indicators, trend_direction=TrendDirection.NEUTRAL)
+        score, _ = score_volatility(indicators)
+        assert score == 0.0
 
 
 class TestDirection:

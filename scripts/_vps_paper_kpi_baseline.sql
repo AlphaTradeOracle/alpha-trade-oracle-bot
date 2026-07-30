@@ -20,6 +20,13 @@ FROM (
       ELSE 999 END AS pf
   FROM paper_positions WHERE status='closed'
 ) s;
+SELECT 'RKPI|' || COUNT(*) || '|' || ROUND(COALESCE(SUM(r),0)::numeric,3) || '|' ||
+  ROUND((CASE WHEN COUNT(*)>0 THEN COALESCE(SUM(r),0)/COUNT(*) ELSE 0 END)::numeric,4) || '|' ||
+  ROUND(COALESCE(SUM(fee_r),0)::numeric,3)
+FROM (
+  SELECT realized_pnl / risk_amount AS r, fees / risk_amount AS fee_r
+  FROM paper_positions WHERE status='closed' AND risk_amount > 0
+) t;
 SELECT 'TOP|' || symbol || '|' || ROUND(realized_pnl::numeric,2) || '|' || exit_reason
 FROM paper_positions WHERE status='closed' ORDER BY realized_pnl DESC LIMIT 5;
 SELECT 'BOT|' || symbol || '|' || ROUND(realized_pnl::numeric,2) || '|' || exit_reason

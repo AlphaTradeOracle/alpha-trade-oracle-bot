@@ -32,6 +32,10 @@ async def paper_summary(session: SessionDep, paper: PaperTradingDep) -> PaperSum
         win_rate=summary.win_rate,
         closed_trades=summary.closed_trades,
         profit_factor=summary.profit_factor,
+        total_r=summary.total_r,
+        expectancy_r=summary.expectancy_r,
+        fees_r=summary.fees_r,
+        r_trades=summary.r_trades,
     )
 
 
@@ -77,6 +81,12 @@ async def paper_positions(
             tp3_filled=p.tp3_filled,
             realized_pnl=float(p.realized_pnl),
             fees=float(p.fees),
+            risk_amount=float(p.risk_amount),
+            r_multiple=(
+                float(p.realized_pnl) / float(p.risk_amount)
+                if float(p.risk_amount) > 0
+                else None
+            ),
             signal_score=float(p.signal_score) if p.signal_score is not None else None,
             exit_reason=p.exit_reason,
             opened_at=p.opened_at,

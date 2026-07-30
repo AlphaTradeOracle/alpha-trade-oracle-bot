@@ -49,6 +49,11 @@ class PaperSummary:
     closed_trades: int
     profit_factor: float
     pending_positions: int = 0
+    #: Risikonormierte Kennzahlen. Nur Positionen mit hinterlegtem 1R zaehlen.
+    total_r: float = 0.0
+    expectancy_r: float = 0.0
+    fees_r: float = 0.0
+    r_trades: int = 0
 
 
 @dataclass
@@ -82,6 +87,16 @@ class PendingResolveResult:
     filled: int = 0
     skipped: int = 0
     still_pending: int = 0
+
+
+@dataclass(frozen=True)
+class PositionSizing:
+    """Ergebnis der Positionsberechnung fuer einen Paper-Trade."""
+
+    quantity: Decimal
+    notional: Decimal
+    margin: Decimal
+    risk_amount: Decimal
 
 
 class PaperTradingService:
@@ -144,6 +159,50 @@ class PaperTradingService:
             pending_multiplier=int(self._settings.paper_retest_pending_multiplier),
         )
 
+    def _size_position(self, entry: Decimal, stop: Decimal) -> PositionSizing | None:
+        """Stueckzahl aus Risikobetrag und Stop-Abstand statt aus fixer Margin.
+
+        Bei fixer Margin bestimmt allein der Stop-Abstand, wie viel Dollar ein
+        Stop-Treffer kostet — im Ledger schwankte das um den Faktor 15. Ueber
+        ``paper_risk_per_trade_usd`` kostet jeder Stop-Treffer gleich viel, die
+        Trades werden dadurch ueberhaupt erst untereinander vergleichbar (1R).
+        """
+        if entry <= 0:
+            return None
+
+        leverage = Decimal(str(self._settings.paper_leverage))
+        risk_budget = Decimal(str(self._settings.paper_risk_per_trade_usd))
+        stop_distance = abs(entry - stop)
+
+        if risk_budget <= 0 or stop_distance <= 0:
+            margin = Decimal(str(self._settings.paper_margin_per_trade))
+            notional = margin * leverage
+            quantity = notional / entry
+            return PositionSizing(
+                quantity=quantity,
+                notional=notional,
+                margin=margin,
+                risk_amount=quantity * stop_distance,
+            )
+
+        quantity = Decimal(
+            str(RiskManager.position_size_for_risk(float(risk_budget), float(stop_distance)))
+        )
+        notional = quantity * entry
+        cap = Decimal(str(self._settings.paper_max_notional_usd))
+        if cap > 0 and notional > cap:
+            quantity = cap / entry
+            notional = cap
+        if quantity <= 0:
+            return None
+
+        return PositionSizing(
+            quantity=quantity,
+            notional=notional,
+            margin=notional / leverage,
+            risk_amount=quantity * stop_distance,
+        )
+
     async def get_or_create_account(self, session: AsyncSession) -> PaperAccount:
         repo = PaperRepository(session)
         return await repo.get_or_create_account(
@@ -183,7 +242,14 @@ class PaperTradingService:
                 session, account, outcome, opened_at=opened_at
             )
 
-        margin = Decimal(str(self._settings.paper_margin_per_trade))
+        leverage = Decimal(str(self._settings.paper_leverage))
+        entry = Decimal(str(result.risk.entry_mid or result.reference_price))
+        stop = Decimal(str(result.risk.stop_loss))
+        sizing = self._size_position(entry, stop)
+        if sizing is None:
+            return None
+
+        margin = sizing.margin
         if account.cash_balance < margin:
             logger.warning(
                 "paper_insufficient_cash",
@@ -192,13 +258,8 @@ class PaperTradingService:
             )
             return None
 
-        leverage = Decimal(str(self._settings.paper_leverage))
-        entry = Decimal(str(result.risk.entry_mid or result.reference_price))
-        if entry <= 0:
-            return None
-
-        notional = margin * leverage
-        quantity = notional / entry
+        notional = sizing.notional
+        quantity = sizing.quantity
         fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
         entry_fee = notional * fee_rate
 
@@ -225,6 +286,7 @@ class PaperTradingService:
             notional=notional,
             leverage=float(leverage),
             fees=entry_fee,
+            risk_amount=sizing.risk_amount,
             signal_score=result.score,
             opened_at=now,
             expires_at=result.expires_at,
@@ -250,6 +312,7 @@ class PaperTradingService:
             margin=float(margin),
             notional=float(notional),
             quantity=float(quantity),
+            risk_amount=float(sizing.risk_amount),
         )
         await self._notify_open(position, reasons=result.reasons)
         return position
@@ -267,8 +330,8 @@ class PaperTradingService:
         assert result.risk is not None
         repo = PaperRepository(session)
         leverage = Decimal(str(self._settings.paper_leverage))
-        margin = Decimal(str(self._settings.paper_margin_per_trade))
         entry = Decimal(str(result.risk.entry_mid or result.reference_price))
+        stop = Decimal(str(result.risk.stop_loss))
         if entry <= 0:
             return None
 
@@ -276,9 +339,11 @@ class PaperTradingService:
         pending_mult = int(self._settings.paper_retest_pending_multiplier)
         expires_at = armed_at + pending_mult * timeframe_to_timedelta(result.primary_timeframe)
 
-        notional = margin * leverage
-        quantity = notional / entry
-        stop = Decimal(str(result.risk.stop_loss))
+        # Vorlaeufige Groesse auf Basis des Referenz-Entries; beim Fill wird sie
+        # mit dem tatsaechlichen Fill-Preis und -Stop neu berechnet.
+        sizing = self._size_position(entry, stop)
+        if sizing is None:
+            return None
 
         position = PaperPosition(
             account_id=account.id,
@@ -294,12 +359,13 @@ class PaperTradingService:
             take_profit_1=Decimal(str(result.risk.take_profit_1)),
             take_profit_2=Decimal(str(result.risk.take_profit_2)),
             take_profit_3=Decimal(str(result.risk.take_profit_3)),
-            initial_quantity=quantity,
-            remaining_quantity=quantity,
+            initial_quantity=sizing.quantity,
+            remaining_quantity=sizing.quantity,
             margin_used=Decimal("0"),
-            notional=notional,
+            notional=sizing.notional,
             leverage=float(leverage),
             fees=Decimal("0"),
+            risk_amount=sizing.risk_amount,
             signal_score=result.score,
             opened_at=armed_at,
             expires_at=expires_at,
@@ -416,12 +482,32 @@ class PaperTradingService:
         arm: RetestArmResult,
     ) -> bool:
         assert arm.fill_price is not None and arm.fill_time is not None and arm.stop is not None
-        margin = Decimal(str(self._settings.paper_margin_per_trade))
+        entry = Decimal(str(arm.fill_price))
+        stop = Decimal(str(arm.stop))
+        is_long = SignalDirection(position.direction).is_long
+        tp1, tp2, tp3 = levels_from_entry_sl(entry, stop, is_long=is_long)
+
+        sizing = self._size_position(entry, stop)
+        if sizing is None:
+            await self._cancel_pending_retest(
+                session,
+                position,
+                RetestArmResult(
+                    status="skipped_sizing",
+                    note="no_valid_size_at_fill",
+                    zone_lo=arm.zone_lo,
+                    zone_hi=arm.zone_hi,
+                ),
+            )
+            return False
+
+        margin = sizing.margin
         if account.cash_balance < margin:
             logger.warning(
                 "paper_retest_activate_insufficient_cash",
                 symbol=position.symbol,
                 cash=float(account.cash_balance),
+                needed=float(margin),
             )
             await self._cancel_pending_retest(
                 session,
@@ -435,21 +521,16 @@ class PaperTradingService:
             )
             return False
 
-        leverage = Decimal(str(self._settings.paper_leverage))
-        entry = Decimal(str(arm.fill_price))
-        stop = Decimal(str(arm.stop))
-        is_long = SignalDirection(position.direction).is_long
-        tp1, tp2, tp3 = levels_from_entry_sl(entry, stop, is_long=is_long)
-
-        notional = margin * leverage
-        quantity = notional / entry if entry > 0 else Decimal("0")
+        notional = sizing.notional
+        quantity = sizing.quantity
         fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
         entry_fee = notional * fee_rate
         fill_time = ensure_utc(arm.fill_time)
-        armed_at = ensure_utc(position.opened_at)
         tf = position.timeframe or "1h"
         mult = int(self._settings.signal_expiry_multiplier)
-        signal_expiry = armed_at + mult * timeframe_to_timedelta(tf)
+        # Ab Fill, nicht ab Arm-Zeit: sonst frisst die Wartezeit auf den Retest
+        # einen Teil der Haltedauer und der Trade laeuft frueher aus.
+        signal_expiry = fill_time + mult * timeframe_to_timedelta(tf)
 
         account.cash_balance -= margin + entry_fee
         account.realized_pnl -= entry_fee
@@ -466,6 +547,7 @@ class PaperTradingService:
         position.margin_used = margin
         position.notional = notional
         position.fees = entry_fee
+        position.risk_amount = sizing.risk_amount
         position.opened_at = fill_time
         position.expires_at = signal_expiry
         position.notes = (
@@ -495,6 +577,8 @@ class PaperTradingService:
             zone_hi=arm.zone_hi,
             bars_waited=arm.bars_waited,
             fill_time=fill_time.isoformat(),
+            risk_amount=float(sizing.risk_amount),
+            expires_at=signal_expiry.isoformat(),
         )
         reasons: list[str] | None = None
         if position.signal_id is not None:
@@ -1056,6 +1140,11 @@ class PaperTradingService:
         gross_loss = sum(losses)
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (0.0 if gross_profit == 0 else 99.0)
 
+        risked = [p for p in closed if float(p.risk_amount) > 0]
+        r_multiples = [float(p.realized_pnl) / float(p.risk_amount) for p in risked]
+        total_r = sum(r_multiples)
+        fees_r = sum(float(p.fees) / float(p.risk_amount) for p in risked)
+
         equity = float(account.cash_balance) + open_margin + unrealized
         return PaperSummary(
             cash_balance=float(account.cash_balance),
@@ -1068,6 +1157,10 @@ class PaperTradingService:
             closed_trades=len(closed),
             profit_factor=profit_factor,
             pending_positions=len(pending_positions),
+            total_r=total_r,
+            expectancy_r=(total_r / len(r_multiples)) if r_multiples else 0.0,
+            fees_r=fees_r,
+            r_trades=len(r_multiples),
         )
 
     async def _apply_price(

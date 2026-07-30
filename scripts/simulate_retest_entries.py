@@ -29,6 +29,7 @@ from app.market_data.types import Candle
 from app.models.market import Asset, MarketCandle
 from app.models.signal import Signal
 from app.repositories.paper_repository import PaperRepository
+from app.signals.retest_entry import zone_fill_price
 
 FEE = Decimal("0.001")
 SCALE = (Decimal("0.33333333"), Decimal("0.33333333"), Decimal("0.33333334"))
@@ -217,7 +218,9 @@ def _arm_retest(trade: TradeInput, candles: list[Candle]) -> ArmResult:
         # Zone touch
         touched = (low <= zone_hi and high >= zone_lo) if is_long else (low <= zone_hi and high >= zone_lo)
         if touched:
-            fill = (zone_lo + zone_hi) / Decimal("2")
+            fill = zone_fill_price(
+                low=low, high=high, zone_lo=zone_lo, zone_hi=zone_hi, is_long=is_long
+            )
             return ArmResult(
                 status="filled",
                 fill_price=float(fill),

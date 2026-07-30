@@ -17,6 +17,8 @@ def parse_export(text: str) -> dict[str, object]:
     account: dict[str, float] = {}
     status_counts: dict[str, tuple[int, float]] = {}
     wr = {"wins": 0, "losses": 0, "wr": 0.0, "pf": 0.0}
+    rkpi = {"n": 0, "totalR": 0.0, "expectancyR": 0.0, "feesR": 0.0, "wrR": 0.0, "pfR": 0.0}
+    conc = {"entries": 0, "maxOpen": 0}
     exits: list[dict[str, object]] = []
     top: list[list[str]] = []
     bot: list[list[str]] = []
@@ -48,8 +50,26 @@ def parse_export(text: str) -> dict[str, object]:
                 "wr": float(parts[3]),
                 "pf": float(parts[4]),
             }
+        elif tag == "RKPI":
+            rkpi = {
+                "n": int(parts[1]),
+                "totalR": float(parts[2]),
+                "expectancyR": float(parts[3]),
+                "feesR": float(parts[4]),
+                "wrR": float(parts[5]),
+                "pfR": float(parts[6]),
+            }
+        elif tag == "CONC":
+            conc = {"entries": int(parts[1]), "maxOpen": int(parts[2])}
         elif tag == "EXIT":
-            exits.append({"reason": parts[1], "n": int(parts[2]), "pnl": float(parts[3])})
+            exits.append(
+                {
+                    "reason": parts[1],
+                    "n": int(parts[2]),
+                    "pnl": float(parts[3]),
+                    "r": float(parts[4]) if len(parts) > 4 else 0.0,
+                }
+            )
         elif tag == "TOP":
             top.append(parts[1:])
         elif tag == "BOT":
@@ -90,6 +110,14 @@ def parse_export(text: str) -> dict[str, object]:
             "wins": wr["wins"],
             "losses": wr["losses"],
             "pf": wr["pf"],
+            "rTrades": rkpi["n"],
+            "totalR": rkpi["totalR"],
+            "expectancyR": rkpi["expectancyR"],
+            "feesR": rkpi["feesR"],
+            "wrR": rkpi["wrR"],
+            "pfR": rkpi["pfR"],
+            "entries": conc["entries"],
+            "maxOpen": conc["maxOpen"],
         },
         "exits": exits,
         "topClosed": top,
@@ -99,31 +127,46 @@ def parse_export(text: str) -> dict[str, object]:
     }
 
 
+def _r(value: str) -> str:
+    return f"{float(value):+.2f}R" if value else "—"
+
+
 def render_canvas(data: dict[str, object]) -> str:
     kpi = data["kpi"]
     exits = data["exits"]
     generated = data["generated"]
 
-    top_headers = ["ID", "Symbol", "Side", "RPnL $", "Exit", "Opened UTC", "Closed UTC"]
+    top_headers = ["ID", "Symbol", "Side", "R", "RPnL $", "Exit", "Opened UTC", "Closed UTC"]
     top_rows = [
-        [r[0], r[1], r[2], f"${float(r[3]):+.2f}", r[4], r[5], r[6]]
+        [r[0], r[1], r[2], _r(r[7] if len(r) > 7 else ""), f"${float(r[3]):+.2f}", r[4], r[5], r[6]]
         for r in data["topClosed"]
     ]
 
-    open_headers = ["ID", "Symbol", "Side", "Entry", "RPnL $", "Opened UTC"]
+    open_headers = ["ID", "Symbol", "Side", "Entry", "RPnL $", "Risiko 1R", "Opened UTC"]
     open_rows = [
-        [r[0], r[1], r[2], r[3], f"${float(r[4]):+.2f}", r[5]]
+        [
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            f"${float(r[4]):+.2f}",
+            f"${float(r[6]):.2f}" if len(r) > 6 else "—",
+            r[5],
+        ]
         for r in data["open"]
     ]
 
     pend_headers = ["ID", "Symbol", "Side", "Ref Entry", "Armed UTC"]
     pend_rows = [[r[0], r[1], r[2], r[3], r[4]] for r in data["pending"]]
 
-    bot_headers = ["ID", "Symbol", "Side", "RPnL $", "Exit"]
-    bot_rows = [[r[0], r[1], r[2], f"${float(r[3]):+.2f}", r[4]] for r in data["bottomClosed"]]
+    bot_headers = ["ID", "Symbol", "Side", "R", "RPnL $", "Exit"]
+    bot_rows = [
+        [r[0], r[1], r[2], _r(r[5] if len(r) > 5 else ""), f"${float(r[3]):+.2f}", r[4]]
+        for r in data["bottomClosed"]
+    ]
 
     exit_chart = [{"label": e["reason"], "value": e["n"]} for e in exits]
-    exit_pnl = [{"label": e["reason"], "value": e["pnl"]} for e in exits]
+    exit_pnl = [{"label": e["reason"], "value": e["r"]} for e in exits]
 
     kpi_json = json.dumps(kpi, indent=2)
     exit_json = json.dumps(exits, indent=2)

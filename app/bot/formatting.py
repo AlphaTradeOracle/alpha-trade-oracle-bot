@@ -381,6 +381,7 @@ def format_paper_trade_open_message(
             f"{float(position.leverage):.0f}x · "
             f"Notional {format_price(float(position.notional), 2)}"
         ),
+        escape_markdown_v2(f"Risiko (1R) {format_price(float(position.risk_amount or 0), 2)}"),
         escape_markdown_v2(
             f"{position.timeframe or '1h'} · "
             f"Eroeffnet {format_display_time(position.opened_at, display_timezone)}"

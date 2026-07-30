@@ -69,6 +69,29 @@ export default function PaperLiveDashboard() {
       </Grid>
 
       <Grid columns={{ sm: 2, md: 4 }} gap={12}>
+        <Stat
+          value={`${KPI.totalR >= 0 ? "+" : ""}${KPI.totalR.toFixed(2)}R`}
+          label={`Total R (${KPI.rTrades} Trades mit 1R)`}
+          tone={toneFor(KPI.totalR)}
+        />
+        <Stat
+          value={`${KPI.expectancyR >= 0 ? "+" : ""}${KPI.expectancyR.toFixed(3)}R`}
+          label="Erwartungswert je Trade"
+          tone={toneFor(KPI.expectancyR)}
+        />
+        <Stat
+          value={String(KPI.pfR)}
+          label="Profit Factor (R)"
+          tone={KPI.pfR >= 1 ? "success" : "danger"}
+        />
+        <Stat
+          value={`${KPI.feesR.toFixed(2)}R`}
+          label={`Gebuehren · ${KPI.entries} Entries · max ${KPI.maxOpen} parallel`}
+          tone="info"
+        />
+      </Grid>
+
+      <Grid columns={{ sm: 2, md: 4 }} gap={12}>
         <Stat value={`$${KPI.cash.toFixed(2)}`} label="Cash Balance" />
         <Stat value={`$${KPI.book.toFixed(2)}`} label="Book (Start + Realized)" />
         <Stat value={money(KPI.closedRpnl)} label="Closed RPnL Summe" tone={toneFor(KPI.closedRpnl)} />
@@ -92,24 +115,24 @@ export default function PaperLiveDashboard() {
           </Text>
         </Stack>
         <Stack gap={8}>
-          <H2>Exit-Mix (RPnL USD)</H2>
+          <H2>Exit-Mix (R)</H2>
           <BarChart
             categories={EXIT_PNL_CHART.map((d) => d.label)}
-            series={[{ name: "RPnL (USD)", data: EXIT_PNL_CHART.map((d) => d.value) }]}
-            valuePrefix="$"
+            series={[{ name: "R", data: EXIT_PNL_CHART.map((d) => d.value) }]}
             beginAtZero={false}
             height={200}
           />
           <Text tone="secondary" size="small">
-            Realisierter PnL je Exit-Grund · Quelle: VPS Postgres · {GENERATED}
+            Summe der R-Multiples je Exit-Grund · Quelle: VPS Postgres · {GENERATED}
           </Text>
         </Stack>
       </Grid>
 
       <Row gap={8} wrap>
         {EXIT_MIX.map((e) => (
-          <Pill key={e.reason} tone={e.pnl >= 0 ? "success" : "deleted"}>
-            {e.reason}: {e.n}× · {money(e.pnl)}
+          <Pill key={e.reason} tone={e.r >= 0 ? "success" : "deleted"}>
+            {e.reason}: {e.n}× · {e.r >= 0 ? "+" : ""}
+            {e.r.toFixed(2)}R · {money(e.pnl)}
           </Pill>
         ))}
       </Row>
@@ -146,8 +169,8 @@ export default function PaperLiveDashboard() {
         <CardHeader>Depot-Konfiguration</CardHeader>
         <CardBody>
           <Text size="small">
-            Start ${KPI.start} · Margin $100 · Leverage 10x · Cancelled/Skipped {KPI.cancelledN} ·
-            Letztes Update {GENERATED}
+            Start ${KPI.start} · risikonormiertes Sizing (1R je Trade) · Leverage 10x ·
+            Cancelled/Skipped {KPI.cancelledN} · Letztes Update {GENERATED}
           </Text>
         </CardBody>
       </Card>

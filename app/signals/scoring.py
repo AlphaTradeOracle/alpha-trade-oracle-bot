@@ -217,8 +217,11 @@ def score_volatility(indicators: IndicatorSet) -> tuple[float, str]:
     """Volatilitaetsbewertung.
 
     Bewertet die Handelbarkeit, nicht die Richtung: ein Markt im ATR-Zielband
-    erlaubt sinnvolle Stops, ein extrem volatiler nicht. Das Vorzeichen folgt
-    daher der Trendrichtung.
+    erlaubt sinnvolle Stops, ein extrem volatiler nicht. Handelbarkeit bestimmt
+    ausschliesslich den *Betrag*; das Vorzeichen folgt immer der Trendrichtung.
+    Ein richtungsloser Abzug in einem gerichteten Score wuerde jedes Setup
+    Richtung SHORT druecken. Der harte Ausschluss zu volatiler Maerkte liegt
+    nicht hier, sondern als NO_TRADE-Regel (``max_atr_percent``) in der Engine.
     """
     score = 0.0
     notes: list[str] = []
@@ -234,10 +237,10 @@ def score_volatility(indicators: IndicatorSet) -> tuple[float, str]:
             score += 50.0 * trend_sign
             notes.append(f"ATR {atr_pct:.2f}% im gut handelbaren Bereich")
         elif atr_pct > ATR_IDEAL_MAX:
-            score -= 40.0
+            score -= 40.0 * trend_sign
             notes.append(f"ATR {atr_pct:.2f}% erhoeht (weite Stops erforderlich)")
         else:
-            score -= 15.0
+            score -= 15.0 * trend_sign
             notes.append(f"ATR {atr_pct:.2f}% sehr niedrig (wenig Bewegung)")
 
     if (

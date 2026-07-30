@@ -3,7 +3,8 @@
 Arm at signal time; fill only if price revisits the ATR pullback zone
 (0.35–1.0 × ATR from the signal reference entry) before pending expiry
 (``pending_multiplier × primary_timeframe``). Skip if the original stop is
-touched first or the window expires without a fill.
+touched first or the window expires without a fill. The fill uses the least
+favourable price the candle actually traded inside the zone, not the midpoint.
 
 Shared by live paper trading, backtests, and counterfactual scripts.
 Matches ``scripts/simulate_paper_variants.py`` / ``scripts/backtest_retest_variants.py``.
@@ -92,6 +93,26 @@ def retest_zone(
     if is_long:
         return reference - far, reference - near
     return reference + near, reference + far
+
+
+def zone_fill_price(
+    *,
+    low: Decimal,
+    high: Decimal,
+    zone_lo: Decimal,
+    zone_hi: Decimal,
+    is_long: bool,
+) -> Decimal:
+    """Unguenstigster Preis, den die Kerze innerhalb der Zone gehandelt hat.
+
+    Der Zonen-Mittelpunkt ist nur dann erreichbar, wenn die Kerze auch wirklich
+    so tief in die Zone laeuft. Ein Fill am Mittelpunkt schenkt sonst bis zu
+    ``(zone_far - zone_near) / 2`` ATR pro Trade — und weil der Stop am Fill
+    haengt, verschiebt das den kompletten Trade und macht jeden Replay zu
+    optimistisch. Fuer Longs zaehlt daher der hoechste, fuer Shorts der
+    niedrigste in der Zone gehandelte Preis.
+    """
+    return min(high, zone_hi) if is_long else max(low, zone_lo)
 
 
 def levels_from_entry_sl(
@@ -206,7 +227,13 @@ def arm_retest_entry(
             )
 
         if low <= zone_hi and high >= zone_lo:
-            fill = (zone_lo + zone_hi) / Decimal("2")
+            fill = zone_fill_price(
+                low=low,
+                high=high,
+                zone_lo=zone_lo,
+                zone_hi=zone_hi,
+                is_long=is_long,
+            )
             stop = stop_from_retest_fill(
                 fill,
                 reference_entry=reference,

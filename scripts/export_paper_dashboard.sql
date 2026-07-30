@@ -14,7 +14,10 @@ SELECT json_build_object(
              take_profit_1, take_profit_2, take_profit_3,
              initial_quantity, remaining_quantity, margin_used, notional, leverage,
              tp1_filled, tp2_filled, tp3_filled,
-             realized_pnl, fees, signal_score, exit_reason, opened_at, closed_at
+             realized_pnl, fees, risk_amount,
+             realized_pnl / NULLIF(risk_amount, 0) AS r_multiple,
+             fees / NULLIF(risk_amount, 0) AS fees_r,
+             signal_score, exit_reason, opened_at, closed_at
       FROM paper_positions
     ) p
   ), '[]'::json),
