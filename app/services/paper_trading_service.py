@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import TYPE_CHECKING, Iterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +28,9 @@ from app.signals.retest_entry import (
 )
 from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskManager
 from app.signals.types import RiskParameters, SignalResult
+
+if TYPE_CHECKING:
+    from app.bot.notifier import PaperTradeNotifier
 
 logger = get_logger(__name__)
 
@@ -82,8 +87,59 @@ class PendingResolveResult:
 class PaperTradingService:
     """Oeffnet und verwaltet Paper-Positionen aus Signalen."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        notifier: PaperTradeNotifier | None = None,
+    ) -> None:
         self._settings = settings or get_settings()
+        self._notifier = notifier
+        self._notify_enabled = True
+
+    def set_notifier(self, notifier: PaperTradeNotifier | None) -> None:
+        self._notifier = notifier
+
+    @contextmanager
+    def _without_notifications(self) -> Iterator[None]:
+        previous = self._notify_enabled
+        self._notify_enabled = False
+        try:
+            yield
+        finally:
+            self._notify_enabled = previous
+
+    async def _notify_open(
+        self,
+        position: PaperPosition,
+        *,
+        retest_fill: bool = False,
+        reasons: list[str] | None = None,
+    ) -> None:
+        if not self._notify_enabled or self._notifier is None:
+            return
+        try:
+            await self._notifier.notify_open(
+                position, retest_fill=retest_fill, reasons=reasons
+            )
+        except Exception as exc:
+            logger.warning(
+                "paper_trade_open_notify_error",
+                symbol=position.symbol,
+                error=str(exc),
+            )
+
+    async def _notify_close(self, position: PaperPosition) -> None:
+        if not self._notify_enabled or self._notifier is None:
+            return
+        try:
+            await self._notifier.notify_close(position)
+        except Exception as exc:
+            logger.warning(
+                "paper_trade_close_notify_error",
+                symbol=position.symbol,
+                error=str(exc),
+            )
 
     @property
     def enabled(self) -> bool:
@@ -207,6 +263,7 @@ class PaperTradingService:
             notional=float(notional),
             quantity=float(quantity),
         )
+        await self._notify_open(position, reasons=result.reasons)
         return position
 
     async def _open_pending_retest(
@@ -451,6 +508,12 @@ class PaperTradingService:
             bars_waited=arm.bars_waited,
             fill_time=fill_time.isoformat(),
         )
+        reasons: list[str] | None = None
+        if position.signal_id is not None:
+            signal = await SignalRepository(session).get_by_id(position.signal_id)
+            if signal is not None and signal.reasons:
+                reasons = list(signal.reasons)
+        await self._notify_open(position, retest_fill=True, reasons=reasons)
         return True
 
     async def _cancel_pending_retest(
@@ -489,60 +552,61 @@ class PaperTradingService:
         if not self.enabled:
             return result
 
-        signals = await SignalRepository(session).list_since(
-            since,
-            actionable_only=True,
-            dispatched_only=dispatched_only,
-            limit=1000,
-        )
-        if not signals:
-            return result
-
-        asset_ids = list({signal.asset_id for signal in signals})
-        symbols_by_id = await AssetRepository(session).get_symbols_by_ids(asset_ids)
-
-        seen_symbols: set[str] = set()
-        # one_per_symbol: neueste zuerst; sonst chronologisch (Retro-Replay).
-        ordered = sorted(
-            signals,
-            key=lambda s: s.created_at,
-            reverse=one_per_symbol,
-        )
-
-        for signal in ordered:
-            result.considered += 1
-            symbol = symbols_by_id.get(signal.asset_id)
-            if not symbol:
-                result.skipped_filters += 1
-                continue
-            symbol = symbol.upper()
-            if one_per_symbol and symbol in seen_symbols:
-                result.skipped_filters += 1
-                continue
-            if not self._passes_paper_gates(signal):
-                result.skipped_filters += 1
-                continue
-
-            position = await self.open_from_stored_signal(
-                session, signal, symbol=symbol, extend_expiry=not self.retest_enabled
+        with self._without_notifications():
+            signals = await SignalRepository(session).list_since(
+                since,
+                actionable_only=True,
+                dispatched_only=dispatched_only,
+                limit=1000,
             )
-            if position is None:
-                account = await self.get_or_create_account(session)
-                existing = await PaperRepository(session).get_active_by_symbol(
-                    account.id, symbol
-                )
-                if existing is not None:
-                    result.skipped_existing += 1
-                else:
-                    result.skipped_cash += 1
-                continue
+            if not signals:
+                return result
 
-            seen_symbols.add(symbol)
-            result.opened += 1
-            if position.status == "pending":
-                result.pending += 1
-            assert result.opened_symbols is not None
-            result.opened_symbols.append(symbol)
+            asset_ids = list({signal.asset_id for signal in signals})
+            symbols_by_id = await AssetRepository(session).get_symbols_by_ids(asset_ids)
+
+            seen_symbols: set[str] = set()
+            # one_per_symbol: neueste zuerst; sonst chronologisch (Retro-Replay).
+            ordered = sorted(
+                signals,
+                key=lambda s: s.created_at,
+                reverse=one_per_symbol,
+            )
+
+            for signal in ordered:
+                result.considered += 1
+                symbol = symbols_by_id.get(signal.asset_id)
+                if not symbol:
+                    result.skipped_filters += 1
+                    continue
+                symbol = symbol.upper()
+                if one_per_symbol and symbol in seen_symbols:
+                    result.skipped_filters += 1
+                    continue
+                if not self._passes_paper_gates(signal):
+                    result.skipped_filters += 1
+                    continue
+
+                position = await self.open_from_stored_signal(
+                    session, signal, symbol=symbol, extend_expiry=not self.retest_enabled
+                )
+                if position is None:
+                    account = await self.get_or_create_account(session)
+                    existing = await PaperRepository(session).get_active_by_symbol(
+                        account.id, symbol
+                    )
+                    if existing is not None:
+                        result.skipped_existing += 1
+                    else:
+                        result.skipped_cash += 1
+                    continue
+
+                seen_symbols.add(symbol)
+                result.opened += 1
+                if position.status == "pending":
+                    result.pending += 1
+                assert result.opened_symbols is not None
+                result.opened_symbols.append(symbol)
 
         return result
 
@@ -679,59 +743,60 @@ class PaperTradingService:
         repo = PaperRepository(session)
         out.reset_positions = await repo.reset_ledger(account)
 
-        if not one_per_symbol:
-            out.backfill = await self._rebuild_from_signal_stream(
-                session,
-                account,
-                provider,
-                since=since,
-                dispatched_only=dispatched_only,
-                out=out,
-            )
-        else:
-            out.backfill = await self.backfill_from_signals(
-                session,
-                since=since,
-                dispatched_only=dispatched_only,
-                one_per_symbol=one_per_symbol,
-            )
-            if self.retest_enabled:
-                resolve = await self.resolve_pending_retest(
-                    session, provider, end_time=utc_now(), historical=True
+        with self._without_notifications():
+            if not one_per_symbol:
+                out.backfill = await self._rebuild_from_signal_stream(
+                    session,
+                    account,
+                    provider,
+                    since=since,
+                    dispatched_only=dispatched_only,
+                    out=out,
                 )
-                out.retest_filled = resolve.filled
-                out.retest_skipped = resolve.skipped
-                out.retest_still_pending = resolve.still_pending
-
-            positions = await repo.list_positions(account.id)
-            for position in positions:
-                if position.status != "open":
-                    continue
-                try:
-                    series = await provider.get_candles(
-                        position.symbol,
-                        position.timeframe or "1h",
-                        limit=100_000,
-                        start_time=position.opened_at,
-                        end_time=utc_now(),
+            else:
+                out.backfill = await self.backfill_from_signals(
+                    session,
+                    since=since,
+                    dispatched_only=dispatched_only,
+                    one_per_symbol=one_per_symbol,
+                )
+                if self.retest_enabled:
+                    resolve = await self.resolve_pending_retest(
+                        session, provider, end_time=utc_now(), historical=True
                     )
-                    await self._replay_bars(session, account, position, series.candles)
-                    out.replayed += 1
-                except Exception as exc:
-                    logger.warning(
-                        "paper_rebuild_replay_failed",
-                        symbol=position.symbol,
-                        error=str(exc),
-                    )
+                    out.retest_filled = resolve.filled
+                    out.retest_skipped = resolve.skipped
+                    out.retest_still_pending = resolve.still_pending
 
-        still_open = await repo.list_open_positions(account.id)
-        out.still_open = len(still_open)
-        if still_open:
-            symbols = [p.symbol for p in still_open]
-            prices = await _collect_prices(provider, symbols, providers=providers)
-            await self.update_open_positions(session, prices)
+                positions = await repo.list_positions(account.id)
+                for position in positions:
+                    if position.status != "open":
+                        continue
+                    try:
+                        series = await provider.get_candles(
+                            position.symbol,
+                            position.timeframe or "1h",
+                            limit=100_000,
+                            start_time=position.opened_at,
+                            end_time=utc_now(),
+                        )
+                        await self._replay_bars(session, account, position, series.candles)
+                        out.replayed += 1
+                    except Exception as exc:
+                        logger.warning(
+                            "paper_rebuild_replay_failed",
+                            symbol=position.symbol,
+                            error=str(exc),
+                        )
+
             still_open = await repo.list_open_positions(account.id)
             out.still_open = len(still_open)
+            if still_open:
+                symbols = [p.symbol for p in still_open]
+                prices = await _collect_prices(provider, symbols, providers=providers)
+                await self.update_open_positions(session, prices)
+                still_open = await repo.list_open_positions(account.id)
+                out.still_open = len(still_open)
 
         return out
 
@@ -1143,6 +1208,7 @@ class PaperTradingService:
                 reason=reason.value,
                 pnl=float(position.realized_pnl),
             )
+            await self._notify_close(position)
 
     async def _close_remaining(
         self,

@@ -4,16 +4,24 @@ from __future__ import annotations
 
 import asyncio
 from io import BytesIO
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 
-from app.bot.formatting import format_signal_message, split_caption_and_body, split_message
+from app.bot.formatting import (
+    format_paper_trade_close_message,
+    format_paper_trade_open_message,
+    format_signal_message,
+    split_caption_and_body,
+    split_message,
+)
 from app.charts.signal_chart import build_signal_chart
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.models.paper import PaperPosition
 from app.repositories.chat_repository import ChatRepository
 from app.services.analysis_service import AnalysisOutcome
 from app.services.scan_service import SignalDispatcher
@@ -218,6 +226,90 @@ class TelegramSignalDispatcher(SignalDispatcher):
                 )
 
         return results
+
+
+class PaperTradeNotifier(Protocol):
+    """Benachrichtigung bei Paper-Trade-Ereignissen."""
+
+    async def notify_open(
+        self,
+        position: PaperPosition,
+        *,
+        retest_fill: bool = False,
+        reasons: list[str] | None = None,
+    ) -> None: ...
+
+    async def notify_close(self, position: PaperPosition) -> None: ...
+
+
+class TelegramPaperTradeNotifier:
+    """Paper-Trade-Meldungen an TELEGRAM_ALLOWED_CHAT_IDS."""
+
+    def __init__(self, notifier: TelegramNotifier, settings: Settings | None = None) -> None:
+        self._notifier = notifier
+        self._settings = settings or get_settings()
+
+    async def notify_open(
+        self,
+        position: PaperPosition,
+        *,
+        retest_fill: bool = False,
+        reasons: list[str] | None = None,
+    ) -> None:
+        chat_ids = sorted(self._settings.allowed_chat_ids)
+        if not chat_ids:
+            logger.debug("paper_trade_notify_skipped_no_chats", symbol=position.symbol)
+            return
+
+        text = format_paper_trade_open_message(
+            position,
+            display_timezone=self._settings.display_timezone,
+            retest_fill=retest_fill,
+            reasons=reasons,
+        )
+        for chat_id in chat_ids:
+            try:
+                await self._notifier.send(chat_id, text)
+                logger.info(
+                    "paper_trade_open_notified",
+                    chat_id=chat_id,
+                    symbol=position.symbol,
+                    retest_fill=retest_fill,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "paper_trade_open_notify_failed",
+                    chat_id=chat_id,
+                    symbol=position.symbol,
+                    error=str(exc),
+                )
+
+    async def notify_close(self, position: PaperPosition) -> None:
+        chat_ids = sorted(self._settings.allowed_chat_ids)
+        if not chat_ids:
+            logger.debug("paper_trade_notify_skipped_no_chats", symbol=position.symbol)
+            return
+
+        text = format_paper_trade_close_message(
+            position,
+            display_timezone=self._settings.display_timezone,
+        )
+        for chat_id in chat_ids:
+            try:
+                await self._notifier.send(chat_id, text)
+                logger.info(
+                    "paper_trade_close_notified",
+                    chat_id=chat_id,
+                    symbol=position.symbol,
+                    reason=position.exit_reason,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "paper_trade_close_notify_failed",
+                    chat_id=chat_id,
+                    symbol=position.symbol,
+                    error=str(exc),
+                )
 
 
 def _strip_markdown(text: str) -> str:

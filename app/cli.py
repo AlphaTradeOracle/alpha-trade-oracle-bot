@@ -199,7 +199,10 @@ def check() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_telegram_dispatcher(settings: Settings) -> SignalDispatcher:
+def _build_telegram_dispatcher(
+    settings: Settings,
+    notifier: TelegramNotifier | None = None,
+) -> SignalDispatcher:
     """Dispatcher, der sich je Zustellung eine eigene DB-Session holt.
 
     Der ScanService darf keine langlebige Session halten, weil ein Scan mehrere
@@ -210,14 +213,16 @@ def _build_telegram_dispatcher(settings: Settings) -> SignalDispatcher:
 
     from app.bot.notifier import TelegramNotifier, TelegramSignalDispatcher
 
-    notifier = TelegramNotifier(Bot(settings.telegram_bot_token.get_secret_value()), settings)
+    shared_notifier = notifier or TelegramNotifier(
+        Bot(settings.telegram_bot_token.get_secret_value()), settings
+    )
 
     class SessionScopedDispatcher(SignalDispatcher):
         async def dispatch(
             self, outcome: AnalysisOutcome
         ) -> list[tuple[int, int | None, str | None]]:
             async with session_scope() as session:
-                return await TelegramSignalDispatcher(notifier, session, settings).dispatch(outcome)
+                return await TelegramSignalDispatcher(shared_notifier, session, settings).dispatch(outcome)
 
     return SessionScopedDispatcher()
 
@@ -235,7 +240,17 @@ async def _run_worker() -> None:
         raise typer.Exit(code=1)
 
     container = build_container(settings)
+    from telegram import Bot
+
+    from app.bot.notifier import TelegramNotifier, TelegramPaperTradeNotifier
     from app.scheduler.runner import SchedulerRunner
+
+    telegram_bot = Bot(settings.telegram_bot_token.get_secret_value())
+    telegram_notifier = TelegramNotifier(telegram_bot, settings)
+    if settings.enable_paper_trading:
+        container.paper_trading.set_notifier(
+            TelegramPaperTradeNotifier(telegram_notifier, settings)
+        )
 
     # Der ScanService muss vor der Application existieren, weil die Handler ihn
     # brauchen. Der Notifier nutzt daher eine eigene Bot-Instanz statt
@@ -243,7 +258,7 @@ async def _run_worker() -> None:
     scan_service = ScanService(
         container.analysis_service,
         container.deduplicator,
-        dispatcher=_build_telegram_dispatcher(settings),
+        dispatcher=_build_telegram_dispatcher(settings, telegram_notifier),
         paper_trading=container.paper_trading,
         settings=settings,
     )

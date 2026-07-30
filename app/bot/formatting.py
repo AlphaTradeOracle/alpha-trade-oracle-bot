@@ -11,10 +11,15 @@ Test abgesichert.
 
 from __future__ import annotations
 
-from app.core.enums import Confidence, SignalDirection
+from typing import TYPE_CHECKING
+
+from app.core.enums import Confidence, ExitReason, SignalDirection
 from app.core.time import format_display_time
 from app.llm.schemas import LLMAnalysisResponse
 from app.signals.types import SignalResult
+
+if TYPE_CHECKING:
+    from app.models.paper import PaperPosition
 
 #: Pflicht-Risikohinweis. Erscheint in jeder ausgehenden Analyse-Nachricht.
 DISCLAIMER = "Keine Finanzberatung. Kryptowaehrungen sind hochriskant."
@@ -266,3 +271,94 @@ def _pretty_symbol(symbol: str) -> str:
 def _quote_asset(symbol: str) -> str:
     pretty = _pretty_symbol(symbol)
     return pretty.split("/")[1] if "/" in pretty else ""
+
+
+_EXIT_REASON_LABELS: dict[str, str] = {
+    ExitReason.TAKE_PROFIT_1.value: "Take-Profit 1",
+    ExitReason.TAKE_PROFIT_2.value: "Take-Profit 2",
+    ExitReason.TAKE_PROFIT_3.value: "Take-Profit 3",
+    ExitReason.STOP_LOSS.value: "Stop-Loss",
+    ExitReason.EXPIRED.value: "Signal abgelaufen",
+    ExitReason.END_OF_DATA.value: "Ende der Daten",
+    ExitReason.RETEST_SKIPPED.value: "Retest uebersprungen",
+}
+
+
+def format_paper_trade_open_message(
+    position: PaperPosition,
+    *,
+    price_precision: int = 2,
+    display_timezone: str = "Europe/Berlin",
+    retest_fill: bool = False,
+    reasons: list[str] | None = None,
+) -> str:
+    """Paper-Trade-Eroeffnung (IST oder Retest-Fill)."""
+    try:
+        direction = _DIRECTION_LABELS[SignalDirection(position.direction)]
+    except ValueError:
+        direction = position.direction
+    symbol_label = _pretty_symbol(position.symbol)
+    quote = _quote_asset(position.symbol)
+    entry_kind = "Retest-Fill" if retest_fill else "Paper-Trade"
+    lines: list[str] = [
+        f"📄 *{escape_markdown_v2(entry_kind)}* · *{escape_markdown_v2(symbol_label)}*",
+        f"*{escape_markdown_v2(direction)}*",
+    ]
+    if position.signal_score is not None:
+        lines.append(escape_markdown_v2(f"Score: {float(position.signal_score):.0f}/100"))
+    if reasons:
+        lines += ["", "*Bestaetigungen:*"]
+        lines += [f"• {escape_markdown_v2(item)}" for item in reasons[:8]]
+    lines += [
+        "",
+        escape_markdown_v2(f"Entry  {format_price(float(position.entry_price), price_precision)} {quote}"),
+        escape_markdown_v2(f"SL     {format_price(float(position.stop_loss), price_precision)} {quote}"),
+        escape_markdown_v2(f"TP1    {format_price(float(position.take_profit_1), price_precision)}"),
+        escape_markdown_v2(f"TP2    {format_price(float(position.take_profit_2), price_precision)}"),
+        escape_markdown_v2(f"TP3    {format_price(float(position.take_profit_3), price_precision)}"),
+        "",
+        escape_markdown_v2(
+            f"Margin {format_price(float(position.margin_used), 2)} · "
+            f"{float(position.leverage):.0f}x · "
+            f"Notional {format_price(float(position.notional), 2)}"
+        ),
+        escape_markdown_v2(
+            f"{position.timeframe or '1h'} · "
+            f"Eroeffnet {format_display_time(position.opened_at, display_timezone)}"
+        ),
+        f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
+    ]
+    return "\n".join(lines)
+
+
+def format_paper_trade_close_message(
+    position: PaperPosition,
+    *,
+    price_precision: int = 2,
+    display_timezone: str = "Europe/Berlin",
+) -> str:
+    """Paper-Trade-Schlussmeldung."""
+    try:
+        direction = _DIRECTION_LABELS[SignalDirection(position.direction)]
+    except ValueError:
+        direction = position.direction
+    symbol_label = _pretty_symbol(position.symbol)
+    reason = _EXIT_REASON_LABELS.get(
+        position.exit_reason or "",
+        position.exit_reason or "geschlossen",
+    )
+    pnl = float(position.realized_pnl)
+    pnl_label = f"+{format_price(pnl, 2)}" if pnl >= 0 else format_price(pnl, 2)
+    lines: list[str] = [
+        f"📄 *Paper-Trade geschlossen* · *{escape_markdown_v2(symbol_label)}*",
+        f"*{escape_markdown_v2(direction)}* · {escape_markdown_v2(reason)}",
+        "",
+        escape_markdown_v2(f"Entry  {format_price(float(position.entry_price), price_precision)}"),
+        escape_markdown_v2(f"PnL    {pnl_label} USDT"),
+        escape_markdown_v2(
+            f"Gebuehren {format_price(float(position.fees), 2)} · "
+            f"Geschlossen {format_display_time(position.closed_at or position.opened_at, display_timezone)}"
+        ),
+        f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
+    ]
+    return "\n".join(lines)

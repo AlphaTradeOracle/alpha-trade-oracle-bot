@@ -15,6 +15,8 @@ from app.bot.formatting import (
     TELEGRAM_MAX_LENGTH,
     escape_markdown_v2,
     format_analysis_message,
+    format_paper_trade_close_message,
+    format_paper_trade_open_message,
     format_price,
     format_score_breakdown,
     format_signal_message,
@@ -22,6 +24,7 @@ from app.bot.formatting import (
 )
 from app.core.enums import SignalDirection
 from app.llm.schemas import LLMAnalysisResponse
+from app.models.paper import PaperPosition
 from tests.test_dedup import make_result
 
 _MDV2_SPECIAL = r"_*[]()~`>#+-=|{}.!"
@@ -217,3 +220,65 @@ class TestSplitting:
         parts = split_message("x" * (SPLIT_LENGTH * 2 + 10))
         assert len(parts) == 3
         assert all(len(part) <= SPLIT_LENGTH for part in parts)
+
+
+def _sample_paper_position(**overrides) -> PaperPosition:
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    defaults = {
+        "account_id": 1,
+        "symbol": "BTCUSDT",
+        "direction": "STRONG_LONG",
+        "status": "open",
+        "timeframe": "1h",
+        "entry_price": Decimal("100000"),
+        "stop_loss": Decimal("98000"),
+        "current_stop": Decimal("98000"),
+        "take_profit_1": Decimal("104000"),
+        "take_profit_2": Decimal("108000"),
+        "take_profit_3": Decimal("112000"),
+        "initial_quantity": Decimal("0.01"),
+        "remaining_quantity": Decimal("0.01"),
+        "margin_used": Decimal("100"),
+        "notional": Decimal("1000"),
+        "leverage": 10.0,
+        "fees": Decimal("1"),
+        "signal_score": 82.0,
+        "opened_at": datetime(2024, 6, 1, 12, tzinfo=UTC),
+    }
+    defaults.update(overrides)
+    return PaperPosition(**defaults)
+
+
+class TestPaperTradeFormatting:
+    def test_open_message_contains_disclaimer(self) -> None:
+        message = format_paper_trade_open_message(_sample_paper_position())
+        assert DISCLAIMER in message.replace("\\", "")
+
+    def test_open_message_labels_retest_fill(self) -> None:
+        message = format_paper_trade_open_message(
+            _sample_paper_position(), retest_fill=True
+        )
+        assert "Retest" in message.replace("\\", "")
+
+    def test_open_message_includes_reasons(self) -> None:
+        message = format_paper_trade_open_message(
+            _sample_paper_position(),
+            reasons=["Trendlage bullisch", "EMA9 ueber EMA20"],
+        )
+        assert "Bestaetigungen" in message
+        assert escape_markdown_v2("Trendlage bullisch") in message
+
+    def test_close_message_contains_pnl(self) -> None:
+        from decimal import Decimal
+
+        position = _sample_paper_position(
+            status="closed",
+            realized_pnl=Decimal("12.5"),
+            exit_reason="take_profit_1",
+            closed_at=_sample_paper_position().opened_at,
+        )
+        message = format_paper_trade_close_message(position)
+        assert "12,50" in message
+        assert DISCLAIMER in message.replace("\\", "")
