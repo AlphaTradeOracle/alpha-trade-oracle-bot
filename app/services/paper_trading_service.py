@@ -8,12 +8,14 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterator
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.enums import Confidence, ExitReason, MarketPhase, SignalDirection
 from app.core.logging import get_logger
 from app.core.time import ensure_utc, timeframe_to_timedelta, utc_now
+from app.models.market import IndicatorSnapshot
 from app.models.paper import PaperAccount, PaperFill, PaperPosition
 from app.models.signal import Signal
 from app.repositories.asset_repository import AssetRepository
@@ -574,6 +576,9 @@ class PaperTradingService:
                 if not self._passes_paper_gates(signal):
                     result.skipped_filters += 1
                     continue
+                if not await self._signal_passes_adx(session, signal):
+                    result.skipped_filters += 1
+                    continue
 
                 position = await self.open_from_stored_signal(
                     session, signal, symbol=symbol, extend_expiry=not self.retest_enabled
@@ -624,6 +629,25 @@ class PaperTradingService:
         if float(signal.data_quality) < 60.0:
             return False
         return True
+
+    async def _signal_passes_adx(self, session: AsyncSession, signal: Signal) -> bool:
+        """ADX-Gate fuer Paper-Backfill/Rebuild (nutzt Snapshot zum Signalzeitpunkt)."""
+        row = (
+            await session.execute(
+                select(IndicatorSnapshot.adx_14)
+                .where(
+                    IndicatorSnapshot.asset_id == signal.asset_id,
+                    IndicatorSnapshot.timeframe == signal.primary_timeframe,
+                    IndicatorSnapshot.candle_open_time <= signal.created_at,
+                    IndicatorSnapshot.adx_14.is_not(None),
+                )
+                .order_by(IndicatorSnapshot.candle_open_time.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return True
+        return float(row) >= self._settings.signal_min_adx
 
     async def open_from_stored_signal(
         self,
@@ -824,6 +848,9 @@ class PaperTradingService:
                 continue
             symbol = symbol.upper()
             if not self._passes_paper_gates(signal):
+                backfill.skipped_filters += 1
+                continue
+            if not await self._signal_passes_adx(session, signal):
                 backfill.skipped_filters += 1
                 continue
 
