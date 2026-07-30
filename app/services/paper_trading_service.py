@@ -646,7 +646,7 @@ class PaperTradingService:
             )
         ).scalar_one_or_none()
         if row is None:
-            return True
+            return False
         return float(row) >= self._settings.signal_min_adx
 
     async def open_from_stored_signal(
