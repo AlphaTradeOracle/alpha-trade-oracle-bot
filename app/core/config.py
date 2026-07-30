@@ -101,11 +101,11 @@ class Settings(BaseSettings):
     reference_capital: float = 10_000.0
 
     # --- Scheduler / Daten -------------------------------------------------
-    scan_interval_minutes: int = 60
+    scan_interval_minutes: int = 30
     candle_limit: int = 500
     min_candles_required: int = 210
     universe_size: int = 450
-    #: Pro Stunden-Scan: Batch-Groesse (sollte ~ universe_target_count sein).
+    #: Pro Scan-Zyklus: Batch-Groesse (sollte >= universe_target_count sein).
     universe_scan_batch_size: int = 300
     universe_refresh_hours: int = 24
     universe_exchanges: str = "kucoin,binance,coinbase"

@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 #: Verfuegbare Scan-Intervalle in Minuten.
 SCAN_INTERVALS: dict[str, int] = {
     "15m": 15,
+    "30m": 30,
     "1h": 60,
     "4h": 240,
     "1d": 1440,

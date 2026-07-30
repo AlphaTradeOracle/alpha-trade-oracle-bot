@@ -164,8 +164,9 @@ Makefile-Äquivalente: `make analyze`, `make scan`, `make backtest`, `make check
 1. `python -m app.cli universe refresh` lädt CoinGecko Top-N (`UNIVERSE_SIZE`, Default 450)
    und mappt auf handelbare Paare; `data prune` behält `UNIVERSE_TARGET_COUNT` (Default 300).
 2. Der Scheduler refreshed alle `UNIVERSE_REFRESH_HOURS` (Default 24) und scannt
-   alle `SCAN_INTERVAL_MINUTES` eine Batch von `UNIVERSE_SCAN_BATCH_SIZE`
-   Symbolen (Round-Robin über `last_scanned_at`).
+   alle `SCAN_INTERVAL_MINUTES` (Default 30) bis zu `UNIVERSE_SCAN_BATCH_SIZE`
+   Symbole (Default 300 — deckt das volle Universe pro Zyklus ab;
+   Round-Robin über `last_scanned_at`).
 3. Bulk-Scans laufen ohne LLM; Telegram-Versand nur für Symbole auf einer
    aktiven Watchlist.
 

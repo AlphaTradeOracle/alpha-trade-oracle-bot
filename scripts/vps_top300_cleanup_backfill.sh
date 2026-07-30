@@ -22,7 +22,7 @@ upsert_env UNIVERSE_EXCHANGES kucoin,binance,coinbase
 upsert_env UNIVERSE_TICKER_FALLBACK true
 upsert_env UNIVERSE_TICKER_FALLBACK_MAX 80
 upsert_env CANDLE_RETENTION_DAYS 365
-upsert_env SCAN_INTERVAL_MINUTES 60
+upsert_env SCAN_INTERVAL_MINUTES 30
 upsert_env ENABLE_UNIVERSE_SCAN true
 
 docker compose build worker app
