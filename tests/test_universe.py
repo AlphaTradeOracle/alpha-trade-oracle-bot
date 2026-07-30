@@ -255,6 +255,34 @@ class TestUniverseService:
         assert assets[0].in_universe is True
 
     @pytest.mark.asyncio
+    async def test_skips_duplicate_symbol_mappings(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        """Zwei CoinGecko-Eintraege mit gleichem Boersen-Symbol zaehlen nur einmal."""
+        provider = MultiSymbolStubProvider(uptrend_frames, [BTC, ETH])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("bitcoin-fork", "BTC", "Bitcoin Fork", 80.0, 2),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 70.0, 3),
+            ]
+        )
+        settings = service_settings(
+            universe_size=10,
+            universe_target_count=2,
+            enable_universe_scan=True,
+        )
+        service = UniverseService(provider, gecko, settings=settings)
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 2
+        assert result.skipped_duplicate == 1
+        assets = await AssetRepository(session).list_universe()
+        assert len(assets) == 2
+
+    @pytest.mark.asyncio
     async def test_stops_at_universe_target_count(
         self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
     ) -> None:

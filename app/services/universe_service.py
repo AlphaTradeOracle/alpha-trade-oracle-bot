@@ -56,6 +56,7 @@ class UniverseRefreshResult:
     ticker_lookups: int = 0
     skipped_stable: int = 0
     skipped_no_pair: int = 0
+    skipped_duplicate: int = 0
     deactivated: int = 0
     symbols: list[str] = field(default_factory=list)
 
@@ -68,6 +69,7 @@ class UniverseRefreshResult:
             "ticker_lookups": self.ticker_lookups,
             "skipped_stable": self.skipped_stable,
             "skipped_no_pair": self.skipped_no_pair,
+            "skipped_duplicate": self.skipped_duplicate,
             "deactivated": self.deactivated,
         }
 
@@ -119,9 +121,10 @@ class UniverseService:
         exchange_indices = await self._load_exchange_indices(quote)
         assets = AssetRepository(session)
         active_symbols: set[str] = set()
+        mapped_symbols: set[str] = set()
 
         for market in markets:
-            if target > 0 and result.mapped >= target:
+            if target > 0 and len(mapped_symbols) >= target:
                 break
 
             base = market.symbol.upper().strip()
@@ -143,6 +146,10 @@ class UniverseService:
                 continue
 
             symbol, info, exchange = mapped
+            if symbol in mapped_symbols:
+                result.skipped_duplicate += 1
+                continue
+
             await assets.upsert_universe_entry(
                 symbol=symbol,
                 base_asset=info.base_asset,
@@ -158,6 +165,7 @@ class UniverseService:
                 is_active=info.is_active,
             )
             active_symbols.add(symbol)
+            mapped_symbols.add(symbol)
             result.symbols.append(symbol)
             result.mapped += 1
             if via_ticker:
@@ -167,10 +175,10 @@ class UniverseService:
 
         result.deactivated = await assets.deactivate_stale_universe(active_symbols)
 
-        if target > 0 and result.mapped < target:
+        if target > 0 and len(mapped_symbols) < target:
             logger.warning(
                 "universe_target_not_reached",
-                mapped=result.mapped,
+                mapped=len(mapped_symbols),
                 target=target,
                 pool_size=limit,
                 skipped_no_pair=result.skipped_no_pair,
