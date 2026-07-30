@@ -159,7 +159,7 @@ def paper_rebuild(
         ),
     ] = False,
 ) -> None:
-    """Paper-Ledger zuruecksetzen und mit Retest-Entry / aktuellen TP-Multiples neu berechnen."""
+    """Paper-Ledger zuruecksetzen und mit aktueller Entry-/Expiry-Logik neu berechnen."""
     asyncio.run(_run_paper_rebuild(since, dispatched_only, one_per_symbol))
 
 

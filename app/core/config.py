@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     #: Fuer Shorts: Score darf maximal so hoch sein (Spiegel zu min_score).
     signal_short_max_score: float = 25.0
     signal_cooldown_minutes: int = 120
-    signal_expiry_multiplier: int = 4
+    signal_expiry_multiplier: int = 24
     signal_rsi_long_max: float = 75.0
     signal_rsi_short_min: float = 25.0
     signal_block_range_market: bool = True

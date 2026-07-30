@@ -401,8 +401,10 @@ class PaperTradingService:
         fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
         entry_fee = notional * fee_rate
         fill_time = ensure_utc(arm.fill_time)
-        # Expiry bleibt am Signal-Fenster (Winning Arm B / Paper-Sweep).
-        signal_expiry = position.expires_at
+        armed_at = ensure_utc(position.opened_at)
+        tf = position.timeframe or "1h"
+        mult = int(self._settings.signal_expiry_multiplier)
+        signal_expiry = armed_at + mult * timeframe_to_timedelta(tf)
 
         account.cash_balance -= margin + entry_fee
         account.realized_pnl -= entry_fee
@@ -621,9 +623,9 @@ class PaperTradingService:
         )
         expires_at = signal.expires_at
         if extend_expiry:
-            floor = utc_now() + timedelta(hours=4)
-            if expires_at < floor:
-                expires_at = floor
+            mult = int(self._settings.signal_expiry_multiplier)
+            tf = signal.primary_timeframe or "1h"
+            expires_at = ensure_utc(signal.created_at) + mult * timeframe_to_timedelta(tf)
 
         result = SignalResult(
             symbol=symbol.upper(),
@@ -677,8 +679,8 @@ class PaperTradingService:
         repo = PaperRepository(session)
         out.reset_positions = await repo.reset_ledger(account)
 
-        if self.retest_enabled and not one_per_symbol:
-            out.backfill = await self._rebuild_retest_from_signal_stream(
+        if not one_per_symbol:
+            out.backfill = await self._rebuild_from_signal_stream(
                 session,
                 account,
                 provider,
@@ -733,7 +735,7 @@ class PaperTradingService:
 
         return out
 
-    async def _rebuild_retest_from_signal_stream(
+    async def _rebuild_from_signal_stream(
         self,
         session: AsyncSession,
         account: PaperAccount,
@@ -743,7 +745,7 @@ class PaperTradingService:
         dispatched_only: bool,
         out: PaperRebuildResult,
     ) -> PaperBackfillResult:
-        """Signale chronologisch: pending -> Retest-Fill/Skip -> Exit-Replay -> naechstes."""
+        """Signale chronologisch: Entry (IST oder Retest) -> Exit-Replay -> naechstes."""
         backfill = PaperBackfillResult()
         signals = await SignalRepository(session).list_since(
             since,
@@ -778,7 +780,10 @@ class PaperTradingService:
                 continue
 
             position = await self.open_from_stored_signal(
-                session, signal, symbol=symbol, extend_expiry=False
+                session,
+                signal,
+                symbol=symbol,
+                extend_expiry=not self.retest_enabled,
             )
             if position is None:
                 backfill.skipped_cash += 1
@@ -789,8 +794,29 @@ class PaperTradingService:
             if symbol not in backfill.opened_symbols:
                 backfill.opened_symbols.append(symbol)
 
+            tf = position.timeframe or "1h"
+
             if position.status != "pending":
+                try:
+                    series_mgmt = await provider.get_candles(
+                        symbol,
+                        tf,
+                        limit=100_000,
+                        start_time=position.opened_at,
+                        end_time=cutoff,
+                    )
+                    await self._replay_bars(
+                        session, account, position, series_mgmt.candles
+                    )
+                    out.replayed += 1
+                except Exception as exc:
+                    logger.warning(
+                        "paper_rebuild_replay_failed",
+                        symbol=symbol,
+                        error=str(exc),
+                    )
                 continue
+
             backfill.pending += 1
 
             tf = position.timeframe or "1h"

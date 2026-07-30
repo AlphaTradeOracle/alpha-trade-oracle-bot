@@ -132,7 +132,8 @@ Berechnet in `app/signals/risk.py`, ausschließlich informativ.
 **Entry-Zone.** Um den Referenzkurs herum, halbe ATR-Breite:
 `entry_low = price − 0.25 × ATR`, `entry_high = price + 0.25 × ATR` für Long
 (spiegelbildlich für Short). Die Zone ist die *Signal*-Referenz; der tatsächliche
-Paper-/Backtest-Fill folgt der Retest/Pullback-These (siehe Abschnitt 6b).
+Paper-/Backtest-Fill erfolgt bei aktivem Retest per Pullback-These (Abschnitt 6b);
+sonst sofort am Signal-Entry (IST).
 
 **Stop-Loss.** Basis ist `ATR × ATR_MULTIPLIER` (Standard 1.5) unterhalb der
 Entry-Zone. Liegt ein Support innerhalb von `1.0 × ATR` darunter, wird der Stop
@@ -165,8 +166,9 @@ wird `NO_TRADE` gesetzt.
 
 ## 6b. Retest / Pullback-Entry (Paper + Backtest, Default ON)
 
-Kanonische Regeln in `app/signals/retest_entry.py` (Winning Arm B aus dem
-Paper-Sweep / historischen Top-100-SUPPORTS-Backtest). Schalter:
+Kanonische Regeln in `app/signals/retest_entry.py`. Mit **24h-Expiry** bleibt Retest
+für Entry-Qualität aktiv (Pending 4× TF); nach Fill gilt Hold/Expiry = 24h ab Signal.
+Ohne Retest (IST) steigen SL-Treffer im Paper deutlich — Retest-Skip bleibt sinnvoll.
 
 | Env | Default | Wirkung |
 |---|---|---|
@@ -183,7 +185,7 @@ Ablauf:
 3. Long: Fill wenn eine Folgekerze die Zone `[entry − 1.0×ATR, entry − 0.35×ATR]`
    berührt. Short spiegelbildlich darüber.
 4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
-   TPs neu aus 2/4/6R. Management-Expiry bleibt am Signal-Fenster (4× TF).
+   TPs neu aus 2/4/6R. Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF).
 5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
    Fenster abläuft oder keine ATR-Historie verfügbar ist (`exit_reason=retest_skipped`).
 
@@ -191,8 +193,8 @@ Nicht aktiv: Delay+30m und HTF-4h-Breakout (bewusst verworfen / reverted).
 
 ## 7. Signalgültigkeit und Invalidierung
 
-**Ablaufzeit:** `expires_at = created_at + 4 × Dauer(primary_timeframe)`.
-Bei `1h` also vier Stunden. Abgelaufene Signale werden nie versendet und im
+**Ablaufzeit:** `expires_at = created_at + SIGNAL_EXPIRY_MULTIPLIER × Dauer(primary_timeframe)`.
+Standard `SIGNAL_EXPIRY_MULTIPLIER=24`; bei `1h` also **24 Stunden**. Abgelaufene Signale werden nie versendet und im
 Backtest als `expired` geschlossen.
 
 **Invalidierungsbedingung:** Wird als Klartext im Signal gespeichert, z. B.
