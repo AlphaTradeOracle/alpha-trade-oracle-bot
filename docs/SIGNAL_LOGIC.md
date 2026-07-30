@@ -211,9 +211,11 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 
 ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
 
-**Telegram (Paper):** Eroeffnung (IST oder Retest-Fill) und vollständiger Schluss
-werden an alle `TELEGRAM_ALLOWED_CHAT_IDS` gesendet — getrennt vom Signal-Dispatch.
-Backfill/Rebuild unterdrückt Benachrichtigungen.
+**Telegram:** Standard (`TELEGRAM_SIGNAL_DISPATCH=false`) gehen **nur** Paper-Trade-
+Meldungen an alle `TELEGRAM_ALLOWED_CHAT_IDS`: Eroeffnung (IST oder Retest-Fill) und
+vollständiger Schluss. Klassische Signal-Alerts (Chart + Analyse) sind deaktiviert.
+Mit `TELEGRAM_SIGNAL_DISPATCH=true` zusaetzlich wieder Signal-Dispatch moeglich.
+Backfill/Rebuild unterdrückt Paper-Benachrichtigungen.
 
 ## 7. Signalgültigkeit und Invalidierung
 
@@ -247,7 +249,9 @@ Redis-Ausfall keine Signalflut auslöst.
 
 ## 9. Versandbedingungen
 
-Ein Signal wird nur zugestellt, wenn **alle** Bedingungen erfüllt sind:
+Ein Signal wird nur **verarbeitet** (Paper-Trade + ggf. Dedup), wenn **alle**
+Bedingungen erfüllt sind. Telegram-Signal-Alerts nur zusaetzlich bei
+`TELEGRAM_SIGNAL_DISPATCH=true`:
 
 1. `direction != NEUTRAL` und `direction != NO_TRADE`
 2. `score ≥ SIGNAL_MIN_SCORE` (Standard 65) bzw. ≥ Chat-Override

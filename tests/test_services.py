@@ -139,6 +139,16 @@ class RecordingDispatcher(SignalDispatcher):
         return [(1, 42, None)]
 
 
+class RecordingDedup(SignalDeduplicator):
+    def __init__(self) -> None:
+        super().__init__(cooldown_minutes=0)
+        self.recorded: list[SignalResult] = []
+
+    async def record_dispatch(self, result: SignalResult) -> None:
+        self.recorded.append(result)
+        await super().record_dispatch(result)
+
+
 class AlwaysSuppressDedup(SignalDeduplicator):
     async def evaluate(self, result, **_kwargs):  # type: ignore[no-untyped-def]
         from app.core.enums import SuppressionReason
@@ -358,6 +368,27 @@ class TestScanService:
         assert result.symbols_scanned == 1
         if result.signals_dispatched:
             assert len(dispatcher.dispatched) == 1
+
+    @pytest.mark.asyncio
+    async def test_paper_only_scan_records_dedup_without_dispatcher(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        analysis = AnalysisService(StubProvider(uptrend_frames), settings=service_settings())
+        dedup = RecordingDedup()
+        settings = service_settings(signal_min_score=0.0, min_risk_reward_ratio=0.01)
+        scan = ScanService(
+            analysis,
+            dedup,
+            dispatcher=None,
+            settings=settings,
+        )
+
+        result = await scan.scan(session, symbols=["BTCUSDT"], dispatch=True)
+
+        assert result.symbols_scanned == 1
+        assert result.signals_dispatched == 0
+        if result.signals_created and not result.signals_suppressed:
+            assert len(dedup.recorded) == 1
 
     @pytest.mark.asyncio
     async def test_empty_target_list_is_a_noop(self, session: AsyncSession) -> None:

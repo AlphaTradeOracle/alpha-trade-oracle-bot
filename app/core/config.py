@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_allowed_chat_ids: str = ""
     telegram_admin_chat_ids: str = ""
+    #: Signal-Alerts (Chart + Analyse). False = nur Paper-Trade open/close.
+    telegram_signal_dispatch: bool = False
 
     # --- Marktdaten --------------------------------------------------------
     market_data_provider: str = "binance"

@@ -255,10 +255,14 @@ async def _run_worker() -> None:
     # Der ScanService muss vor der Application existieren, weil die Handler ihn
     # brauchen. Der Notifier nutzt daher eine eigene Bot-Instanz statt
     # application.bot — das vermeidet eine zirkulaere Abhaengigkeit.
+    signal_dispatcher = None
+    if settings.telegram_signal_dispatch:
+        signal_dispatcher = _build_telegram_dispatcher(settings, telegram_notifier)
+
     scan_service = ScanService(
         container.analysis_service,
         container.deduplicator,
-        dispatcher=_build_telegram_dispatcher(settings, telegram_notifier),
+        dispatcher=signal_dispatcher,
         paper_trading=container.paper_trading,
         settings=settings,
     )

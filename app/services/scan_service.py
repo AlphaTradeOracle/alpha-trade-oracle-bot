@@ -190,19 +190,27 @@ class ScanService:
             await self._record_suppression(session, outcome, decision.reason)
             return
 
-        if not dispatch or self._dispatcher is None:
+        if self._paper is not None and self._paper.enabled:
+            await self._paper.open_from_signal(session, outcome)
+
+        if not dispatch:
             logger.info(
                 "signal_ready_not_dispatched",
                 symbol=symbol,
                 score=outcome.result.score,
                 universe_mode=universe_mode,
             )
-            if self._paper is not None and self._paper.enabled:
-                await self._paper.open_from_signal(session, outcome)
             return
 
-        if self._paper is not None and self._paper.enabled:
-            await self._paper.open_from_signal(session, outcome)
+        if self._dispatcher is None:
+            await self._dedup.record_dispatch(outcome.result)
+            logger.info(
+                "signal_processed_paper_only",
+                symbol=symbol,
+                score=outcome.result.score,
+                universe_mode=universe_mode,
+            )
+            return
 
         deliveries = await self._dispatcher.dispatch(outcome)
         sent_any = False
