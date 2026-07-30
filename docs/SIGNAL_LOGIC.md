@@ -191,6 +191,30 @@ Ablauf:
 
 Nicht aktiv: Delay+30m und HTF-4h-Breakout (bewusst verworfen / reverted).
 
+## 6c. Paper-Trade-Gates und Telegram
+
+**Live-Scan:** Ein Paper-Trade wird in `scan_service` geöffnet, sobald das Signal
+alle Dedup-/Versand-Gates passiert (`should_send=true`) — unabhängig davon, ob
+Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
+`enable_paper_trading=true`, Risk-Levels vorhanden, ggf. ausreichend Cash (IST).
+
+**Backfill/Rebuild:** `_passes_paper_gates` in `paper_trading_service.py` (ohne Cooldown):
+
+| Gate | Standard |
+|---|---|
+| Richtung | actionable (STRONG_LONG/SHORT bei `SIGNAL_REQUIRE_STRONG=true`) |
+| Long-Score | ≥ `SIGNAL_MIN_SCORE` (75) |
+| Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (25) |
+| Datenqualität | ≥ 60 |
+| Chance-Risiko (TP2) | ≥ `MIN_RISK_REWARD_RATIO` (2.0) |
+| Levels | SL + TP1/2/3 gesetzt |
+
+ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
+
+**Telegram (Paper):** Eroeffnung (IST oder Retest-Fill) und vollständiger Schluss
+werden an alle `TELEGRAM_ALLOWED_CHAT_IDS` gesendet — getrennt vom Signal-Dispatch.
+Backfill/Rebuild unterdrückt Benachrichtigungen.
+
 ## 7. Signalgültigkeit und Invalidierung
 
 **Ablaufzeit:** `expires_at = created_at + SIGNAL_EXPIRY_MULTIPLIER × Dauer(primary_timeframe)`.
