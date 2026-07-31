@@ -96,7 +96,7 @@ def _render(
     fig, ax = plt.subplots(figsize=FIGURE_SIZE)
     tv.style_figure(fig)
     tv.style_axes(ax)
-    tv.watermark(ax, alpha=0.70, zoom=0.172, loc="top_left", xycoords="figure fraction")
+    tv.watermark(ax, alpha=0.70, zoom=0.155, loc="top_left", xycoords="figure fraction")
 
     # Soft glow under line
     ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
