@@ -381,6 +381,8 @@ class TestPaperDigestFormatting:
         plain = message.replace("\\", "")
         assert "Performance Dashboard" in plain
         assert "Alpha Trade Oracle" in plain
+        assert plain.index("Alpha Trade Oracle") < plain.index("Performance Dashboard")
+        assert "Performance Dashboard  ·  " in plain
         assert "Value  $5.142,30" in plain
         assert "Cash + Open PnL" in plain
         assert "ACCOUNT" in plain

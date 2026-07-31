@@ -429,8 +429,8 @@ def format_paper_digest_message(
     stamp = format_display_time(snapshot.as_of, display_timezone)
     equity_delta = summary.equity - summary.initial_balance
     lines: list[str] = [
-        f"*{escape_markdown_v2('Performance Dashboard')}*",
-        escape_markdown_v2(f"Alpha Trade Oracle  ·  {stamp}"),
+        f"*{escape_markdown_v2('Alpha Trade Oracle')}*",
+        escape_markdown_v2(f"Performance Dashboard  ·  {stamp}"),
         "",
         escape_markdown_v2(
             f"Value  ${format_price(summary.equity, 2)}  ·  "
