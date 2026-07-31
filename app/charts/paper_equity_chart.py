@@ -56,12 +56,23 @@ def build_paper_equity_chart(
     initial: float,
     title: str = "EQUITY",
     subtitle: str = "Cash + Open PnL",
+    windows: Sequence[tuple[str, float]] | None = None,
 ) -> bytes | None:
-    """PNG-Bytes fuer Telegram; None bei zu wenigen/ungueltigen Punkten."""
+    """PNG-Bytes fuer Telegram; None bei zu wenigen/ungueltigen Punkten.
+
+    ``windows``: optionale Performance-Fenster ``(label, equity_delta)``,
+    z. B. ``(\"1h\", 12.5)`` — werden oben rechts im Header gerendert.
+    """
     if len(points) < 2:
         return None
     try:
-        return _render(points, initial=float(initial), title=title, subtitle=subtitle)
+        return _render(
+            points,
+            initial=float(initial),
+            title=title,
+            subtitle=subtitle,
+            windows=list(windows or ()),
+        )
     except Exception as exc:
         logger.warning("paper_equity_chart_failed", error=str(exc))
         return None
@@ -73,6 +84,7 @@ def _render(
     initial: float,
     title: str,
     subtitle: str,
+    windows: list[tuple[str, float]],
 ) -> bytes:
     xs = [p[0] for p in points]
     ys = np.asarray([p[1] for p in points], dtype=float)
@@ -135,8 +147,8 @@ def _render(
     )
     ax.scatter([xs[-1]], [last], s=180, color=accent, alpha=0.18, zorder=4)
 
-    # Header: Titel rechts vom Logo; Wert/PnL rechts
-    fig.subplots_adjust(left=0.05, right=0.84, top=0.86, bottom=0.14)
+    # Header: Titel links; Gesamtwert mittig-rechts; 1h/24h/7d ganz rechts
+    fig.subplots_adjust(left=0.05, right=0.84, top=0.84, bottom=0.14)
     fig.text(
         0.145,
         0.935,
@@ -158,13 +170,13 @@ def _render(
     )
 
     chip_color = tv.UP if up else tv.DOWN
-    # Gesamtwert (Cash + Margin + Open PnL) links neben dem PnL
+    value_x = 0.52 if windows else 0.84
     fig.text(
-        0.84,
+        value_x,
         0.935,
         tv.fmt_usd(last),
         color=tv.TEXT,
-        fontsize=14,
+        fontsize=13,
         fontweight="bold",
         ha="right",
         va="center",
@@ -176,20 +188,57 @@ def _render(
         .replace("X", ".")
     )
     fig.text(
-        0.84,
+        value_x,
         0.895,
         delta_label,
         color=chip_color,
-        fontsize=11,
+        fontsize=10,
         fontweight="bold",
         ha="right",
         va="center",
     )
 
+    if windows:
+        # Drei kompakte Spalten am rechten Rand: Label oben, Equity-Δ darunter
+        cols = windows[-3:]
+        right = 0.975
+        col_w = 0.105
+        start_x = right - col_w * (len(cols) - 0.5)
+        for i, (label, eq_delta) in enumerate(cols):
+            cx = start_x + i * col_w
+            color = tv.UP if eq_delta >= 0 else tv.DOWN
+            fig.text(
+                cx,
+                0.945,
+                str(label).upper(),
+                color=tv.MUTED,
+                fontsize=8,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+            fig.text(
+                cx,
+                0.900,
+                _fmt_signed_usd(eq_delta),
+                color=color,
+                fontsize=9.5,
+                fontweight="bold",
+                ha="center",
+                va="center",
+            )
+
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
     return buffer.getvalue()
+
+
+def _fmt_signed_usd(value: float) -> str:
+    """Kompaktes ``+$12,50`` / ``-$3,00`` fuer Chart-Header."""
+    sign = "+" if value >= 0 else "-"
+    body = f"{abs(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{sign}${body}"
 
 
 def _equity_tag(

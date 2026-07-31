@@ -451,44 +451,8 @@ def format_paper_digest_message(
         escape_markdown_v2(
             f"Expect.   {_signed_usd(_expectancy_usd(summary))}/Trade"
         ),
-        "",
-        f"*{escape_markdown_v2('PERFORMANCE')}*",
     ]
-    windows = snapshot.windows
-    if windows:
-        for win in windows:
-            eq_part = (
-                f"  ·  Eq {_signed_usd(win.equity_delta)}"
-                if win.equity_delta is not None
-                else ""
-            )
-            wr = (
-                f"{win.win_count}/{win.closed_count}"
-                if win.closed_count
-                else "0/0"
-            )
-            lines.append(
-                escape_markdown_v2(
-                    f"{win.label:<3}  n={win.closed_count}  "
-                    f"{_signed_usd(win.closed_pnl)}"
-                    f"{eq_part}"
-                )
-            )
-            lines.append(
-                escape_markdown_v2(
-                    f"     W {wr}  ·  Opened {win.opened_count}"
-                )
-            )
-    else:
-        lines.append(
-            escape_markdown_v2(
-                f"1h   Closed {snapshot.hour_closed_count}  ·  "
-                f"{_signed_usd(snapshot.hour_closed_pnl)}"
-            )
-        )
-        lines.append(
-            escape_markdown_v2(f"Opened {snapshot.hour_opened_count}")
-        )
+    # 1h / 24h / 7d stehen im Equity-Chart (Header rechts), nicht mehr im Text.
 
     open_header = (
         f"OFFEN ({summary.open_positions})  "

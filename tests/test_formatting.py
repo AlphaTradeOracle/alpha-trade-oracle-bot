@@ -384,11 +384,8 @@ class TestPaperDigestFormatting:
         assert "Wert  $5.142,30" in plain
         assert "Cash + Open PnL" in plain
         assert "DEPOT" in plain
-        assert "PERFORMANCE" in plain
-        assert "1h" in plain
-        assert "24h" in plain
-        assert "7d" in plain
-        assert "Eq +$12,50" in plain
+        assert "PERFORMANCE" not in plain
+        assert "Eq +$12,50" not in plain
         assert "+$42,10" in plain
         assert "+0.84R" not in plain
         assert "+0.00R" not in plain

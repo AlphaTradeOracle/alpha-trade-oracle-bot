@@ -84,11 +84,17 @@ class TelegramNotifier:
         chart: bytes | None = None
         curve = snapshot.equity_curve or []
         if len(curve) >= 2:
+            window_cols: list[tuple[str, float]] = []
+            for win in snapshot.windows or []:
+                if win.equity_delta is None:
+                    continue
+                window_cols.append((win.label, float(win.equity_delta)))
             chart = build_paper_equity_chart(
                 curve,
                 initial=float(snapshot.summary.initial_balance),
                 title="EQUITY",
                 subtitle="Cash + Open PnL  ·  Performance Dashboard",
+                windows=window_cols or None,
             )
         if chart is None:
             return await self.notify_allowed_chats(text)

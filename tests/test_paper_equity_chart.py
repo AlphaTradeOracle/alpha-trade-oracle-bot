@@ -44,3 +44,19 @@ def test_equity_chart_renders_png() -> None:
     png = build_paper_equity_chart(points, initial=5000.0)
     assert png is not None
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_equity_chart_renders_with_window_stats() -> None:
+    start = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
+    points = [
+        (start, 5000.0),
+        (start + timedelta(hours=2), 5012.5),
+        (start + timedelta(hours=5), 5142.3),
+    ]
+    png = build_paper_equity_chart(
+        points,
+        initial=5000.0,
+        windows=[("1h", 12.5), ("24h", 40.0), ("7d", 142.3)],
+    )
+    assert png is not None
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
