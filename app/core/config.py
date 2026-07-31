@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_allowed_chat_ids: str = ""
     telegram_admin_chat_ids: str = ""
-    #: Signal-Alerts (Chart + Analyse). False = nur Paper-Trade-Open mit Chart.
-    telegram_signal_dispatch: bool = False
+    #: Signal-Alerts (Chart + Analyse). True = jedes qualifizierte Signal nach Telegram.
+    telegram_signal_dispatch: bool = True
 
     # --- Marktdaten --------------------------------------------------------
     market_data_provider: str = "binance"
@@ -176,12 +176,12 @@ class Settings(BaseSettings):
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
     #: Im Ledger standen bis zu 32 Positionen gleichzeitig offen — mit 50 USD je
     #: Trade waeren das 32% des Kontos in einem Zug (0 = keine Grenze).
-    paper_max_portfolio_risk_pct: float = 10.0
+    paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
-    paper_max_open_positions: int = 10
+    paper_max_open_positions: int = 20
     #: Obergrenze je Richtung. Altcoin-Shorts korrelieren mit ~0.85, neun davon
     #: in einer Stunde sind effektiv eine Wette in neunfacher Groesse.
-    paper_max_open_per_direction: int = 6
+    paper_max_open_per_direction: int = 12
     #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
     #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
     paper_fee_percent: float = 0.05
@@ -196,8 +196,8 @@ class Settings(BaseSettings):
     paper_retest_min_bars_in_zone: int = 1
     #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
     backtest_retest_entry_enabled: bool = True
-    #: Paper-Trade-Telegram-Chart: leer = naechst hoeherer TF als Setup (z. B. 1h -> 4h).
-    paper_telegram_chart_timeframe: str = ""
+    #: Paper-Trade-Telegram-Chart (Default 4h, wie Signal-Charts).
+    paper_telegram_chart_timeframe: str = "4h"
     #: Early-Scratch: Position schliessen wenn MFE < Schwelle nach N Stunden (0 = aus).
     paper_early_scratch_hours: int = 12
     paper_early_scratch_mfe_r: float = 0.5

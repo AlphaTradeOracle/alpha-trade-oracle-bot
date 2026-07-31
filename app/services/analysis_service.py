@@ -228,7 +228,7 @@ class AnalysisService:
             result=result,
             price_precision=info.price_precision,
             skipped_timeframes=skipped,
-            chart_series=self._select_chart_series(series_map, result.primary_timeframe),
+            chart_series=self._select_chart_series(series_map),
         )
 
         await self._attach_llm_summary(outcome, use_llm=use_llm)
@@ -247,10 +247,11 @@ class AnalysisService:
         return outcome
 
     def _select_chart_series(
-        self, series_map: dict[str, CandleSeries], primary_timeframe: str
+        self, series_map: dict[str, CandleSeries]
     ) -> CandleSeries | None:
-        """Kerzen fuer das Telegram-Chart (primaerer Timeframe, sonst Fallback)."""
-        preferred = series_map.get(primary_timeframe)
+        """Kerzen fuer das Telegram-Signal-Chart — immer 4h, sonst Fallback."""
+        preferred_tf = "4h"
+        preferred = series_map.get(preferred_tf)
         if preferred is not None and not preferred.is_empty:
             return preferred
         for timeframe in self._settings.timeframes:
