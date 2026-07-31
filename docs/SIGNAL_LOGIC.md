@@ -239,11 +239,9 @@ ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut
 | `PAPER_EARLY_SCRATCH_HOURS` | `12` | Scratch nach N Stunden ohne MFE (0 = aus) |
 | `PAPER_EARLY_SCRATCH_MFE_R` | `0.5` | Mindest-MFE in R, sonst Scratch |
 
-**Telegram:** Standard (`TELEGRAM_SIGNAL_DISPATCH=false`) gehen **nur** Paper-Trade-
-Meldungen an alle `TELEGRAM_ALLOWED_CHAT_IDS`: Eroeffnung (IST oder Retest-Fill) und
-vollständiger Schluss. Klassische Signal-Alerts (Chart + Analyse) sind deaktiviert.
-Mit `TELEGRAM_SIGNAL_DISPATCH=true` zusaetzlich wieder Signal-Dispatch moeglich.
-Backfill/Rebuild unterdrückt Paper-Benachrichtigungen.
+**Telegram:** Mit `TELEGRAM_SIGNAL_DISPATCH=true` gehen qualifizierte Signale (Chart +
+Analyse) an alle `TELEGRAM_ALLOWED_CHAT_IDS`. Zusaetzlich Paper-Open mit Chart nach
+Retest-Fill. Backfill/Rebuild unterdrueckt Paper-Benachrichtigungen.
 
 ## 7. Signalgültigkeit und Invalidierung
 

@@ -163,6 +163,12 @@ def paper_rebuild(
     asyncio.run(_run_paper_rebuild(since, dispatched_only, one_per_symbol))
 
 
+@paper_app.command("reset")
+def paper_reset() -> None:
+    """Alle Paper-Positionen loeschen und Cash auf Startkapital zuruecksetzen."""
+    asyncio.run(_run_paper_reset())
+
+
 @cli.command()
 def backtest(
     symbol: Annotated[str, typer.Option("--symbol", help="Handelspaar, z. B. BTCUSDT")],
@@ -598,6 +604,36 @@ async def _run_paper_backfill(
         f"(cash ${summary.cash_balance:,.2f}, open {summary.open_positions})"
     )
 
+    await container.aclose()
+
+
+async def _run_paper_reset() -> None:
+    """Alle Paper-Trades loeschen und Konto auf Startkapital setzen."""
+    from decimal import Decimal
+
+    from app.repositories.paper_repository import PaperRepository
+
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+    start = Decimal(str(settings.paper_initial_balance))
+
+    async with session_scope() as session:
+        account = await container.paper_trading.get_or_create_account(session)
+        account.initial_balance = start
+        deleted = await PaperRepository(session).reset_ledger(account)
+        summary = await container.paper_trading.summary(session)
+
+    typer.echo("")
+    typer.secho("Paper-Reset abgeschlossen", fg=typer.colors.GREEN, bold=True)
+    typer.echo(f"  deleted_positions:  {deleted}")
+    typer.echo(f"  initial_balance:    ${summary.initial_balance:,.2f}")
+    typer.echo(f"  cash_balance:       ${summary.cash_balance:,.2f}")
+    typer.echo(f"  realized_pnl:       ${summary.realized_pnl:,.2f}")
+    typer.echo(
+        f"  open/pending/closed: {summary.open_positions}/"
+        f"{summary.pending_positions}/{summary.closed_trades}"
+    )
     await container.aclose()
 
 
