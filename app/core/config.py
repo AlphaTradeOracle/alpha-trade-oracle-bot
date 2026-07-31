@@ -93,7 +93,9 @@ class Settings(BaseSettings):
     signal_cooldown_minutes: int = 120
     signal_expiry_multiplier: int = 24
     signal_rsi_long_max: float = 75.0
-    signal_rsi_short_min: float = 25.0
+    signal_rsi_short_min: float = 33.0
+    #: Shorts mit Score <= diesem Wert gelten als ueberverkauft/Erschoepfung (NO_TRADE).
+    signal_short_min_score: float = 18.0
     signal_block_range_market: bool = True
     signal_min_adx: float = 20.0
     atr_multiplier: float = 1.5
@@ -119,6 +121,10 @@ class Settings(BaseSettings):
     paper_entry_blackout_utc: str = "21:00-01:00"
     #: Nach TP1: Expiry auf N x Primary-TF verlaengern (0 = unveraendert 24h ab Fill).
     paper_expiry_multiplier_after_tp1: int = 48
+    #: BTC-Regime-Filter: Shorts in Bull-Regime / Longs in Bear-Regime blockieren.
+    regime_filter_enabled: bool = True
+    regime_btc_symbol: str = "BTCUSDT"
+    regime_timeframe: str = "4h"
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 30
@@ -182,13 +188,18 @@ class Settings(BaseSettings):
     paper_update_interval_minutes: int = 5
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
     paper_retest_entry_enabled: bool = True
-    paper_retest_zone_near: float = 0.35
+    paper_retest_zone_near: float = 0.55
     paper_retest_zone_far: float = 1.0
-    paper_retest_pending_multiplier: int = 4
+    paper_retest_pending_multiplier: int = 6
+    #: Mindestanzahl aufeinanderfolgender Kerzen in der Retest-Zone vor Fill.
+    paper_retest_min_bars_in_zone: int = 2
     #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
     backtest_retest_entry_enabled: bool = True
     #: Paper-Trade-Telegram-Chart: leer = naechst hoeherer TF als Setup (z. B. 1h -> 4h).
     paper_telegram_chart_timeframe: str = ""
+    #: Early-Scratch: Position schliessen wenn MFE < Schwelle nach N Stunden (0 = aus).
+    paper_early_scratch_hours: int = 8
+    paper_early_scratch_mfe_r: float = 0.5
 
     # --- HTTP --------------------------------------------------------------
     http_timeout_seconds: float = 10.0

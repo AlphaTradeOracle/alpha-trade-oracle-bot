@@ -63,20 +63,39 @@ def _short_risk(entry: float = 100.0, stop_distance: float = 5.0) -> RiskParamet
 
 class TestShortScoreGate:
     @pytest.mark.asyncio
-    async def test_allows_strong_short_with_low_score(self) -> None:
+    async def test_allows_strong_short_above_exhaustion_band(self) -> None:
         decision = await SignalDeduplicator().evaluate(
             make_result(
                 direction=SignalDirection.STRONG_SHORT,
-                score=18.0,
+                score=22.0,
                 fingerprint="short-ok",
             ),
             min_score=75.0,
             short_max_score=25.0,
+            short_min_score=18.0,
             min_risk_reward_ratio=2.0,
             require_strong=True,
             now=NOW,
         )
         assert decision.should_send is True
+
+    @pytest.mark.asyncio
+    async def test_rejects_short_at_exhaustion_score(self) -> None:
+        decision = await SignalDeduplicator().evaluate(
+            make_result(
+                direction=SignalDirection.STRONG_SHORT,
+                score=18.0,
+                fingerprint="short-exhaust",
+            ),
+            min_score=75.0,
+            short_max_score=25.0,
+            short_min_score=18.0,
+            min_risk_reward_ratio=2.0,
+            require_strong=True,
+            now=NOW,
+        )
+        assert decision.should_send is False
+        assert decision.reason is SuppressionReason.SHORT_EXHAUSTION
 
     @pytest.mark.asyncio
     async def test_rejects_short_above_max_score(self) -> None:

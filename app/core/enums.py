@@ -79,12 +79,14 @@ class SuppressionReason(StrEnum):
     COOLDOWN = "cooldown"
     DUPLICATE = "duplicate"
     BELOW_MIN_SCORE = "below_min_score"
+    SHORT_EXHAUSTION = "short_exhaustion"
     NOT_STRONG = "not_strong"
     NOT_ACTIONABLE = "not_actionable"
     EXPIRED = "expired"
     LOW_DATA_QUALITY = "low_data_quality"
     RISK_REWARD_TOO_LOW = "risk_reward_too_low"
     ENTRY_BLACKOUT = "entry_blackout"
+    REGIME_FILTER = "regime_filter"
     NOTIFICATIONS_DISABLED = "notifications_disabled"
 
 
@@ -103,6 +105,8 @@ class ExitReason(StrEnum):
     END_OF_DATA = "end_of_data"
     #: Pending Retest-Entry nie gefuellt (Ablauf / SL vor Fill / keine Historie).
     RETEST_SKIPPED = "retest_skipped"
+    #: Position geschlossen wegen fehlendem MFE nach Mindest-Haltedauer.
+    EARLY_SCRATCH = "early_scratch"
 
 
 class LLMRequestStatus(StrEnum):

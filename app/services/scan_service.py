@@ -23,6 +23,7 @@ from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome, AnalysisService
 from app.services.paper_trading_service import PaperTradingService
 from app.signals.dedup import SignalDeduplicator
+from app.signals.regime import RegimeSnapshot
 
 logger = get_logger(__name__)
 
@@ -112,6 +113,16 @@ class ScanService:
             symbols=targets[:20],
         )
 
+        self._analysis.clear_regime_cache()
+        regime_snapshot = await self._analysis.resolve_market_regime(refresh=True)
+        if self._settings.regime_filter_enabled:
+            logger.info(
+                "market_regime_resolved",
+                regime=regime_snapshot.regime.value if regime_snapshot.regime else None,
+                available=regime_snapshot.available,
+                detail=regime_snapshot.detail,
+            )
+
         for symbol in targets:
             result.symbols_scanned += 1
             try:
@@ -121,6 +132,7 @@ class ScanService:
                     result,
                     dispatch=dispatch,
                     universe_mode=universe_mode,
+                    regime_snapshot=regime_snapshot,
                 )
             except AlphaTradeOracleError as exc:
                 result.failures.append((symbol, str(exc)))
@@ -160,6 +172,7 @@ class ScanService:
         *,
         dispatch: bool,
         universe_mode: bool,
+        regime_snapshot: RegimeSnapshot | None = None,
     ) -> None:
         outcome = await self._analysis.analyze(
             symbol,
@@ -185,8 +198,11 @@ class ScanService:
             outcome.result,
             min_score=self._settings.signal_min_score,
             short_max_score=self._settings.signal_short_max_score,
+            short_min_score=self._settings.signal_short_min_score,
             min_risk_reward_ratio=self._settings.min_risk_reward_ratio,
             require_strong=self._settings.signal_require_strong,
+            market_regime=regime_snapshot.regime if regime_snapshot else None,
+            regime_filter_enabled=self._settings.regime_filter_enabled,
         )
 
         signals = SignalRepository(session)
@@ -205,7 +221,11 @@ class ScanService:
             return
 
         if self._paper is not None and self._paper.enabled:
-            await self._paper.open_from_signal(session, outcome)
+            await self._paper.open_from_signal(
+                session,
+                outcome,
+                regime_snapshot=regime_snapshot,
+            )
 
         if not dispatch:
             logger.info(

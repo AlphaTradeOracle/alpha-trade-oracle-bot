@@ -21,10 +21,11 @@ from app.core.time import ensure_utc, timeframe_to_timedelta
 from app.market_data.types import Candle
 from app.signals.risk import DEFAULT_TP_MULTIPLIERS
 
-ZONE_NEAR = Decimal("0.35")
+ZONE_NEAR = Decimal("0.55")
 ZONE_FAR = Decimal("1.0")
 ATR_PERIOD = 14
-DEFAULT_PENDING_MULTIPLIER = 4
+DEFAULT_PENDING_MULTIPLIER = 6
+DEFAULT_MIN_BARS_IN_ZONE = 2
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class RetestEntryConfig:
     zone_far: Decimal = ZONE_FAR
     atr_period: int = ATR_PERIOD
     pending_multiplier: int = DEFAULT_PENDING_MULTIPLIER
+    min_bars_in_zone: int = DEFAULT_MIN_BARS_IN_ZONE
 
 
 @dataclass
@@ -190,6 +192,7 @@ def arm_retest_entry(
     )
 
     bars_waited = 0
+    bars_in_zone = 0
     now_cap = ensure_utc(candles[-1].open_time) if candles else arm_time
 
     for candle in candles[sig_idx + 1 :]:
@@ -227,30 +230,34 @@ def arm_retest_entry(
             )
 
         if low <= zone_hi and high >= zone_lo:
-            fill = zone_fill_price(
-                low=low,
-                high=high,
-                zone_lo=zone_lo,
-                zone_hi=zone_hi,
-                is_long=is_long,
-            )
-            stop = stop_from_retest_fill(
-                fill,
-                reference_entry=reference,
-                original_stop=orig_sl,
-                is_long=is_long,
-            )
-            return RetestArmResult(
-                status="filled",
-                fill_price=float(fill),
-                fill_time=when,
-                stop=float(stop),
-                zone_lo=float(zone_lo),
-                zone_hi=float(zone_hi),
-                atr=float(atr),
-                bars_waited=bars_waited,
-                note="retest_zone_fill",
-            )
+            bars_in_zone += 1
+            if bars_in_zone >= max(1, cfg.min_bars_in_zone):
+                fill = zone_fill_price(
+                    low=low,
+                    high=high,
+                    zone_lo=zone_lo,
+                    zone_hi=zone_hi,
+                    is_long=is_long,
+                )
+                stop = stop_from_retest_fill(
+                    fill,
+                    reference_entry=reference,
+                    original_stop=orig_sl,
+                    is_long=is_long,
+                )
+                return RetestArmResult(
+                    status="filled",
+                    fill_price=float(fill),
+                    fill_time=when,
+                    stop=float(stop),
+                    zone_lo=float(zone_lo),
+                    zone_hi=float(zone_hi),
+                    atr=float(atr),
+                    bars_waited=bars_waited,
+                    note="retest_zone_fill",
+                )
+        else:
+            bars_in_zone = 0
 
     if now_cap < pending_until:
         return RetestArmResult(

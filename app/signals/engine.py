@@ -27,6 +27,7 @@ from app.signals.multi_timeframe import (
     multi_timeframe_agreement,
 )
 from app.signals.risk import RiskConfig, RiskManager
+from app.signals.regime import MarketRegime, direction_allowed_by_regime, regime_block_reason
 from app.signals.types import ScoreComponent, SignalResult, TimeframeAssessment
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
@@ -63,7 +64,9 @@ class SignalEngineConfig:
     block_range_market: bool = True
     min_adx: float = 20.0
     rsi_long_max: float = 75.0
-    rsi_short_min: float = 25.0
+    rsi_short_min: float = 33.0
+    short_min_score: float = 18.0
+    regime_filter_enabled: bool = True
     strategy_version_label: str = "default:1"
 
 
@@ -88,6 +91,8 @@ def signal_engine_config_from_settings(
         min_adx=settings.signal_min_adx,
         rsi_long_max=settings.signal_rsi_long_max,
         rsi_short_min=settings.signal_rsi_short_min,
+        short_min_score=settings.signal_short_min_score,
+        regime_filter_enabled=settings.regime_filter_enabled,
     )
 
 
@@ -122,6 +127,7 @@ class SignalEngine:
         data_quality: float = 100.0,
         sentiment_score: float | None = None,
         now: datetime | None = None,
+        market_regime: MarketRegime | None = None,
     ) -> SignalResult:
         """Signal fuer ein Symbol erzeugen.
 
@@ -163,6 +169,8 @@ class SignalEngine:
             risk,
             data_quality,
             market_phase=market_phase,
+            score=score,
+            market_regime=market_regime,
         )
         if no_trade_reason is not None:
             direction = SignalDirection.NO_TRADE
@@ -327,10 +335,26 @@ class SignalEngine:
         data_quality: float,
         *,
         market_phase: MarketPhase,
+        score: float,
+        market_regime: MarketRegime | None = None,
     ) -> str | None:
         """Harte Ausschlusskriterien. Sie ueberschreiben jede Richtung."""
         if not direction.is_actionable:
             return None
+
+        if (
+            direction.is_short
+            and score <= self._config.short_min_score
+        ):
+            return (
+                f"Short-Score {score:.1f} in Erschoepfungsband "
+                f"(Minimum {self._config.short_min_score:.0f})"
+            )
+
+        if self._config.regime_filter_enabled and market_regime is not None:
+            blocked = regime_block_reason(market_regime, direction)
+            if blocked is not None:
+                return blocked
 
         if data_quality < MIN_DATA_QUALITY:
             return (

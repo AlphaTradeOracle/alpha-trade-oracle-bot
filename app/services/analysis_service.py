@@ -28,6 +28,7 @@ from app.repositories.strategy_repository import StrategyRepository
 from app.sentiment.service import SentimentService
 from app.signals.engine import SignalEngine, signal_engine_config_from_settings
 from app.signals.data_quality import compute_analysis_data_quality
+from app.signals.regime import RegimeSnapshot, log_regime_degraded, regime_from_indicators
 from app.signals.risk import RiskConfig, RiskManager, tp_multipliers_from_settings
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
@@ -75,6 +76,42 @@ class AnalysisService:
         self._indicators = indicator_engine or IndicatorEngine(
             min_candles=self._settings.min_candles_required
         )
+        self._regime_cache: RegimeSnapshot | None = None
+
+    async def resolve_market_regime(self, *, refresh: bool = False) -> RegimeSnapshot:
+        """BTC-Regime fuer den aktuellen Scan-Zyklus (gecacht)."""
+        if not self._settings.regime_filter_enabled:
+            return RegimeSnapshot(None, "regime_filter_disabled", False)
+        if self._regime_cache is not None and not refresh:
+            return self._regime_cache
+
+        symbol = self._settings.regime_btc_symbol.upper()
+        timeframe = self._settings.regime_timeframe
+        try:
+            series = await self._provider.get_candles(
+                symbol,
+                timeframe,
+                limit=self._settings.candle_limit,
+            )
+            if series.is_empty:
+                log_regime_degraded("btc_candles_empty")
+                snapshot = RegimeSnapshot(None, "btc_candles_empty", False)
+            else:
+                indicators = self._indicators.compute(
+                    series.to_dataframe(), timeframe, symbol=symbol
+                )
+                snapshot = regime_from_indicators(indicators)
+                if not snapshot.available:
+                    log_regime_degraded(snapshot.detail)
+        except Exception as exc:
+            log_regime_degraded(str(exc))
+            snapshot = RegimeSnapshot(None, f"btc_regime_error: {exc}", False)
+
+        self._regime_cache = snapshot
+        return snapshot
+
+    def clear_regime_cache(self) -> None:
+        self._regime_cache = None
 
     @property
     def provider(self) -> MarketDataProvider:
@@ -161,11 +198,19 @@ class AnalysisService:
         engine = self._build_engine(effective_weights)
         sentiment_score = await self._load_sentiment(normalized)
 
+        regime_snapshot = await self.resolve_market_regime()
+        market_regime = (
+            regime_snapshot.regime
+            if self._settings.regime_filter_enabled and regime_snapshot.available
+            else None
+        )
+
         result = engine.generate(
             normalized,
             indicator_sets,
             data_quality=data_quality,
             sentiment_score=sentiment_score,
+            market_regime=market_regime,
         )
 
         logger.info(

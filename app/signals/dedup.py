@@ -15,6 +15,7 @@ from typing import Any, Protocol
 from app.core.enums import SignalDirection, SuppressionReason
 from app.core.logging import get_logger
 from app.core.time import utc_now
+from app.signals.regime import MarketRegime, direction_allowed_by_regime
 from app.signals.types import SignalResult
 
 logger = get_logger(__name__)
@@ -83,6 +84,9 @@ class SignalDeduplicator:
         min_data_quality: float = 60.0,
         require_strong: bool = False,
         short_max_score: float | None = None,
+        short_min_score: float = 18.0,
+        market_regime: MarketRegime | None = None,
+        regime_filter_enabled: bool = True,
         now: datetime | None = None,
     ) -> DedupDecision:
         """Alle Versandbedingungen pruefen."""
@@ -123,6 +127,25 @@ class SignalDeduplicator:
                 False,
                 SuppressionReason.BELOW_MIN_SCORE,
                 f"Short-Score {result.score:.1f} ueber dem Maximum von {short_max:.1f}",
+            )
+
+        if result.direction.is_short and result.score <= short_min_score:
+            return DedupDecision(
+                False,
+                SuppressionReason.SHORT_EXHAUSTION,
+                f"Short-Score {result.score:.1f} in Erschoepfungsband "
+                f"(Minimum {short_min_score:.0f})",
+            )
+
+        if (
+            regime_filter_enabled
+            and market_regime is not None
+            and not direction_allowed_by_regime(market_regime, result.direction)
+        ):
+            return DedupDecision(
+                False,
+                SuppressionReason.REGIME_FILTER,
+                f"Regime {market_regime.value} blockiert {result.direction.value}",
             )
 
         if result.data_quality < min_data_quality:

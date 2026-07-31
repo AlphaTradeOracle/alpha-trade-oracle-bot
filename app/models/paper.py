@@ -68,6 +68,8 @@ class PaperPosition(Base, TimestampMixin):
     entry_price: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     stop_loss: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     current_stop: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
+    #: Bisher guenstigster Preis (Long: Hoch, Short: Tief) fuer MFE/Early-Scratch.
+    peak_price: Mapped[Decimal | None] = mapped_column(PRICE, nullable=True)
     take_profit_1: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     take_profit_2: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     take_profit_3: Mapped[Decimal] = mapped_column(PRICE, nullable=False)

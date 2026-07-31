@@ -106,6 +106,14 @@ Diese Prüfungen überschreiben jede Richtung:
 - `data_quality` liegt unter 60 (zu viele fehlende Kerzen oder zu kurze Historie).
 - Der ATR-Anteil überschreitet `MAX_ATR_PERCENT` (Standard 12 %) — der Markt ist
   zu volatil für eine sinnvolle Stop-Platzierung.
+- RSI überkauft/überverkauft: Long wenn RSI > `SIGNAL_RSI_LONG_MAX` (75);
+  Short wenn RSI < `SIGNAL_RSI_SHORT_MIN` (**33**, erhöht von 25 — Short-Erschöpfung).
+- Short-Score in Erschöpfungsband: Score ≤ `SIGNAL_SHORT_MIN_SCORE` (**18**) →
+  `NO_TRADE` (25 Trades @ 24 % WR, −$352 im Paper-Sample).
+- **Regime-Filter** (`REGIME_FILTER_ENABLED=true`): BTCUSDT auf **4h** —
+  Close vs. EMA20/EMA50 + Supertrend (≥3 Stimmen → bull/bear, sonst neutral).
+  Blockiert neue **Shorts** in bullischem und **Longs** in bärischem Regime.
+  Fehlende BTC-Daten → kein Filter (Warning im Log).
 - Der Stop-Abstand liegt unter `MIN_STOP_DISTANCE_PERCENT` (Standard 0.3 %) — der
   Stop wäre reines Marktrauschen.
 
@@ -177,16 +185,17 @@ Ohne Retest (IST) steigen SL-Treffer im Paper deutlich — Retest-Skip bleibt si
 |---|---|---|
 | `PAPER_RETEST_ENTRY_ENABLED` | `true` | Paper wartet auf ATR-Pullback-Fill |
 | `BACKTEST_RETEST_ENTRY_ENABLED` | `true` | Backtest nutzt Retest statt IST |
-| `PAPER_RETEST_ZONE_NEAR` | `0.35` | Zone-Innenkante × ATR |
+| `PAPER_RETEST_ZONE_NEAR` | `0.55` | Zone-Innenkante × ATR (tieferer Pullback) |
 | `PAPER_RETEST_ZONE_FAR` | `1.0` | Zone-Außenkante × ATR |
-| `PAPER_RETEST_PENDING_MULTIPLIER` | `4` | Pending-Fenster = N × Primary-TF |
+| `PAPER_RETEST_PENDING_MULTIPLIER` | `6` | Pending-Fenster = N × Primary-TF |
+| `PAPER_RETEST_MIN_BARS_IN_ZONE` | `2` | Mindestens N Kerzen in Zone vor Fill |
 
 Ablauf:
 
 1. Signal entsteht wie bisher (Score, Gates, Entry-Zone, Signal-SL).
 2. Paper legt `status=pending` an (kein Cash-Lock). Pending blockiert das Symbol.
-3. Long: Fill wenn eine Folgekerze die Zone `[entry − 1.0×ATR, entry − 0.35×ATR]`
-   berührt. Short spiegelbildlich darüber.
+3. Long: Fill wenn **zwei aufeinanderfolgende** Folgekerzen die Zone
+   `[entry − 1.0×ATR, entry − 0.55×ATR]` berühren. Short spiegelbildlich darüber.
 4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
    TPs neu aus konfigurierter Leiter (Default 2/4/6R). Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF); nach TP1 optional 48h (`PAPER_EXPIRY_MULTIPLIER_AFTER_TP1`).
 5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
@@ -207,7 +216,9 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 |---|---|
 | Richtung | actionable (STRONG_LONG/SHORT bei `SIGNAL_REQUIRE_STRONG=true`) |
 | Long-Score | ≥ `SIGNAL_MIN_SCORE` (75) |
-| Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (25) |
+| Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (25) und > `SIGNAL_SHORT_MIN_SCORE` (18, exkl.) |
+| Short-Erschöpfung | Score ≤ `SIGNAL_SHORT_MIN_SCORE` (18) |
+| Regime | BTC 4h — kein Short in Bull, kein Long in Bear (`skipped_regime`) |
 | Datenqualität | ≥ 60 |
 | Chance-Risiko (TP2) | ≥ `MIN_RISK_REWARD_RATIO` (2.0) |
 | Levels | SL + TP1/2/3 gesetzt |
@@ -222,6 +233,11 @@ ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut
 | `PAPER_SYMBOL_CIRCUIT_BREAKER_HOURS` | `24` | Pausendauer in Stunden |
 | `SIGNAL_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Keine neuen Signale/Paper-Entries in diesem UTC-Fenster |
 | `PAPER_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Backfill-Gate für Paper (leer = aus) |
+| `REGIME_FILTER_ENABLED` | `true` | BTC-4h-Regime blockiert konträre Richtungen |
+| `REGIME_BTC_SYMBOL` | `BTCUSDT` | Referenz fuer Regime |
+| `REGIME_TIMEFRAME` | `4h` | Timeframe fuer Regime |
+| `PAPER_EARLY_SCRATCH_HOURS` | `8` | Scratch nach N Stunden ohne MFE (0 = aus) |
+| `PAPER_EARLY_SCRATCH_MFE_R` | `0.5` | Mindest-MFE in R, sonst Scratch |
 
 **Telegram:** Standard (`TELEGRAM_SIGNAL_DISPATCH=false`) gehen **nur** Paper-Trade-
 Meldungen an alle `TELEGRAM_ALLOWED_CHAT_IDS`: Eroeffnung (IST oder Retest-Fill) und
