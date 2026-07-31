@@ -84,6 +84,7 @@ class SuppressionReason(StrEnum):
     EXPIRED = "expired"
     LOW_DATA_QUALITY = "low_data_quality"
     RISK_REWARD_TOO_LOW = "risk_reward_too_low"
+    ENTRY_BLACKOUT = "entry_blackout"
     NOTIFICATIONS_DISABLED = "notifications_disabled"
 
 

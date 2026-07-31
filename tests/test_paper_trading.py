@@ -363,9 +363,9 @@ class TestPortfolioRiskLimits:
         assert await self._open(service, session, "BBB4USDT") is None
         assert service.last_skip_reason == "skipped_portfolio_risk"
 
-        # TP1 nimmt ein Drittel vom Tisch -> ein Drittel 1R wird wieder frei.
+        # TP1 nimmt die Haelfte vom Tisch -> die Haelfte 1R wird wieder frei.
         await service.update_open_positions(session, {"BBB0USDT": 105.0})
-        assert float(opened[0].remaining_quantity) == pytest.approx(6.6666667)
+        assert float(opened[0].remaining_quantity) == pytest.approx(5.0)
         assert await self._open(service, session, "BBB4USDT") is not None
 
     @pytest.mark.asyncio

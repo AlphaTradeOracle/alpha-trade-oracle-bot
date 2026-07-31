@@ -125,9 +125,9 @@ class TestTakeProfit:
         risk = RiskManager().calculate(SignalDirection.LONG, make_indicators())
         assert risk is not None
         distance = risk.entry_low - risk.stop_loss
-        assert risk.take_profit_1 == pytest.approx(risk.entry_low + distance * 2.0)
-        assert risk.take_profit_2 == pytest.approx(risk.entry_low + distance * 4.0)
-        assert risk.take_profit_3 == pytest.approx(risk.entry_low + distance * 6.0)
+        assert risk.take_profit_1 == pytest.approx(risk.entry_low + distance * 1.0)
+        assert risk.take_profit_2 == pytest.approx(risk.entry_low + distance * 2.0)
+        assert risk.take_profit_3 == pytest.approx(risk.entry_low + distance * 3.0)
 
     def test_target_is_pulled_below_blocking_resistance(self) -> None:
         indicators = make_indicators(close_price=40_000.0, atr_14=400.0, resistances=[40_600.0])

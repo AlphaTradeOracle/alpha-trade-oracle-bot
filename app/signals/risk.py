@@ -7,14 +7,29 @@ und keine Boersen-Schnittstellen aufgerufen.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.core.enums import SignalDirection
 from app.indicators.engine import IndicatorSet
 from app.signals.types import RiskParameters
 
+if TYPE_CHECKING:
+    from app.core.config import Settings
+
+
+def tp_multipliers_from_settings(settings: Settings | None = None) -> tuple[float, float, float]:
+    """TP-Multiples aus Settings oder Modul-Default."""
+    if settings is None:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+    return settings.parsed_tp_multipliers
+
 #: Vielfache des Risikoabstands R fuer die drei Take-Profit-Ziele.
-TP_MULTIPLIERS = (2.0, 4.0, 6.0)
+#: Default 1/2/3R (MFE-Analyse: ≥2R nur ~24%% live; engere Leiter bankt oefter).
+TP_MULTIPLIERS = (1.0, 2.0, 3.0)
 DEFAULT_TP_MULTIPLIERS = TP_MULTIPLIERS
+LEGACY_TP_MULTIPLIERS = (2.0, 4.0, 6.0)
 
 #: Halbe Breite der Entry-Zone in ATR.
 ENTRY_ZONE_ATR_FRACTION = 0.25

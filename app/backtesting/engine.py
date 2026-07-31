@@ -44,7 +44,8 @@ logger = get_logger(__name__)
 WARMUP_CANDLES = 210
 
 #: Anteil der Position bei TP1 / TP2 / TP3 (Summe 1.0).
-DEFAULT_SCALE_OUT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
+DEFAULT_SCALE_OUT_FRACTIONS = (0.5, 0.25, 0.25)
+LEGACY_SCALE_OUT_FRACTIONS = (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -77,7 +78,7 @@ class BacktestConfig:
     #: Nach TP1 Stop auf Entry (Break-even) ziehen.
     move_stop_to_breakeven_after_tp1: bool = True
     #: Take-Profit als Vielfache von R (Stop-Abstand).
-    tp_multipliers: tuple[float, float, float] = (2.0, 4.0, 6.0)
+    tp_multipliers: tuple[float, float, float] = (1.0, 2.0, 3.0)
     #: Retest/Pullback-Entry statt naechster Primary-Open (IST).
     retest_entry_enabled: bool = True
     retest_zone_near: float = 0.35

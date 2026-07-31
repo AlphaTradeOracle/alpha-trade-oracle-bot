@@ -106,6 +106,19 @@ class Settings(BaseSettings):
     reject_wide_stops: bool = False
     max_atr_percent: float = 12.0
     reference_capital: float = 10_000.0
+    #: Take-Profit-Leiter als R-Multiples (kommasepariert, genau drei Werte).
+    tp_multipliers: str = "1.0,2.0,3.0"
+    #: Scale-out-Anteile je TP (Summe 1.0). Default 50/25/25 — mehr Gewinn bei TP1.
+    paper_scale_out_fractions: str = "0.5,0.25,0.25"
+    #: Nach N aufeinanderfolgenden Verlusten auf demselben Symbol pausieren (0 = aus).
+    paper_symbol_circuit_breaker_losses: int = 2
+    #: Pausendauer nach Symbol-Circuit-Breaker in Stunden.
+    paper_symbol_circuit_breaker_hours: int = 24
+    #: UTC-Blackout fuer neue Signale/Paper-Entries (``HH:MM-HH:MM``). Leer = aus.
+    signal_entry_blackout_utc: str = "21:00-01:00"
+    paper_entry_blackout_utc: str = "21:00-01:00"
+    #: Nach TP1: Expiry auf N x Primary-TF verlaengern (0 = unveraendert 24h ab Fill).
+    paper_expiry_multiplier_after_tp1: int = 48
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 30
@@ -255,6 +268,34 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def parsed_tp_multipliers(self) -> tuple[float, float, float]:
+        parts = [part.strip() for part in self.tp_multipliers.split(",") if part.strip()]
+        if len(parts) != 3:
+            raise ValueError(
+                "TP_MULTIPLIERS muss genau drei kommaseparierte Werte haben, "
+                f"war: {self.tp_multipliers!r}"
+            )
+        return (float(parts[0]), float(parts[1]), float(parts[2]))
+
+    @property
+    def parsed_scale_out_fractions(self) -> tuple[float, float, float]:
+        parts = [
+            part.strip() for part in self.paper_scale_out_fractions.split(",") if part.strip()
+        ]
+        if len(parts) != 3:
+            raise ValueError(
+                "PAPER_SCALE_OUT_FRACTIONS muss genau drei Werte haben, "
+                f"war: {self.paper_scale_out_fractions!r}"
+            )
+        values = tuple(float(part) for part in parts)
+        total = sum(values)
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(
+                f"PAPER_SCALE_OUT_FRACTIONS muss sich zu 1.0 summieren, war {total:.6f}"
+            )
+        return values  # type: ignore[return-value]
 
 
 def _parse_int_set(raw: str) -> set[int]:

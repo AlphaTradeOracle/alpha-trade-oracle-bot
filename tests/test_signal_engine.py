@@ -40,7 +40,13 @@ class TestScoreComposition:
         self, uptrend_indicators: dict[str, IndicatorSet]
     ) -> None:
         result = SignalEngine().generate("BTCUSDT", uptrend_indicators, now=NOW)
-        assert sum(c.weight for c in result.components) == pytest.approx(1.0)
+        scoring = [
+            c for c in result.components if c.category is not ScoreCategory.RISK_REWARD
+        ]
+        # R:R ist Gate-only (weight 0); die verbleibenden Kategorien behalten ihre Gewichte.
+        assert sum(c.weight for c in scoring) == pytest.approx(
+            1.0 - DEFAULT_WEIGHTS.risk_reward, abs=1e-4
+        )
 
     def test_weighted_score_matches_raw_times_weight(
         self, uptrend_indicators: dict[str, IndicatorSet]
@@ -176,6 +182,15 @@ class TestNoTradeRules:
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
         assert "Chance-Risiko" in result.no_trade_reason
+
+    def test_risk_reward_is_gate_only_not_score_weight(
+        self, uptrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        result = SignalEngine().generate("BTCUSDT", uptrend_indicators, now=NOW)
+        rr = next(c for c in result.components if c.category.value == "risk_reward")
+        assert rr.weight == 0.0
+        assert rr.raw_score == 0.0
+        assert "Gate" in rr.detail or "Minimum" in rr.detail
 
     def test_neutral_direction_gets_no_no_trade_reason(
         self, sideways_indicators: dict[str, IndicatorSet]

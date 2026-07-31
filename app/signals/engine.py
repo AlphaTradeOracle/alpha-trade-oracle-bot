@@ -27,7 +27,6 @@ from app.signals.multi_timeframe import (
     multi_timeframe_agreement,
 )
 from app.signals.risk import RiskConfig, RiskManager
-from app.signals.scoring import score_risk_reward
 from app.signals.types import ScoreComponent, SignalResult, TimeframeAssessment
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
@@ -142,10 +141,10 @@ class SignalEngine:
         assessments = assess_timeframes(indicator_sets)
 
         components = self._build_components(assessments, sentiment_score)
-        preliminary_score = self._weighted_score(components)
+        score = self._weighted_score(components)
         agreement = self._agreement_value(components)
 
-        direction = self._determine_direction(preliminary_score, agreement)
+        direction = self._determine_direction(score, agreement)
         primary_indicators = assessments[primary_timeframe].indicators
 
         risk = self._risk_manager.calculate(
@@ -154,14 +153,8 @@ class SignalEngine:
             confirmation_timeframe=self._config.confirmation_timeframe,
         )
 
-        # Das R:R kann erst nach der Risikoberechnung bewertet werden und wird
-        # daher nachtraeglich in den Score eingerechnet.
-        rr_component = self._risk_reward_component(risk)
-        components = [c for c in components if c.category != ScoreCategory.RISK_REWARD]
-        components.append(rr_component)
-
-        score = self._weighted_score(components)
-        direction = self._determine_direction(score, agreement)
+        # R:R ist nur NO_TRADE-Gate, nicht Score-Komponente (direction-blind bei 3.27%% Gewicht).
+        components.append(self._risk_reward_info_component(risk))
         market_phase = determine_market_phase(assessments, primary_timeframe)
 
         no_trade_reason = self._check_no_trade(
@@ -278,30 +271,25 @@ class SignalEngine:
                     )
                 )
 
-        # Platzhalter mit Rohwert 0; wird nach der Risikoberechnung ersetzt.
-        components.append(
-            ScoreComponent(
-                category=ScoreCategory.RISK_REWARD,
-                raw_score=0.0,
-                weight=weights[ScoreCategory.RISK_REWARD],
-                detail="Noch nicht bewertet",
-            )
-        )
+        # R:R fließt nicht in den Score ein — nur als NO_TRADE-Gate (siehe _check_no_trade).
         return components
 
-    def _risk_reward_component(self, risk: object | None) -> ScoreComponent:
-        weight = self._weights.as_dict()[ScoreCategory.RISK_REWARD]
+    def _risk_reward_info_component(self, risk: object | None) -> ScoreComponent:
+        """Informativer R:R-Eintrag im Breakdown ohne Score-Beitrag."""
         if risk is None:
-            return ScoreComponent(
-                category=ScoreCategory.RISK_REWARD,
-                raw_score=0.0,
-                weight=weight,
-                detail="Kein Chance-Risiko-Verhaeltnis berechnet (kein handelbares Setup)",
+            detail = "Kein Chance-Risiko-Verhaeltnis berechnet (kein handelbares Setup)"
+            ratio = 0.0
+        else:
+            ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
+            detail = (
+                f"Chance-Risiko-Verhaeltnis {ratio:.2f} "
+                f"(Minimum {self._config.min_risk_reward_ratio:.2f}, nur Gate)"
             )
-        ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
-        raw, detail = score_risk_reward(ratio, self._config.min_risk_reward_ratio)
         return ScoreComponent(
-            category=ScoreCategory.RISK_REWARD, raw_score=raw, weight=weight, detail=detail
+            category=ScoreCategory.RISK_REWARD,
+            raw_score=0.0,
+            weight=0.0,
+            detail=detail,
         )
 
     @staticmethod

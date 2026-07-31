@@ -127,6 +127,21 @@ class PaperRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_recent_closed_by_symbol(
+        self, account_id: int, symbol: str, *, limit: int = 2
+    ) -> list[PaperPosition]:
+        result = await self._session.execute(
+            select(PaperPosition)
+            .where(
+                PaperPosition.account_id == account_id,
+                PaperPosition.symbol == symbol.upper(),
+                PaperPosition.status == "closed",
+            )
+            .order_by(PaperPosition.closed_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars())
+
     async def list_closed(self, account_id: int, *, limit: int = 20) -> list[PaperPosition]:
         result = await self._session.execute(
             select(PaperPosition)

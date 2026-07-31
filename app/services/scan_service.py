@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.entry_blackout import is_in_utc_blackout
 from app.core.enums import DeliveryStatus, EventSeverity, SuppressionReason
 from app.core.errors import AlphaTradeOracleError
 from app.core.logging import get_logger, set_correlation_id
+from app.core.time import utc_now
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import EventRepository
@@ -166,6 +168,18 @@ class ScanService:
             use_llm=False if universe_mode else None,
         )
         result.signals_created += 1
+
+        blackout_spec = self._settings.signal_entry_blackout_utc.strip()
+        if (
+            blackout_spec
+            and outcome.result.direction.is_actionable
+            and is_in_utc_blackout(utc_now(), blackout_spec)
+        ):
+            result.signals_suppressed += 1
+            result.suppression_details.append((symbol, "entry_blackout_utc"))
+            logger.info("signal_suppressed_entry_blackout", symbol=symbol)
+            await self._record_suppression(session, outcome, SuppressionReason.ENTRY_BLACKOUT)
+            return
 
         decision = await self._dedup.evaluate(
             outcome.result,

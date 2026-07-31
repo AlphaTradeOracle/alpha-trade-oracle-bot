@@ -1,4 +1,4 @@
-"""PaperTradingService — virtuelles Depot mit 33/33/34 Scale-out."""
+"""PaperTradingService — virtuelles Depot mit konfigurierbarem Scale-out."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Iterator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.entry_blackout import is_in_utc_blackout
 from app.core.enums import Confidence, ExitReason, MarketPhase, SignalDirection
 from app.core.logging import get_logger
 from app.core.time import ensure_utc, timeframe_to_timedelta, utc_now
@@ -26,7 +27,7 @@ from app.signals.retest_entry import (
     arm_retest_entry,
     levels_from_entry_sl,
 )
-from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskManager
+from app.signals.risk import RiskManager, tp_multipliers_from_settings
 from app.signals.types import RiskParameters, SignalResult
 
 if TYPE_CHECKING:
@@ -34,13 +35,19 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-SCALE_OUT_FRACTIONS = (Decimal("0.33333333"), Decimal("0.33333333"), Decimal("0.33333334"))
-
 SKIP_PORTFOLIO_RISK = "skipped_portfolio_risk"
 SKIP_MAX_POSITIONS = "skipped_max_positions"
 SKIP_DIRECTION_CAP = "skipped_direction_cap"
+SKIP_SYMBOL_CIRCUIT = "skipped_symbol_circuit"
+SKIP_ENTRY_BLACKOUT = "skipped_entry_blackout"
 PORTFOLIO_LIMIT_SKIPS = frozenset(
-    {SKIP_PORTFOLIO_RISK, SKIP_MAX_POSITIONS, SKIP_DIRECTION_CAP}
+    {
+        SKIP_PORTFOLIO_RISK,
+        SKIP_MAX_POSITIONS,
+        SKIP_DIRECTION_CAP,
+        SKIP_SYMBOL_CIRCUIT,
+        SKIP_ENTRY_BLACKOUT,
+    }
 )
 
 
@@ -120,6 +127,48 @@ class PaperTradingService:
         self._notifier = notifier
         self._notify_enabled = True
         self._last_skip_reason: str | None = None
+
+    @property
+    def _scale_out_fractions(self) -> tuple[Decimal, Decimal, Decimal]:
+        parts = self._settings.parsed_scale_out_fractions
+        return (Decimal(str(parts[0])), Decimal(str(parts[1])), Decimal(str(parts[2])))
+
+    @property
+    def _tp_multipliers(self) -> tuple[float, float, float]:
+        return tp_multipliers_from_settings(self._settings)
+
+    def _entry_blackout_active(self, when: datetime) -> bool:
+        spec = self._settings.paper_entry_blackout_utc.strip()
+        if not spec:
+            return False
+        return is_in_utc_blackout(ensure_utc(when), spec)
+
+    async def _symbol_circuit_breach(
+        self,
+        session: AsyncSession,
+        account: PaperAccount,
+        symbol: str,
+        *,
+        when: datetime | None = None,
+    ) -> bool:
+        """True wenn Symbol nach aufeinanderfolgenden Verlusten pausiert ist."""
+        threshold = int(self._settings.paper_symbol_circuit_breaker_losses)
+        pause_hours = int(self._settings.paper_symbol_circuit_breaker_hours)
+        if threshold <= 0 or pause_hours <= 0:
+            return False
+
+        repo = PaperRepository(session)
+        recent = await repo.list_recent_closed_by_symbol(
+            account.id, symbol.upper(), limit=threshold
+        )
+        if len(recent) < threshold:
+            return False
+        if any(float(p.realized_pnl) >= 0 for p in recent):
+            return False
+
+        last_closed = ensure_utc(recent[0].closed_at or recent[0].opened_at)
+        reference = ensure_utc(when or utc_now())
+        return reference < last_closed + timedelta(hours=pause_hours)
 
     def set_notifier(self, notifier: PaperTradeNotifier | None) -> None:
         self._notifier = notifier
@@ -314,6 +363,16 @@ class PaperTradingService:
                 symbol=result.symbol,
                 status=existing.status,
             )
+            return None
+
+        opened_at = opened_at or utc_now()
+        if self._entry_blackout_active(opened_at):
+            self._last_skip_reason = SKIP_ENTRY_BLACKOUT
+            logger.info("paper_skip_entry_blackout", symbol=result.symbol, at=opened_at.isoformat())
+            return None
+        if await self._symbol_circuit_breach(session, account, result.symbol, when=opened_at):
+            self._last_skip_reason = SKIP_SYMBOL_CIRCUIT
+            logger.info("paper_skip_symbol_circuit", symbol=result.symbol)
             return None
 
         if self.retest_enabled:
@@ -582,7 +641,9 @@ class PaperTradingService:
         entry = Decimal(str(arm.fill_price))
         stop = Decimal(str(arm.stop))
         is_long = SignalDirection(position.direction).is_long
-        tp1, tp2, tp3 = levels_from_entry_sl(entry, stop, is_long=is_long)
+        tp1, tp2, tp3 = levels_from_entry_sl(
+            entry, stop, is_long=is_long, multipliers=tuple(Decimal(str(m)) for m in self._tp_multipliers)
+        )
 
         sizing = self._size_position(entry, stop)
         if sizing is None:
@@ -834,6 +895,9 @@ class PaperTradingService:
             return False
         if float(signal.data_quality) < 60.0:
             return False
+        spec = self._settings.paper_entry_blackout_utc.strip()
+        if spec and is_in_utc_blackout(ensure_utc(signal.created_at), spec):
+            return False
         return True
 
     async def open_from_stored_signal(
@@ -867,7 +931,7 @@ class PaperTradingService:
             entry_mid,
             stop_loss,
             is_long=direction.is_long,
-            multipliers=DEFAULT_TP_MULTIPLIERS,
+            multipliers=self._tp_multipliers,
         )
         stop_distance = abs(entry_mid - stop_loss)
         rr = abs(tp2 - entry_mid) / stop_distance if stop_distance > 0 else 0.0
@@ -1316,10 +1380,11 @@ class PaperTradingService:
                 )
                 return True
 
+        scale = self._scale_out_fractions
         levels = (
-            (not position.tp1_filled, float(position.take_profit_1), ExitReason.TAKE_PROFIT_1, SCALE_OUT_FRACTIONS[0], 1),
-            (not position.tp2_filled, float(position.take_profit_2), ExitReason.TAKE_PROFIT_2, SCALE_OUT_FRACTIONS[1], 2),
-            (not position.tp3_filled, float(position.take_profit_3), ExitReason.TAKE_PROFIT_3, SCALE_OUT_FRACTIONS[2], 3),
+            (not position.tp1_filled, float(position.take_profit_1), ExitReason.TAKE_PROFIT_1, scale[0], 1),
+            (not position.tp2_filled, float(position.take_profit_2), ExitReason.TAKE_PROFIT_2, scale[1], 2),
+            (not position.tp3_filled, float(position.take_profit_3), ExitReason.TAKE_PROFIT_3, scale[2], 3),
         )
         for pending, tp, reason, fraction, level in levels:
             if not pending:
@@ -1340,6 +1405,12 @@ class PaperTradingService:
                 position.tp1_filled = True
                 if self._settings.paper_move_stop_to_breakeven:
                     position.current_stop = position.entry_price
+                extend_mult = int(self._settings.paper_expiry_multiplier_after_tp1)
+                if extend_mult > 0 and position.opened_at is not None:
+                    tf = position.timeframe or "1h"
+                    position.expires_at = ensure_utc(position.opened_at) + extend_mult * timeframe_to_timedelta(
+                        tf
+                    )
             elif level == 2:
                 position.tp2_filled = True
             else:

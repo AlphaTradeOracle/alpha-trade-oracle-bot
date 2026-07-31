@@ -27,7 +27,8 @@ from app.repositories.signal_repository import SignalRepository
 from app.repositories.strategy_repository import StrategyRepository
 from app.sentiment.service import SentimentService
 from app.signals.engine import SignalEngine, signal_engine_config_from_settings
-from app.signals.risk import DEFAULT_TP_MULTIPLIERS, RiskConfig, RiskManager
+from app.signals.data_quality import compute_analysis_data_quality
+from app.signals.risk import RiskConfig, RiskManager, tp_multipliers_from_settings
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
@@ -252,9 +253,14 @@ class AnalysisService:
             qualities.append(series.data_quality(min_candles=self._settings.min_candles_required))
 
         base_quality = sum(qualities) / len(qualities) if qualities else 0.0
-        # Fehlende Timeframes senken die Datenqualitaet proportional.
-        coverage = len(indicator_sets) / len(requested) if requested else 0.0
-        data_quality = round(base_quality * coverage, 2)
+        data_quality = compute_analysis_data_quality(
+            qualities,
+            indicator_sets=indicator_sets,
+            primary_timeframe=self._settings.primary_timeframe,
+        )
+        if data_quality == 0.0 and indicator_sets and base_quality > 0:
+            # Setup-TF vorhanden, aber kein hoeherer TF — explizit niedrig halten.
+            data_quality = round(min(base_quality, 59.99), 2)
 
         return indicator_sets, skipped, data_quality
 
@@ -268,7 +274,7 @@ class AnalysisService:
                 max_stop_distance_percent=self._settings.max_stop_distance_percent,
                 reject_wide_stops=self._settings.reject_wide_stops,
                 reference_capital=self._settings.reference_capital,
-                tp_multipliers=DEFAULT_TP_MULTIPLIERS,
+                tp_multipliers=tp_multipliers_from_settings(self._settings),
             )
         )
         config = signal_engine_config_from_settings(

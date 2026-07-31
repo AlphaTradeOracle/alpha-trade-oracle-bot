@@ -15,7 +15,9 @@ die Begründung in natürlicher Sprache.
 
 Ein Signal entsteht niemals aus einem einzelnen Indikator oder einem einzelnen
 Timeframe. Fehlt ein Timeframe (z. B. wegen Datenlücken), wird sein Gewicht auf
-die verbleibenden verteilt und die `data_quality` reduziert.
+die verbleibenden verteilt. Die `data_quality` wird aus den **verfügbaren**
+Timeframes gemittelt (ohne Strafe für fehlende höhere TFs bei jungen Listings),
+setzt aber voraus: Setup-TF (`1h`) **plus** mindestens ein höherer TF (`4h`/`1d`).
 
 ## 2. Kategorien und Gewichtungen
 
@@ -141,20 +143,25 @@ Anschließende Prüfungen:
 - Stop-Abstand > `MAX_STOP_DISTANCE_PERCENT` (Standard 8 %) ⇒ Signal wird
   markiert (`wide_stop`) und in den Gegenargumenten vermerkt
 
-**Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|`:
+**Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|` (Default **1/2/3R**,
+konfigurierbar via `TP_MULTIPLIERS`):
 
 ```
-TP1 = entry + 2 × R
-TP2 = entry + 4 × R
-TP3 = entry + 6 × R
+TP1 = entry + 1 × R
+TP2 = entry + 2 × R
+TP3 = entry + 3 × R
 ```
+
+Paper-Scale-out Default **50/25/25** (`PAPER_SCALE_OUT_FRACTIONS`) — mehr Gewinn
+wird bei TP1 gesichert; Break-Even nach TP1 bleibt aktiv.
 
 Liegt ein Widerstand vor einem TP-Ziel, wird das Ziel knapp darunter gezogen,
 damit es realistisch erreichbar bleibt.
 
 **Risiko-Rendite-Verhältnis.** Referenz ist TP2:
 `R:R = |TP2 − entry| / |entry − stop|`. Unterschreitet dieser Wert das Minimum,
-wird `NO_TRADE` gesetzt.
+wird `NO_TRADE` gesetzt. Seit 2026-07 fließt R:R **nicht** mehr in den Score ein
+(nur Gate — das frühere direction-blinde Scoring mit 3,27 % Gewicht war fehleranfällig).
 
 **Positionsgröße.** Rein informativ, bezogen auf ein Referenzkapital von
 10 000 USDT und `MAX_RISK_PERCENT` (Standard 1 %):
@@ -181,7 +188,7 @@ Ablauf:
 3. Long: Fill wenn eine Folgekerze die Zone `[entry − 1.0×ATR, entry − 0.35×ATR]`
    berührt. Short spiegelbildlich darüber.
 4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
-   TPs neu aus 2/4/6R. Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF).
+   TPs neu aus konfigurierter Leiter (Default 1/2/3R). Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF); nach TP1 optional 48h (`PAPER_EXPIRY_MULTIPLIER_AFTER_TP1`).
 5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
    Fenster abläuft oder keine ATR-Historie verfügbar ist (`exit_reason=retest_skipped`).
 
@@ -206,6 +213,15 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 | Levels | SL + TP1/2/3 gesetzt |
 
 ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
+
+**Verhaltens-Guards (Paper/Scan):**
+
+| Env | Default | Wirkung |
+|---|---|---|
+| `PAPER_SYMBOL_CIRCUIT_BREAKER_LOSSES` | `2` | Nach N Verlusten in Folge auf dem Symbol pausieren |
+| `PAPER_SYMBOL_CIRCUIT_BREAKER_HOURS` | `24` | Pausendauer in Stunden |
+| `SIGNAL_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Keine neuen Signale/Paper-Entries in diesem UTC-Fenster |
+| `PAPER_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Backfill-Gate für Paper (leer = aus) |
 
 **Telegram:** Standard (`TELEGRAM_SIGNAL_DISPATCH=false`) gehen **nur** Paper-Trade-
 Meldungen an alle `TELEGRAM_ALLOWED_CHAT_IDS`: Eroeffnung (IST oder Retest-Fill) und

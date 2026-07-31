@@ -388,9 +388,16 @@ def _process_asset(
         if primary not in indicator_sets:
             continue
 
-        base_quality = sum(qualities) / len(qualities) if qualities else 0.0
-        coverage = len(indicator_sets) / len(requested)
-        data_quality = round(base_quality * coverage, 2)
+        from app.signals.data_quality import compute_analysis_data_quality
+
+        data_quality = compute_analysis_data_quality(
+            qualities,
+            indicator_sets=indicator_sets,
+            primary_timeframe=primary,
+        )
+        if data_quality == 0.0 and qualities:
+            base_quality = sum(qualities) / len(qualities)
+            data_quality = round(min(base_quality, 59.99), 2)
 
         timestamp = _from_ns(int(ts_ns)).to_pydatetime()
         result = signal_engine.generate(
@@ -451,6 +458,32 @@ def _result_row(
         column = CATEGORY_COLUMN.get(component.category)
         if column:
             row[column] = component.raw_score
+
+    # Risiko-Levels und Marktstruktur mitschreiben. Ohne sie laesst sich ein
+    # Exit-Replay nicht rekonstruieren: der Stop haengt am naechsten Support
+    # bzw. Widerstand, nicht nur am ATR-Abstand.
+    risk = result.risk
+    row.update(
+        {
+            "atr_value": primary_indicators.atr_14,
+            "nearest_support": primary_indicators.structure.nearest_support,
+            "nearest_resistance": primary_indicators.structure.nearest_resistance,
+            "entry_low": float(risk.entry_low) if risk is not None else None,
+            "entry_high": float(risk.entry_high) if risk is not None else None,
+            "stop_loss": float(risk.stop_loss) if risk is not None else None,
+            "take_profit_1": float(risk.take_profit_1) if risk is not None else None,
+            "take_profit_2": float(risk.take_profit_2) if risk is not None else None,
+            "take_profit_3": float(risk.take_profit_3) if risk is not None else None,
+            "stop_distance_percent": (
+                float(risk.stop_distance_percent) if risk is not None else None
+            ),
+            "expires_at": (
+                int(pd.Timestamp(result.expires_at).tz_convert("UTC").as_unit("ns").value)
+                if result.expires_at is not None
+                else None
+            ),
+        }
+    )
 
     row.update(
         {
@@ -621,6 +654,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if panel.empty:
         raise RuntimeError("Keine Signale regeneriert — Fenster oder Kerzenabdeckung pruefen")
     panel["ts"] = pd.to_datetime(panel["ts"].astype("int64"), unit="ns", utc=True)
+    if "expires_at" in panel.columns:
+        panel["expires_at"] = pd.to_datetime(panel["expires_at"], unit="ns", utc=True)
     panel = panel.sort_values(["ts", "asset_id"], kind="stable")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
