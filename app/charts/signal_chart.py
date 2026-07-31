@@ -166,7 +166,7 @@ def _render_png(
     tv.style_figure(fig)
     tv.style_axes(ax)
     tv.style_axes(ax_vol)
-    tv.watermark(ax)
+    tv.watermark(ax, alpha=0.15, zoom=0.27)
 
     n = len(candles)
     last_i = n - 1

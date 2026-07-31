@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from PIL import Image
 
 # TradingView Dark Palette
 BG = "#131722"
@@ -24,6 +29,9 @@ WARN = "#f5d76e"
 BRAND = "Alpha Trade Oracle"
 
 DPI = 160
+
+_LOGO_PATH = Path(__file__).resolve().parent / "assets" / "alpha-trade-oracle-logo.png"
+_logo_base: np.ndarray | None = None
 
 
 def style_figure(fig: Figure) -> None:
@@ -49,14 +57,49 @@ def style_axes(ax: Axes, *, show_right: bool = True) -> None:
         ax.spines["right"].set_visible(False)
 
 
-def watermark(ax: Axes, text: str = BRAND, *, alpha: float = 0.055) -> None:
+def _load_logo_base() -> np.ndarray | None:
+    global _logo_base
+    if _logo_base is not None:
+        return _logo_base
+    if not _LOGO_PATH.is_file():
+        return None
+    image = Image.open(_LOGO_PATH).convert("RGBA")
+    image.thumbnail((480, 480), Image.Resampling.LANCZOS)
+    _logo_base = np.asarray(image)
+    return _logo_base
+
+
+def watermark(
+    ax: Axes,
+    text: str = BRAND,
+    *,
+    alpha: float = 0.16,
+    zoom: float = 0.28,
+) -> None:
+    """Dezentes Logo-Wasserzeichen (halbtransparent) in der Chart-Mitte."""
+    base = _load_logo_base()
+    if base is not None:
+        rgba = base.astype(np.float32)
+        rgba[..., 3] = np.clip(rgba[..., 3] * float(alpha), 0, 255)
+        imagebox = OffsetImage(rgba.astype(np.uint8), zoom=zoom)
+        artist = AnnotationBbox(
+            imagebox,
+            (0.5, 0.52),
+            xycoords="axes fraction",
+            frameon=False,
+            pad=0.0,
+            zorder=0.7,
+        )
+        ax.add_artist(artist)
+        return
+
     ax.text(
         0.5,
         0.52,
         text,
         transform=ax.transAxes,
         color=TEXT,
-        alpha=alpha,
+        alpha=max(alpha, 0.05),
         fontsize=26,
         fontweight="bold",
         ha="center",

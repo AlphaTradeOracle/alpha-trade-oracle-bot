@@ -32,6 +32,9 @@ def test_equity_curve_tracks_fills_and_live_mtm() -> None:
 
 
 def test_equity_chart_renders_png() -> None:
+    from app.charts.theme import _LOGO_PATH
+
+    assert _LOGO_PATH.is_file()
     start = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
     points = [
         (start, 5000.0),
