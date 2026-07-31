@@ -746,7 +746,7 @@ def load_signals(path: Path, *, gate: str) -> tuple[list[SignalRow], dict[str, A
     frame = frame[frame["reference_price"] > 0]
     stats["after_levels"] = len(frame)
 
-    ts = pd.to_datetime(frame["ts"], utc=True).astype("int64").to_numpy()
+    ts = pd.to_datetime(frame["ts"], utc=True).map(lambda value: value.value).to_numpy(dtype=np.int64)
     rows = [
         SignalRow(
             asset_id=int(a),
@@ -1118,6 +1118,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             rows,
             series_by_asset,
             limit=args.arm_parity,
+            timeframe=args.timeframe,
             pending_ns=pending_ns,
             seed=args.seed,
         )
