@@ -1,5 +1,6 @@
 import {
   BarChart,
+  Callout,
   Card,
   CardBody,
   CardHeader,
@@ -19,6 +20,7 @@ const KPI = __KPI__ as const;
 const EXIT_MIX = __EXIT_MIX__ as const;
 const EXIT_COUNT_CHART = __EXIT_COUNT_CHART__ as const;
 const EXIT_PNL_CHART = __EXIT_PNL_CHART__ as const;
+const STRATEGY = __STRATEGY__ as const;
 
 const TOP_HEADERS = __TOP_HEADERS__;
 const TOP_ROWS = __TOP_ROWS__ as const;
@@ -49,9 +51,14 @@ export default function PaperLiveDashboard() {
       <Stack gap={6}>
         <H1>Paper Trades — Live Dashboard</H1>
         <Text tone="secondary">
-          Production VPS · paper_accounts + paper_positions · Stand __GENERATED_INLINE__ · Auto-Refresh alle 15 Min
+          Production VPS · Stand __GENERATED_INLINE__ · {STRATEGY.commit} · Regime + Short-Guard + Early Scratch
         </Text>
       </Stack>
+
+      <Callout tone="info">
+        Live: TP 2/4/6R · scale-out 50/25/25 · STRONG only · Long≥75 / Short 18–25 · RSI Short≥33 · Retest
+        0.55×6 · min 1 Bar · Early Scratch 12h/0.5R · Portfolio 10%/10/6.
+      </Callout>
 
       <Grid columns={{ sm: 2, md: 4 }} gap={12}>
         <Stat
@@ -61,46 +68,39 @@ export default function PaperLiveDashboard() {
         />
         <Stat value={money(KPI.realized)} label="Account Realized PnL" tone={toneFor(KPI.realized)} />
         <Stat
-          value={`${KPI.wr}%`}
-          label={`Win Rate (${KPI.wins}W/${KPI.losses}L)`}
-          tone="info"
-        />
-        <Stat value={String(KPI.pf)} label="Profit Factor" tone={KPI.pf >= 1 ? "success" : "danger"} />
-      </Grid>
-
-      <Grid columns={{ sm: 2, md: 4 }} gap={12}>
-        <Stat
           value={`${KPI.totalR >= 0 ? "+" : ""}${KPI.totalR.toFixed(2)}R`}
-          label={`Total R (${KPI.rTrades} Trades mit 1R)`}
+          label={`Total R (${KPI.rTrades} Trades)`}
           tone={toneFor(KPI.totalR)}
         />
         <Stat
           value={`${KPI.expectancyR >= 0 ? "+" : ""}${KPI.expectancyR.toFixed(3)}R`}
-          label="Erwartungswert je Trade"
+          label="Expectancy / Trade"
           tone={toneFor(KPI.expectancyR)}
-        />
-        <Stat
-          value={String(KPI.pfR)}
-          label="Profit Factor (R)"
-          tone={KPI.pfR >= 1 ? "success" : "danger"}
-        />
-        <Stat
-          value={`${KPI.feesR.toFixed(2)}R`}
-          label={`Gebuehren · ${KPI.entries} Entries · max ${KPI.maxOpen} parallel`}
-          tone="info"
         />
       </Grid>
 
       <Grid columns={{ sm: 2, md: 4 }} gap={12}>
-        <Stat value={`$${KPI.cash.toFixed(2)}`} label="Cash Balance" />
-        <Stat value={`$${KPI.book.toFixed(2)}`} label="Book (Start + Realized)" />
-        <Stat value={money(KPI.closedRpnl)} label="Closed RPnL Summe" tone={toneFor(KPI.closedRpnl)} />
+        <Stat
+          value={`${KPI.wr}%`}
+          label={`Win Rate (${KPI.wins}W/${KPI.losses}L)`}
+          tone="info"
+        />
+        <Stat value={String(KPI.pfR)} label="Profit Factor (R)" tone={KPI.pfR >= 1 ? "success" : "danger"} />
+        <Stat value={String(KPI.pf)} label="Profit Factor ($)" tone={KPI.pf >= 1 ? "success" : "danger"} />
         <Stat
           value={`${KPI.openN} / ${KPI.closedN} / ${KPI.pendingN}`}
           label="Open / Closed / Pending"
           tone="info"
         />
       </Grid>
+
+      <Row gap={8} wrap>
+        {STRATEGY.pills.map((p) => (
+          <Pill key={p} tone="info">
+            {p}
+          </Pill>
+        ))}
+      </Row>
 
       <Grid columns={{ sm: 1, md: 2 }} gap={16}>
         <Stack gap={8}>
@@ -111,7 +111,7 @@ export default function PaperLiveDashboard() {
             height={200}
           />
           <Text tone="secondary" size="small">
-            Anzahl geschlossener Trades nach Exit-Grund · n={KPI.closedN} · Quelle: VPS Postgres · {GENERATED}
+            Closed by exit reason · n={KPI.closedN} · VPS Postgres · {GENERATED}
           </Text>
         </Stack>
         <Stack gap={8}>
@@ -123,7 +123,7 @@ export default function PaperLiveDashboard() {
             height={200}
           />
           <Text tone="secondary" size="small">
-            Summe der R-Multiples je Exit-Grund · Quelle: VPS Postgres · {GENERATED}
+            Sum R by exit reason · VPS Postgres · {GENERATED}
           </Text>
         </Stack>
       </Grid>
@@ -153,24 +153,24 @@ export default function PaperLiveDashboard() {
 
       {TOP_ROWS.length > 0 ? (
         <Stack gap={8}>
-          <H2>Top Geschlossene</H2>
+          <H2>Top Closed</H2>
           <Table headers={TOP_HEADERS} rows={TOP_ROWS} striped framed />
         </Stack>
       ) : null}
 
       {BOT_ROWS.length > 0 ? (
         <Stack gap={8}>
-          <H2>Schwächste Geschlossene</H2>
+          <H2>Weakest Closed</H2>
           <Table headers={BOT_HEADERS} rows={BOT_ROWS} striped framed />
         </Stack>
       ) : null}
 
       <Card>
-        <CardHeader>Depot-Konfiguration</CardHeader>
+        <CardHeader>Depot</CardHeader>
         <CardBody>
           <Text size="small">
-            Start ${KPI.start} · risikonormiertes Sizing (1R je Trade) · Leverage 10x ·
-            Cancelled/Skipped {KPI.cancelledN} · Letztes Update {GENERATED}
+            Start ${KPI.start} · 1R=${STRATEGY.riskPerTradeUsd} · Fee {STRATEGY.feePercent}% · Leverage{" "}
+            {STRATEGY.leverage}x · Cancelled {KPI.cancelledN} · {GENERATED}
           </Text>
         </CardBody>
       </Card>

@@ -188,7 +188,7 @@ Ohne Retest (IST) steigen SL-Treffer im Paper deutlich — Retest-Skip bleibt si
 | `PAPER_RETEST_ZONE_NEAR` | `0.55` | Zone-Innenkante × ATR (tieferer Pullback) |
 | `PAPER_RETEST_ZONE_FAR` | `1.0` | Zone-Außenkante × ATR |
 | `PAPER_RETEST_PENDING_MULTIPLIER` | `6` | Pending-Fenster = N × Primary-TF |
-| `PAPER_RETEST_MIN_BARS_IN_ZONE` | `2` | Mindestens N Kerzen in Zone vor Fill |
+| `PAPER_RETEST_MIN_BARS_IN_ZONE` | `1` | Mindestens N Kerzen in Zone vor Fill |
 
 Ablauf:
 
@@ -236,7 +236,7 @@ ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut
 | `REGIME_FILTER_ENABLED` | `true` | BTC-4h-Regime blockiert konträre Richtungen |
 | `REGIME_BTC_SYMBOL` | `BTCUSDT` | Referenz fuer Regime |
 | `REGIME_TIMEFRAME` | `4h` | Timeframe fuer Regime |
-| `PAPER_EARLY_SCRATCH_HOURS` | `8` | Scratch nach N Stunden ohne MFE (0 = aus) |
+| `PAPER_EARLY_SCRATCH_HOURS` | `12` | Scratch nach N Stunden ohne MFE (0 = aus) |
 | `PAPER_EARLY_SCRATCH_MFE_R` | `0.5` | Mindest-MFE in R, sonst Scratch |
 
 **Telegram:** Standard (`TELEGRAM_SIGNAL_DISPATCH=false`) gehen **nur** Paper-Trade-

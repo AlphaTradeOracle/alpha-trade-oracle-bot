@@ -28,7 +28,7 @@ TIMELINE = [
         "wr": 37.9,
         "pf": 1.16,
         "rpnl": 132.6,
-        "note": "Rescore + rebuild with c8460e6 indicator weights",
+        "note": "Rescore + rebuild with indicator weights",
     },
     {
         "phase": "ADX ≥ 35 (rejected)",
@@ -39,7 +39,46 @@ TIMELINE = [
         "rpnl": -133.5,
         "note": "Live rebuild failed — counterfactual sim only; reverted to ADX=20",
     },
+    {
+        "phase": "Risk + TP ladder",
+        "date": "2026-07-30",
+        "closed": 61,
+        "wr": 39.3,
+        "pf": 1.50,
+        "rpnl": 423.9,
+        "note": "Risk-normalized sizing · TP 2/4/6R 50/25/25 confirmed by exit replay",
+    },
+    {
+        "phase": "Retest1 + Scratch12h",
+        "date": "2026-07-31",
+        "closed": 0,
+        "wr": 0.0,
+        "pf": 0.0,
+        "rpnl": 0.0,
+        "note": "6M sweep: min_bars=1 (+39R) · scratch 12h (+11R); paper ledger rebuilt",
+    },
 ]
+
+STRATEGY = {
+    "commit": "retest1+scratch12h",
+    "riskPerTradeUsd": 50,
+    "feePercent": 0.05,
+    "leverage": 10,
+    "universeTarget": 300,
+    "scanMinutes": 30,
+    "pills": [
+        "BTC regime filter",
+        "Short RSI≥33 · Score 18–25",
+        "Long Score≥75 · STRONG",
+        "TP 2/4/6R · 50/25/25",
+        "Retest 0.55×6 · min 1 bar",
+        "Early scratch 12h / 0.5R",
+        "Portfolio 10% / 10 / 6",
+        "Blackout 21:00–01:00 UTC",
+        "Circuit breaker 2L/24h",
+        "Telegram: paper opens only",
+    ],
+}
 
 
 def parse_export(text: str) -> dict[str, object]:
@@ -146,6 +185,18 @@ def parse_export(text: str) -> dict[str, object]:
     open_upnl = sum(t["rpnl"] for t in trades if t["status"] == "open")
     equity = cash + open_upnl
 
+    def _side_stats(prefix: str) -> dict[str, float | int]:
+        xs = [t for t in trades if t["status"] == "closed" and str(t["side"]).startswith(prefix)]
+        wins = sum(1 for t in xs if float(t["rpnl"]) > 0)
+        rs = [float(t["r"]) for t in xs if t["r"] is not None]
+        n = len(xs)
+        return {
+            "n": n,
+            "wr": round(100.0 * wins / n, 1) if n else 0.0,
+            "totalR": round(sum(rs), 3),
+            "pnl": round(sum(float(t["rpnl"]) for t in xs), 2),
+        }
+
     return {
         "generated": meta,
         "account": account,
@@ -175,6 +226,7 @@ def parse_export(text: str) -> dict[str, object]:
             "entries": conc["entries"],
             "maxOpen": conc["maxOpen"],
         },
+        "side": {"long": _side_stats("STRONG_LONG"), "short": _side_stats("STRONG_SHORT")},
         "exits": exits,
         "trades": trades,
     }
@@ -257,14 +309,14 @@ def render_canvas(data: dict[str, object]) -> str:
     ]
     timeline_rows.append(
         [
-            "Current (ADX=20, MTF v2)",
+            "Current (eff7968 gates)",
             generated.split()[0] if generated else "—",
             str(kpi["closedN"]),
             f"{kpi['wr']}%",
             str(kpi["pf"]),
             f"{kpi['totalR']:+.2f}R",
             f"${kpi['closedRpnl']:+.2f}",
-            "Live VPS ledger after revert + rebuild",
+            "Regime + short guard + early scratch live; ledger still mixed-era",
         ]
     )
 
@@ -273,6 +325,7 @@ def render_canvas(data: dict[str, object]) -> str:
         {"label": "Baseline", "value": 1.16},
         {"label": "MTF v2", "value": 1.16},
         {"label": "ADX35 rej.", "value": 0.41},
+        {"label": "Risk+TP", "value": 1.50},
         {"label": "Current", "value": float(kpi["pf"])},
     ]
 
@@ -282,6 +335,8 @@ def render_canvas(data: dict[str, object]) -> str:
     replacements = {
         "__GENERATED__": json.dumps(generated),
         "__KPI__": json.dumps(kpi, indent=2),
+        "__SIDE__": json.dumps(data["side"], indent=2),
+        "__STRATEGY__": json.dumps(STRATEGY, indent=2),
         "__EXIT_MIX__": json.dumps(exits, indent=2),
         "__EXIT_COUNT_CHART__": json.dumps(exit_chart, indent=2),
         "__PF_TIMELINE__": json.dumps(pf_timeline, indent=2),

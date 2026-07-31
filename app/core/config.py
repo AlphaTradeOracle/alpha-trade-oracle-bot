@@ -192,13 +192,13 @@ class Settings(BaseSettings):
     paper_retest_zone_far: float = 1.0
     paper_retest_pending_multiplier: int = 6
     #: Mindestanzahl aufeinanderfolgender Kerzen in der Retest-Zone vor Fill.
-    paper_retest_min_bars_in_zone: int = 2
+    paper_retest_min_bars_in_zone: int = 1
     #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
     backtest_retest_entry_enabled: bool = True
     #: Paper-Trade-Telegram-Chart: leer = naechst hoeherer TF als Setup (z. B. 1h -> 4h).
     paper_telegram_chart_timeframe: str = ""
     #: Early-Scratch: Position schliessen wenn MFE < Schwelle nach N Stunden (0 = aus).
-    paper_early_scratch_hours: int = 8
+    paper_early_scratch_hours: int = 12
     paper_early_scratch_mfe_r: float = 0.5
 
     # --- HTTP --------------------------------------------------------------

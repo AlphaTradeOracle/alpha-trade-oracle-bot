@@ -140,7 +140,7 @@ class TestArmRetestEntry:
         )
         assert arm.status == "skipped_expiry"
 
-    def test_requires_two_bars_in_zone_by_default(self) -> None:
+    def test_fills_on_first_bar_in_zone_by_default(self) -> None:
         candles = _history(21, base=100.0)
         arm_time = candles[-1].open_time
         t1 = arm_time + timedelta(hours=1)
@@ -153,6 +153,23 @@ class TestArmRetestEntry:
             timeframe="1h",
             candles=candles,
         )
+        assert arm_one.filled
+        assert arm_one.bars_waited == 1
+
+    def test_requires_two_bars_when_configured(self) -> None:
+        candles = _history(21, base=100.0)
+        arm_time = candles[-1].open_time
+        t1 = arm_time + timedelta(hours=1)
+        candles.append(_c(t1, high=100.0, low=98.5, close=99.0))
+        arm_one = arm_retest_entry(
+            direction=SignalDirection.STRONG_LONG,
+            arm_time=arm_time,
+            reference_entry=100.0,
+            original_stop=95.0,
+            timeframe="1h",
+            candles=candles,
+            config=RetestEntryConfig(min_bars_in_zone=2),
+        )
         assert arm_one.status == "pending"
 
         t2 = arm_time + timedelta(hours=2)
@@ -164,5 +181,6 @@ class TestArmRetestEntry:
             original_stop=95.0,
             timeframe="1h",
             candles=candles,
+            config=RetestEntryConfig(min_bars_in_zone=2),
         )
         assert arm_two.filled

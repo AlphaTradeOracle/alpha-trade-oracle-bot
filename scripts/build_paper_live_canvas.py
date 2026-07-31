@@ -11,6 +11,22 @@ DEFAULT_OUT = Path(
     r"C:\Users\Admin\.cursor\projects\c-Users-Admin-Projects-alpha-trade-oracle-bot\canvases\paper-live-dashboard.canvas.tsx"
 )
 
+STRATEGY = {
+    "commit": "retest1+scratch12h",
+    "riskPerTradeUsd": 50,
+    "feePercent": 0.05,
+    "leverage": 10,
+    "pills": [
+        "BTC regime filter",
+        "Short RSI≥33 · Score 18–25",
+        "Long Score≥75 · STRONG",
+        "TP 2/4/6R · 50/25/25",
+        "Retest 0.55×6 · min 1 bar",
+        "Early scratch 12h / 0.5R",
+        "Portfolio 10% / 10 / 6",
+    ],
+}
+
 
 def parse_export(text: str) -> dict[str, object]:
     meta = "unknown"
@@ -181,6 +197,7 @@ def render_canvas(data: dict[str, object]) -> str:
     replacements = {
         "__GENERATED__": json.dumps(generated),
         "__KPI__": kpi_json,
+        "__STRATEGY__": json.dumps(STRATEGY, indent=2),
         "__EXIT_MIX__": exit_json,
         "__EXIT_COUNT_CHART__": exit_chart_json,
         "__EXIT_PNL_CHART__": exit_pnl_json,
