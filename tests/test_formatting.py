@@ -76,6 +76,9 @@ class TestSignalMessage:
 
     def test_contains_core_signal_fields(self) -> None:
         message = format_signal_message(make_result())
+        plain = message.replace("\\", "")
+        assert "Alpha Trade Oracle" in plain
+        assert plain.index("Alpha Trade Oracle") < plain.index("BTC/USDT")
         assert "BTC/USDT" in message
         assert "LONG" in message
         assert "Confidence: 72/100" in message

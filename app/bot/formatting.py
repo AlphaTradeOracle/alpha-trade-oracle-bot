@@ -86,6 +86,7 @@ def format_signal_message(
     symbol_label = _pretty_symbol(result.symbol)
     direction = _DIRECTION_LABELS[result.direction]
     lines: list[str] = [
+        f"*{escape_markdown_v2('Alpha Trade Oracle')}*",
         f"*{escape_markdown_v2(symbol_label)}* · *{escape_markdown_v2(direction)}*",
         escape_markdown_v2(f"Confidence: {result.score:.0f}/100"),
     ]
