@@ -489,8 +489,6 @@ def format_paper_digest_message(
         lines.append(
             escape_markdown_v2(f"Opened {snapshot.hour_opened_count}")
         )
-    if summary.pending_positions > 0:
-        lines.append(escape_markdown_v2(f"Signal {summary.pending_positions}"))
 
     open_header = (
         f"OFFEN ({summary.open_positions})  "
@@ -538,16 +536,7 @@ def format_paper_digest_message(
         if rest_c > 0:
             lines.append(escape_markdown_v2(f"+{rest_c} weitere"))
 
-    lines += [
-        "",
-        escape_markdown_v2(
-            f"Risiko ${format_price(snapshot.risk_per_trade, 0)}  ·  "
-            f"{snapshot.leverage:.0f}x  ·  "
-            f"Cap ${format_price(snapshot.max_notional, 0)}  ·  "
-            f"Open {summary.open_positions}/{snapshot.max_open}"
-        ),
-        f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
-    ]
+    lines += ["", f"⚠️ {escape_markdown_v2(DISCLAIMER)}"]
     return "\n".join(lines)
 
 
