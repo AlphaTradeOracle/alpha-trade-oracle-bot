@@ -96,7 +96,7 @@ def _render(
     fig, ax = plt.subplots(figsize=FIGURE_SIZE)
     tv.style_figure(fig)
     tv.style_axes(ax)
-    tv.watermark(ax, alpha=0.32, zoom=0.191, loc="top_left", xycoords="figure fraction")
+    tv.watermark(ax, alpha=0.70, zoom=0.191, loc="top_left", xycoords="figure fraction")
 
     # Soft glow under line
     ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
@@ -147,11 +147,11 @@ def _render(
     )
     ax.scatter([xs[-1]], [last], s=180, color=accent, alpha=0.18, zorder=4)
 
-    # Header: Titel links; Gesamtwert mittig-rechts; 1h/24h/7d ganz rechts
-    fig.subplots_adjust(left=0.05, right=0.84, top=0.84, bottom=0.14)
+    # Header: Titel links; 1H|24H|7D|Gesamtwert rechts (Dollar, darunter %)
+    fig.subplots_adjust(left=0.05, right=0.84, top=0.80, bottom=0.14)
     fig.text(
         0.225,
-        0.935,
+        0.945,
         title,
         color=tv.TEXT,
         fontsize=15,
@@ -161,7 +161,7 @@ def _render(
     )
     fig.text(
         0.225,
-        0.895,
+        0.905,
         subtitle,
         color=tv.MUTED,
         fontsize=10,
@@ -170,14 +170,8 @@ def _render(
     )
 
     chip_color = tv.UP if up else tv.DOWN
-    delta_label = (
-        f"{delta:+,.2f}  ({delta_pct:+.1f}%)"
-        .replace(",", "X")
-        .replace(".", ",")
-        .replace("X", ".")
-    )
 
-    # 1H | 24H | 7D | Gesamtwert — Gesamtwert am rechten Rand, Fenster gleichmaessig links
+    # 1H | 24H | 7D | Gesamtwert — Dollar mit $-Suffix, darunter Prozent
     cols = list(windows[-3:]) if windows else []
     right = 0.985
     win_w = 0.095
@@ -187,22 +181,33 @@ def _render(
     for i, (label, eq_delta) in enumerate(cols):
         cx = cluster_left + win_w * (i + 0.5)
         color = tv.UP if eq_delta >= 0 else tv.DOWN
+        pct = (eq_delta / initial * 100.0) if initial else 0.0
         fig.text(
             cx,
-            0.945,
+            0.955,
             str(label).upper(),
             color=tv.MUTED,
-            fontsize=8,
+            fontsize=7.5,
             fontweight="bold",
             ha="center",
             va="center",
         )
         fig.text(
             cx,
-            0.900,
-            _fmt_signed_usd(eq_delta),
+            0.920,
+            _fmt_signed_usd_suffix(eq_delta),
             color=color,
             fontsize=9.5,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
+        fig.text(
+            cx,
+            0.885,
+            _fmt_signed_pct(pct),
+            color=color,
+            fontsize=8,
             fontweight="bold",
             ha="center",
             va="center",
@@ -210,8 +215,8 @@ def _render(
 
     fig.text(
         right,
-        0.945,
-        tv.fmt_usd(last),
+        0.935,
+        _fmt_usd_suffix(last),
         color=tv.TEXT,
         fontsize=12,
         fontweight="bold",
@@ -220,8 +225,8 @@ def _render(
     )
     fig.text(
         right,
-        0.900,
-        delta_label,
+        0.895,
+        _fmt_signed_pct(delta_pct),
         color=chip_color,
         fontsize=9.5,
         fontweight="bold",
@@ -235,11 +240,26 @@ def _render(
     return buffer.getvalue()
 
 
-def _fmt_signed_usd(value: float) -> str:
-    """Kompaktes ``+$12,50`` / ``-$3,00`` fuer Chart-Header."""
+def _fmt_de_number(value: float, *, decimals: int = 2) -> str:
+    body = f"{abs(value):,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return body
+
+
+def _fmt_signed_usd_suffix(value: float) -> str:
+    """Kompaktes ``+12,50$`` / ``-3,00$`` fuer Chart-Header."""
     sign = "+" if value >= 0 else "-"
-    body = f"{abs(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"{sign}${body}"
+    return f"{sign}{_fmt_de_number(value)}$"
+
+
+def _fmt_usd_suffix(value: float) -> str:
+    """Kompaktes ``5.011,60$`` fuer Chart-Header."""
+    return f"{_fmt_de_number(value)}$"
+
+
+def _fmt_signed_pct(value: float) -> str:
+    """Kompaktes ``+0,3%`` / ``-1,2%`` fuer Chart-Header."""
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}{_fmt_de_number(value, decimals=1)}%"
 
 
 def _equity_tag(
