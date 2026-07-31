@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence
 
 import matplotlib
@@ -88,6 +88,12 @@ def _render(
 ) -> bytes:
     xs = [p[0] for p in points]
     ys = np.asarray([p[1] for p in points], dtype=float)
+    # Always frame the last 7 days (flat at initial before account/history starts).
+    view_end = xs[-1]
+    view_start = view_end - timedelta(days=7)
+    if xs[0] > view_start:
+        xs = [view_start, *xs]
+        ys = np.concatenate([[float(initial)], ys])
     last = float(ys[-1])
     up = last >= initial
     accent = tv.UP if up else tv.DOWN
@@ -117,17 +123,17 @@ def _render(
     pad = max((y_max - y_min) * 0.20, abs(initial) * 0.004, 10.0)
     ax.set_ylim(y_min - pad, y_max + pad)
 
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m\n%H:%M"))
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=3, maxticks=7))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _p: tv.fmt_usd(float(v), decimals=0)))
     ax.tick_params(axis="x", labelsize=8, pad=6)
 
-    # Right-side TV tags
-    x_span = mdates.date2num(xs[-1]) - mdates.date2num(xs[0])
-    tag_x = mdates.date2num(xs[-1]) + max(x_span * 0.02, 0.01)
+    # Right-side TV tags; x-range fixed to last 7 days
+    x_span = mdates.date2num(view_end) - mdates.date2num(view_start)
+    tag_x = mdates.date2num(view_end) + max(x_span * 0.02, 0.01)
     ax.set_xlim(
-        mdates.date2num(xs[0]) - max(x_span * 0.03, 0.01),
-        mdates.date2num(xs[-1]) + max(x_span * 0.22, 0.08),
+        mdates.date2num(view_start),
+        mdates.date2num(view_end) + max(x_span * 0.22, 0.08),
     )
 
     delta = last - initial
@@ -171,11 +177,11 @@ def _render(
 
     chip_color = tv.UP if up else tv.DOWN
 
-    # 1H | 24H | 7D | Gesamtwert — Dollar mit $-Suffix, darunter Prozent
-    cols = list(windows[-3:]) if windows else []
+    # 1H | 24H | 7D | 30D | TOTAL — Dollar mit $-Suffix, darunter Prozent
+    cols = list(windows[-4:]) if windows else []
     right = 0.985
-    win_w = 0.095
-    total_w = 0.13
+    win_w = 0.078
+    total_w = 0.12
     cluster_left = right - total_w - win_w * len(cols)
 
     for i, (label, eq_delta) in enumerate(cols):
@@ -213,33 +219,43 @@ def _render(
             va="center",
         )
 
-    # TOTAL: $ PnL since start, percent underneath (same layout as 1H/24H/7D)
+    # TOTAL: equity · $ PnL since start · return %
     fig.text(
         right,
-        0.955,
+        0.968,
         "TOTAL",
         color=tv.MUTED,
-        fontsize=7.5,
+        fontsize=6.5,
         fontweight="bold",
         ha="right",
         va="center",
     )
     fig.text(
         right,
-        0.920,
+        0.940,
+        _fmt_usd_suffix(last),
+        color=tv.TEXT,
+        fontsize=9.0,
+        fontweight="bold",
+        ha="right",
+        va="center",
+    )
+    fig.text(
+        right,
+        0.910,
         _fmt_signed_usd_suffix(delta),
         color=chip_color,
-        fontsize=9.5,
+        fontsize=8.5,
         fontweight="bold",
         ha="right",
         va="center",
     )
     fig.text(
         right,
-        0.885,
+        0.880,
         _fmt_signed_pct(delta_pct),
         color=chip_color,
-        fontsize=8,
+        fontsize=7.5,
         fontweight="bold",
         ha="right",
         va="center",

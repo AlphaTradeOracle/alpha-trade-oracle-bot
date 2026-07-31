@@ -56,7 +56,7 @@ def test_equity_chart_renders_with_window_stats() -> None:
     png = build_paper_equity_chart(
         points,
         initial=5000.0,
-        windows=[("1h", 12.5), ("24h", 40.0), ("7d", 142.3)],
+        windows=[("1h", 12.5), ("24h", 40.0), ("7d", 142.3), ("30d", 142.3)],
     )
     assert png is not None
     assert png[:8] == b"\x89PNG\r\n\x1a\n"

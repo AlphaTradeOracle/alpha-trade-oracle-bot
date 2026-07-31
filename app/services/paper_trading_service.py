@@ -129,7 +129,7 @@ class PaperDigestSnapshot:
     max_open: int
     #: Zeitreihe Equity = Cash + Margin + Open PnL (rekonstruiert + Live-Punkt).
     equity_curve: list[tuple[datetime, float]] | None = None
-    #: Fenster: 1h / 24h / 7d.
+        #: Fenster: 1h / 24h / 7d / 30d.
     windows: list[PaperDigestWindowStats] | None = None
 
 
@@ -1596,23 +1596,30 @@ class PaperTradingService:
         since_1h = now - window
         since_24h = now - timedelta(hours=24)
         since_7d = now - timedelta(days=7)
+        since_30d = now - timedelta(days=30)
         account = await self.get_or_create_account(session)
         repo = PaperRepository(session)
         open_positions = await repo.list_open_positions(account.id)
-        week_closed = await repo.list_closed_since(account.id, since_7d, limit=500)
+        month_closed = await repo.list_closed_since(account.id, since_30d, limit=2000)
+        week_closed = [
+            pos
+            for pos in month_closed
+            if pos.closed_at is not None and pos.closed_at >= since_7d
+        ]
         hour_closed = [
             pos
-            for pos in week_closed
+            for pos in month_closed
             if pos.closed_at is not None and pos.closed_at >= since_1h
         ]
         day_closed = [
             pos
-            for pos in week_closed
+            for pos in month_closed
             if pos.closed_at is not None and pos.closed_at >= since_24h
         ]
         hour_opened = await repo.count_opened_since(account.id, since_1h)
         day_opened = await repo.count_opened_since(account.id, since_24h)
         week_opened = await repo.count_opened_since(account.id, since_7d)
+        month_opened = await repo.count_opened_since(account.id, since_30d)
         marks = {key.upper(): value for key, value in (prices or {}).items()}
 
         open_rows: list[PaperDigestOpenRow] = []
@@ -1719,6 +1726,14 @@ class PaperTradingService:
                 week_closed,
                 opened_count=week_opened,
                 since=since_7d,
+                live_equity=float(summary.equity),
+                equity_curve=equity_curve,
+            ),
+            self._digest_window_stats(
+                "30d",
+                month_closed,
+                opened_count=month_opened,
+                since=since_30d,
                 live_equity=float(summary.equity),
                 equity_curve=equity_curve,
             ),
