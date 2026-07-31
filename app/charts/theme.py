@@ -74,7 +74,7 @@ def watermark(
     text: str = BRAND,
     *,
     alpha: float = 0.22,
-    zoom: float = 0.155,
+    zoom: float = 0.140,
     loc: str = "top_left",
     xycoords: str = "figure fraction",
     zorder: float = 12,
