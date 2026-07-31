@@ -80,6 +80,16 @@ class TestSignalMessage:
         assert "LONG" in message
         assert "Score: 72/100" in message
 
+    def test_omits_levels_when_chart_carries_them(self) -> None:
+        message = format_signal_message(make_result(), include_levels=False)
+        assert "BTC/USDT" in message
+        assert "LONG" in message
+        assert "Score:" not in message
+        assert "Entry" not in message
+        assert "TP1" not in message
+        assert "TP2" not in message
+        assert "TP3" not in message
+
     def test_contains_risk_levels_for_actionable_signal(self) -> None:
         message = format_signal_message(make_result())
         assert "Entry" in message
@@ -149,6 +159,23 @@ class TestLLMIsolation:
         # Die Risikozeilen tragen die berechneten Werte, nicht die des LLM.
         assert escape_markdown_v2(format_price(result.risk.stop_loss, 2)) in message
         # Halluzinierte Kurse duerfen nicht als SL/Entry erscheinen.
+        before_confirmations = message.split("*Bestaetigungen:*")[0]
+        assert escape_markdown_v2("111.111") not in before_confirmations
+        assert escape_markdown_v2("999.999") not in before_confirmations
+
+    def test_llm_cannot_inject_levels_when_chart_owns_them(self) -> None:
+        analysis = LLMAnalysisResponse(
+            summary="Entry bei 999.999, SL bei 111.111.",
+            reasons=["Erfundener Grund"],
+            risks=["Erfundenes Risiko"],
+        )
+        message = format_signal_message(
+            make_result(entry_mid=40_000.0),
+            llm_analysis=analysis,
+            include_levels=False,
+        )
+        assert "Entry" not in message
+        assert "TP1" not in message
         before_confirmations = message.split("*Bestaetigungen:*")[0]
         assert escape_markdown_v2("111.111") not in before_confirmations
         assert escape_markdown_v2("999.999") not in before_confirmations

@@ -81,19 +81,28 @@ def format_signal_message(
     price_precision: int = 2,
     display_timezone: str = "Europe/Berlin",
     llm_analysis: LLMAnalysisResponse | None = None,
+    include_levels: bool = True,
 ) -> str:
-    """Kompakte Signal-Nachricht: Levels + Plan + Bestaetigungen."""
+    """Kompakte Signal-Nachricht: optional Levels, sonst Bestaetigungen/Risiken.
+
+    ``include_levels=False`` wenn Score/Entry/SL/TP bereits im Chart stehen.
+    """
     symbol_label = _pretty_symbol(result.symbol)
     direction = _DIRECTION_LABELS[result.direction]
     lines: list[str] = [
         f"*{escape_markdown_v2(symbol_label)}* · *{escape_markdown_v2(direction)}*",
-        escape_markdown_v2(f"Score: {result.score:.0f}/100"),
     ]
+    if include_levels:
+        lines.append(escape_markdown_v2(f"Score: {result.score:.0f}/100"))
 
     if result.direction == SignalDirection.NO_TRADE and result.no_trade_reason:
         lines += ["", f"*Grund:* {escape_markdown_v2(result.no_trade_reason)}"]
 
-    if result.risk is not None and result.direction.is_actionable:
+    if (
+        include_levels
+        and result.risk is not None
+        and result.direction.is_actionable
+    ):
         risk = result.risk
         quote = _quote_asset(result.symbol)
         lines += [

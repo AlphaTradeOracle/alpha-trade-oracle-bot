@@ -66,6 +66,8 @@ def build_signal_chart(outcome: AnalysisOutcome) -> bytes | None:
             tp2=float(risk.take_profit_2),
             tp3=float(risk.take_profit_3),
             price_precision=outcome.price_precision,
+            risk_reward_ratio=float(risk.risk_reward_ratio),
+            stop_distance_percent=float(risk.stop_distance_percent),
         )
     except Exception as exc:
         logger.warning("signal_chart_render_failed", symbol=result.symbol, error=str(exc))
@@ -88,6 +90,11 @@ def build_paper_trade_chart(
 
     entry = float(position.entry_price)
     spread = max(abs(entry) * 0.0005, 10 ** (-price_precision))
+    stop = float(position.stop_loss)
+    tp2 = float(position.take_profit_2)
+    risk_dist = abs(entry - stop)
+    rr = (abs(tp2 - entry) / risk_dist) if risk_dist > 0 else 0.0
+    stop_pct = (risk_dist / abs(entry) * 100.0) if entry else 0.0
 
     try:
         return build_trade_levels_chart(
@@ -98,11 +105,13 @@ def build_paper_trade_chart(
             candles=candles,
             entry_low=entry - spread,
             entry_high=entry + spread,
-            stop_loss=float(position.stop_loss),
+            stop_loss=stop,
             tp1=float(position.take_profit_1),
-            tp2=float(position.take_profit_2),
+            tp2=tp2,
             tp3=float(position.take_profit_3),
             price_precision=price_precision,
+            risk_reward_ratio=rr,
+            stop_distance_percent=stop_pct,
         )
     except Exception as exc:
         logger.warning("paper_trade_chart_render_failed", symbol=position.symbol, error=str(exc))
@@ -123,6 +132,8 @@ def build_trade_levels_chart(
     tp2: float,
     tp3: float,
     price_precision: int,
+    risk_reward_ratio: float = 0.0,
+    stop_distance_percent: float = 0.0,
 ) -> bytes:
     return _render_png(
         symbol=symbol,
@@ -137,6 +148,8 @@ def build_trade_levels_chart(
         tp2=tp2,
         tp3=tp3,
         price_precision=price_precision,
+        risk_reward_ratio=risk_reward_ratio,
+        stop_distance_percent=stop_distance_percent,
     )
 
 
@@ -154,6 +167,8 @@ def _render_png(
     tp2: float,
     tp3: float,
     price_precision: int,
+    risk_reward_ratio: float = 0.0,
+    stop_distance_percent: float = 0.0,
 ) -> bytes:
     fig, (ax, ax_vol) = plt.subplots(
         2,
@@ -327,9 +342,9 @@ def _render_png(
     direction_label = direction.replace("_", " ").upper()
     side_color = tv.UP if is_long else tv.DOWN
 
-    # Header-Leiste (Text rechts vom Logo oben links)
+    # Header: Symbol + Performance (R:R / SL%) rechts vom Logo; Richtung + Score rechts
     ax.set_title("")
-    fig.subplots_adjust(left=0.04, right=0.86, top=0.90, bottom=0.07, hspace=0.04)
+    fig.subplots_adjust(left=0.04, right=0.86, top=0.88, bottom=0.07, hspace=0.04)
     fig.text(
         0.145,
         0.955,
@@ -340,9 +355,28 @@ def _render_png(
         ha="left",
         va="center",
     )
+    rr = risk_reward_ratio
+    if rr <= 0:
+        risk_dist = abs(entry_mid - stop_loss)
+        rr = (abs(tp2 - entry_mid) / risk_dist) if risk_dist > 0 else 0.0
+    stop_pct = stop_distance_percent
+    if stop_pct <= 0 and abs(entry_mid) > 0:
+        stop_pct = abs(entry_mid - stop_loss) / abs(entry_mid) * 100.0
+    perf_bits = [f"R:R {rr:.2f}"]
+    if stop_pct > 0:
+        perf_bits.append(f"SL {stop_pct:.2f}%".replace(".", ","))
+    fig.text(
+        0.145,
+        0.915,
+        "  ·  ".join(perf_bits),
+        color=tv.MUTED,
+        fontsize=10,
+        ha="left",
+        va="center",
+    )
     fig.text(
         0.68,
-        0.955,
+        0.945,
         f" {direction_label} ",
         color="#ffffff",
         fontsize=9.5,
@@ -358,7 +392,7 @@ def _render_png(
     )
     fig.text(
         0.86,
-        0.955,
+        0.945,
         f"{score:.0f}/100",
         color=tv.WARN,
         fontsize=13,
