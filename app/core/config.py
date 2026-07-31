@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     max_atr_percent: float = 12.0
     reference_capital: float = 10_000.0
     #: Take-Profit-Leiter als R-Multiples (kommasepariert, genau drei Werte).
-    tp_multipliers: str = "2.0,4.0,6.0"
+    tp_multipliers: str = "1.5,2.5,4.0"
     #: Scale-out-Anteile je TP (Summe 1.0). Default 50/25/25 — mehr Gewinn bei TP1.
     paper_scale_out_fractions: str = "0.5,0.25,0.25"
     #: Nach N aufeinanderfolgenden Verlusten auf demselben Symbol pausieren (0 = aus).

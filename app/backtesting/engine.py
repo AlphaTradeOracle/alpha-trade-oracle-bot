@@ -78,7 +78,7 @@ class BacktestConfig:
     #: Nach TP1 Stop auf Entry (Break-even) ziehen.
     move_stop_to_breakeven_after_tp1: bool = True
     #: Take-Profit als Vielfache von R (Stop-Abstand).
-    tp_multipliers: tuple[float, float, float] = (2.0, 4.0, 6.0)
+    tp_multipliers: tuple[float, float, float] = (1.5, 2.5, 4.0)
     #: Retest/Pullback-Entry statt naechster Primary-Open (IST).
     retest_entry_enabled: bool = True
     retest_zone_near: float = 0.35

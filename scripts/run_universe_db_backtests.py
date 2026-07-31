@@ -457,7 +457,7 @@ async def main() -> int:
             "rsi_short_min": settings.signal_rsi_short_min,
             "block_range": settings.signal_block_range_market,
             "cooldown_minutes": settings.signal_cooldown_minutes,
-            "tp_multipliers": [2.0, 4.0, 6.0],
+            "tp_multipliers": [1.5, 2.5, 4.0],
             "scale_out": True,
             "be_after_tp1": True,
         },
