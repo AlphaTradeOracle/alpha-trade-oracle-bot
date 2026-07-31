@@ -426,9 +426,16 @@ def format_paper_digest_message(
     """Stuendlicher Paper-Performance-Digest fuer Telegram."""
     summary = snapshot.summary
     stamp = format_display_time(snapshot.as_of, display_timezone)
+    equity_delta = summary.equity - summary.initial_balance
     lines: list[str] = [
         f"*{escape_markdown_v2('Performance Dashboard')}*",
         escape_markdown_v2(f"Alpha Trade Oracle  ·  {stamp}"),
+        "",
+        escape_markdown_v2(
+            f"Wert  ${format_price(summary.equity, 2)}  ·  "
+            f"{_signed_usd(equity_delta)}  ({snapshot.equity_return_pct:+.1f}%)"
+        ),
+        escape_markdown_v2("Cash + Open PnL"),
         "",
         f"*{escape_markdown_v2('DEPOT')}*",
         escape_markdown_v2(

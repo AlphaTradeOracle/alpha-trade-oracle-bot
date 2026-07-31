@@ -135,7 +135,7 @@ def _render(
     )
     ax.scatter([xs[-1]], [last], s=180, color=accent, alpha=0.18, zorder=4)
 
-    # Header
+    # Header: links Titel, rechts Gesamtwert neben Gewinn/Verlust
     fig.subplots_adjust(left=0.05, right=0.84, top=0.86, bottom=0.14)
     fig.text(
         0.05,
@@ -157,21 +157,37 @@ def _render(
         va="center",
     )
     fig.text(
-        0.84,
+        0.52,
         0.935,
         tv.BRAND,
         color=tv.MUTED,
-        fontsize=10,
-        ha="right",
+        fontsize=9,
+        ha="left",
         va="center",
     )
 
-    # Delta chip
     chip_color = tv.UP if up else tv.DOWN
+    # Gesamtwert (Cash + Margin + Open PnL) links neben dem PnL
+    fig.text(
+        0.84,
+        0.935,
+        tv.fmt_usd(last),
+        color=tv.TEXT,
+        fontsize=14,
+        fontweight="bold",
+        ha="right",
+        va="center",
+    )
+    delta_label = (
+        f"{delta:+,.2f}  ({delta_pct:+.1f}%)"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
     fig.text(
         0.84,
         0.895,
-        f"{delta:+,.2f} USD".replace(",", "X").replace(".", ",").replace("X", "."),
+        delta_label,
         color=chip_color,
         fontsize=11,
         fontweight="bold",
