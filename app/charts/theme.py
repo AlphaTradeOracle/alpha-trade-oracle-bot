@@ -73,10 +73,23 @@ def watermark(
     ax: Axes,
     text: str = BRAND,
     *,
-    alpha: float = 0.16,
-    zoom: float = 0.28,
+    alpha: float = 0.22,
+    zoom: float = 0.11,
+    loc: str = "top_left",
+    xycoords: str = "figure fraction",
+    zorder: float = 12,
 ) -> None:
-    """Dezentes Logo-Wasserzeichen (halbtransparent) in der Chart-Mitte."""
+    """Dezentes Logo-Wasserzeichen — Standard: oben links (figure)."""
+    positions: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {
+        # xy, box_alignment
+        "top_left": ((0.018, 0.985), (0.0, 1.0)),
+        "center": ((0.5, 0.52), (0.5, 0.5)),
+    }
+    xy, align = positions.get(loc, positions["top_left"])
+    # Bei axes-Koordinaten etwas Luft zum Rand lassen.
+    if xycoords == "axes fraction" and loc == "top_left":
+        xy = (0.02, 0.97)
+
     base = _load_logo_base()
     if base is not None:
         rgba = base.astype(np.float32)
@@ -84,28 +97,29 @@ def watermark(
         imagebox = OffsetImage(rgba.astype(np.uint8), zoom=zoom)
         artist = AnnotationBbox(
             imagebox,
-            (0.5, 0.52),
-            xycoords="axes fraction",
+            xy,
+            xycoords=xycoords,
+            box_alignment=align,
             frameon=False,
             pad=0.0,
-            zorder=0.7,
+            zorder=zorder,
         )
         ax.add_artist(artist)
         return
 
     ax.text(
-        0.5,
-        0.52,
+        xy[0],
+        xy[1],
         text,
-        transform=ax.transAxes,
+        transform=ax.transAxes if xycoords == "axes fraction" else ax.figure.transFigure,
         color=TEXT,
-        alpha=max(alpha, 0.05),
-        fontsize=26,
+        alpha=max(alpha, 0.08),
+        fontsize=11,
         fontweight="bold",
-        ha="center",
-        va="center",
-        zorder=0,
-        clip_on=True,
+        ha="left" if loc == "top_left" else "center",
+        va="top" if loc == "top_left" else "center",
+        zorder=zorder,
+        clip_on=False,
     )
 
 

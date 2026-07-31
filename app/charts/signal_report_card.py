@@ -116,8 +116,8 @@ def _render(outcome: AnalysisOutcome, *, display_timezone: str) -> bytes:
     ax.axis("off")
     ax.set_facecolor(tv.BG)
 
-    # Soft logo watermark
-    tv.watermark(ax, alpha=0.10, zoom=0.42)
+    # Logo oben links (figure), Titel daneben
+    tv.watermark(ax, alpha=0.30, zoom=0.10, loc="top_left", xycoords="figure fraction")
 
     # Outer card
     ax.add_patch(
@@ -148,14 +148,14 @@ def _render(outcome: AnalysisOutcome, *, display_timezone: str) -> bytes:
         )
     )
     ax.text(
-        0.5,
+        0.16,
         0.95,
         "SIGNAL REPORT  ·  ALPHA TRADE ORACLE",
         transform=ax.transAxes,
         color="#ffffff",
         fontsize=10,
         fontweight="bold",
-        ha="center",
+        ha="left",
         va="center",
         zorder=3,
     )
@@ -396,24 +396,6 @@ def _render(outcome: AnalysisOutcome, *, display_timezone: str) -> bytes:
         zorder=3,
         fontstyle="italic",
     )
-
-    # Small logo bottom-right
-    logo_base = tv._load_logo_base()
-    if logo_base is not None:
-        from matplotlib.offsetbox import AnnotationBbox, OffsetImage
-
-        rgba = logo_base.astype(np.float32)
-        rgba[..., 3] = np.clip(rgba[..., 3] * 0.55, 0, 255)
-        imagebox = OffsetImage(rgba.astype(np.uint8), zoom=0.11)
-        ab = AnnotationBbox(
-            imagebox,
-            (0.90, 0.055),
-            xycoords="axes fraction",
-            frameon=False,
-            pad=0.0,
-            zorder=4,
-        )
-        ax.add_artist(ab)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor())

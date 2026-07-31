@@ -84,7 +84,7 @@ def _render(
     fig, ax = plt.subplots(figsize=FIGURE_SIZE)
     tv.style_figure(fig)
     tv.style_axes(ax)
-    tv.watermark(ax, alpha=0.14, zoom=0.26)
+    tv.watermark(ax, alpha=0.28, zoom=0.105, loc="top_left", xycoords="figure fraction")
 
     # Soft glow under line
     ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
@@ -135,10 +135,10 @@ def _render(
     )
     ax.scatter([xs[-1]], [last], s=180, color=accent, alpha=0.18, zorder=4)
 
-    # Header: links Titel, rechts Gesamtwert neben Gewinn/Verlust
+    # Header: Titel rechts vom Logo; Wert/PnL rechts
     fig.subplots_adjust(left=0.05, right=0.84, top=0.86, bottom=0.14)
     fig.text(
-        0.05,
+        0.145,
         0.935,
         title,
         color=tv.TEXT,
@@ -148,20 +148,11 @@ def _render(
         va="center",
     )
     fig.text(
-        0.05,
+        0.145,
         0.895,
         subtitle,
         color=tv.MUTED,
         fontsize=10,
-        ha="left",
-        va="center",
-    )
-    fig.text(
-        0.52,
-        0.935,
-        tv.BRAND,
-        color=tv.MUTED,
-        fontsize=9,
         ha="left",
         va="center",
     )

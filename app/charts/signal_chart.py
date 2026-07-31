@@ -166,7 +166,7 @@ def _render_png(
     tv.style_figure(fig)
     tv.style_axes(ax)
     tv.style_axes(ax_vol)
-    tv.watermark(ax, alpha=0.15, zoom=0.27)
+    tv.watermark(ax, alpha=0.28, zoom=0.105, loc="top_left", xycoords="figure fraction")
 
     n = len(candles)
     last_i = n - 1
@@ -327,11 +327,11 @@ def _render_png(
     direction_label = direction.replace("_", " ").upper()
     side_color = tv.UP if is_long else tv.DOWN
 
-    # Header-Leiste
+    # Header-Leiste (Text rechts vom Logo oben links)
     ax.set_title("")
     fig.subplots_adjust(left=0.04, right=0.86, top=0.90, bottom=0.07, hspace=0.04)
     fig.text(
-        0.04,
+        0.145,
         0.955,
         f"{pretty}  ·  {timeframe}",
         color=tv.TEXT,
