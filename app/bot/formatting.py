@@ -20,7 +20,7 @@ from app.signals.types import RiskParameters, SignalResult
 
 if TYPE_CHECKING:
     from app.models.paper import PaperPosition
-    from app.services.paper_trading_service import PaperDigestSnapshot
+    from app.services.paper_trading_service import PaperDigestSnapshot, PaperSummary
 
 #: Pflicht-Risikohinweis. Erscheint in jeder ausgehenden Analyse-Nachricht.
 DISCLAIMER = "Keine Finanzberatung. Kryptowaehrungen sind hochriskant."
@@ -390,6 +390,13 @@ def _signed_r(value: float) -> str:
     return f"{value:+.2f}R"
 
 
+def _expectancy_usd(summary: PaperSummary) -> float:
+    """Mittlerer realisierter Dollar-Gewinn pro Closed Trade."""
+    if summary.closed_trades <= 0:
+        return 0.0
+    return summary.realized_pnl / summary.closed_trades
+
+
 def _tp_status(tp1: bool, tp2: bool, tp3: bool) -> str:
     def mark(hit: bool, n: int) -> str:
         return f"✓{n}" if hit else f"·{n}"
@@ -429,14 +436,14 @@ def format_paper_digest_message(
             f"({snapshot.equity_return_pct:+.1f}%)"
         ),
         escape_markdown_v2(f"Cash      ${format_price(summary.cash_balance, 2)}"),
-        escape_markdown_v2(
-            f"Realized  {_signed_usd(summary.realized_pnl)}  ·  {_signed_r(summary.total_r)}"
-        ),
+        escape_markdown_v2(f"Realized  {_signed_usd(summary.realized_pnl)}"),
         escape_markdown_v2(
             f"Win-Rate  {summary.win_rate * 100:.0f}%  ·  "
             f"PF {summary.profit_factor:.2f}  ·  n={summary.closed_trades}"
         ),
-        escape_markdown_v2(f"Expect.   {_signed_r(summary.expectancy_r)}/Trade"),
+        escape_markdown_v2(
+            f"Expect.   {_signed_usd(_expectancy_usd(summary))}/Trade"
+        ),
         "",
         f"*{escape_markdown_v2('PERFORMANCE')}*",
     ]
@@ -456,7 +463,7 @@ def format_paper_digest_message(
             lines.append(
                 escape_markdown_v2(
                     f"{win.label:<3}  n={win.closed_count}  "
-                    f"{_signed_r(win.closed_r)}  {_signed_usd(win.closed_pnl)}"
+                    f"{_signed_usd(win.closed_pnl)}"
                     f"{eq_part}"
                 )
             )
@@ -469,7 +476,6 @@ def format_paper_digest_message(
         lines.append(
             escape_markdown_v2(
                 f"1h   Closed {snapshot.hour_closed_count}  ·  "
-                f"{_signed_r(snapshot.hour_closed_r)}  ·  "
                 f"{_signed_usd(snapshot.hour_closed_pnl)}"
             )
         )
@@ -481,8 +487,7 @@ def format_paper_digest_message(
 
     open_header = (
         f"OFFEN ({summary.open_positions})  "
-        f"uPnL {_signed_usd(snapshot.total_open_upnl_usd)}  "
-        f"({_signed_r(snapshot.total_open_upnl_r)})"
+        f"uPnL {_signed_usd(snapshot.total_open_upnl_usd)}"
     )
     lines += ["", f"*{escape_markdown_v2(open_header)}*"]
     if not snapshot.open_rows:
@@ -490,12 +495,12 @@ def format_paper_digest_message(
     else:
         for row in snapshot.open_rows[:max_open]:
             side = _short_direction(row.direction)
-            if row.unrealized_r is None or row.unrealized_usd is None:
+            if row.unrealized_usd is None:
                 pnl_line = f"{_pretty_symbol(row.symbol)} {side}  uPnL n/a"
             else:
                 pnl_line = (
                     f"{_pretty_symbol(row.symbol)} {side}  "
-                    f"{_signed_r(row.unrealized_r)}  {_signed_usd(row.unrealized_usd)}"
+                    f"{_signed_usd(row.unrealized_usd)}"
                 )
             mark_txt = format_price(row.mark, infer_price_precision(row.mark)) if row.mark is not None else "n/a"
             stop_txt = format_price(row.current_stop, infer_price_precision(row.current_stop))
@@ -517,16 +522,10 @@ def format_paper_digest_message(
         for row in snapshot.hour_closes[:max_closes]:
             side = _short_direction(row.direction)
             reason = _EXIT_REASON_LABELS.get(row.exit_reason or "", row.exit_reason or "-")
-            if row.realized_r is None:
-                body = (
-                    f"{_pretty_symbol(row.symbol)} {side}  "
-                    f"{_signed_usd(row.realized_usd)}  {reason}"
-                )
-            else:
-                body = (
-                    f"{_pretty_symbol(row.symbol)} {side}  "
-                    f"{_signed_r(row.realized_r)}  {reason}"
-                )
+            body = (
+                f"{_pretty_symbol(row.symbol)} {side}  "
+                f"{_signed_usd(row.realized_usd)}  {reason}"
+            )
             lines.append(escape_markdown_v2(body))
         rest_c = len(snapshot.hour_closes) - max_closes
         if rest_c > 0:

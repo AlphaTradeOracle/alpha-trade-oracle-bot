@@ -387,7 +387,11 @@ class TestPaperDigestFormatting:
         assert "24h" in plain
         assert "7d" in plain
         assert "Eq +$12,50" in plain
-        assert "+0.84R" in plain
+        assert "+$42,10" in plain
+        assert "+0.84R" not in plain
+        assert "+0.00R" not in plain
         assert "TP ✓1 ✓2 ·3" in plain
         assert "rem 50%" in plain
+        assert "+$31,00" in plain
+        assert "+$8,20/Trade" in plain
         assert DISCLAIMER in plain
