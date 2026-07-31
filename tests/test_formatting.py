@@ -78,7 +78,7 @@ class TestSignalMessage:
         message = format_signal_message(make_result())
         assert "BTC/USDT" in message
         assert "LONG" in message
-        assert "Score: 72/100" in message
+        assert "Confidence: 72/100" in message
 
     def test_contains_risk_levels_for_actionable_signal(self) -> None:
         message = format_signal_message(make_result())
@@ -98,7 +98,7 @@ class TestSignalMessage:
         result = make_result(direction=SignalDirection.NO_TRADE)
         result.no_trade_reason = "Chance-Risiko-Verhaeltnis zu niedrig"
         message = format_signal_message(result)
-        assert "Grund" in message
+        assert "Reason" in message
         assert escape_markdown_v2("Chance-Risiko-Verhaeltnis zu niedrig") in message
 
     def test_omits_entry_levels_when_not_actionable(self) -> None:
@@ -112,7 +112,7 @@ class TestSignalMessage:
             "EMA9 ueber EMA20; Supertrend bullisch",
         ]
         message = format_signal_message(result)
-        assert "*Bestaetigungen:*" in message
+        assert "*Confirmations:*" in message
         assert escape_markdown_v2("Trendlage: 4h bullisch, 1h bullisch, 15m bullisch") in message
 
     def test_fits_telegram_limit(self) -> None:
@@ -133,7 +133,7 @@ class TestLLMIsolation:
         )
         message = format_signal_message(make_result(), llm_analysis=analysis)
         assert escape_markdown_v2("EMA-Staffelung aufwaerts") in message
-        assert "*Bestaetigungen:*" in message
+        assert "*Confirmations:*" in message
 
     def test_llm_cannot_change_prices(self) -> None:
         """Selbst eine halluzinierte Zahl im Text aendert keinen Kurs."""
@@ -149,7 +149,7 @@ class TestLLMIsolation:
         # Die Risikozeilen tragen die berechneten Werte, nicht die des LLM.
         assert escape_markdown_v2(format_price(result.risk.stop_loss, 2)) in message
         # Halluzinierte Kurse duerfen nicht als SL/Entry erscheinen.
-        before_confirmations = message.split("*Bestaetigungen:*")[0]
+        before_confirmations = message.split("*Confirmations:*")[0]
         assert escape_markdown_v2("111.111") not in before_confirmations
         assert escape_markdown_v2("999.999") not in before_confirmations
 
@@ -158,18 +158,18 @@ class TestLLMIsolation:
         result = make_result()
         result.reasons = ["Struktur: hoehere Hochs und hoehere Tiefs"]
         message = format_signal_message(result, llm_analysis=None)
-        assert "Bestaetigungen" in message
+        assert "Confirmations" in message
         assert escape_markdown_v2(DISCLAIMER) in message
 
 
 class TestAnalysisMessage:
     def test_adds_note_for_non_actionable_result(self) -> None:
         message = format_analysis_message(make_result(direction=SignalDirection.NEUTRAL))
-        assert "kein handelbares Setup" in message
+        assert "No tradeable setup" in message
 
     def test_no_extra_note_for_actionable_result(self) -> None:
         message = format_analysis_message(make_result(direction=SignalDirection.LONG))
-        assert "kein handelbares Setup" not in message
+        assert "No tradeable setup" not in message
 
     def test_contains_disclaimer(self) -> None:
         message = format_analysis_message(make_result(direction=SignalDirection.NEUTRAL))
@@ -182,7 +182,7 @@ class TestAnalysisMessage:
             risks=["Widerstand in Reichweite"],
         )
         message = format_analysis_message(make_result(), llm_analysis=analysis)
-        assert "*Einordnung:*" in message
+        assert "*Context:*" in message
         assert escape_markdown_v2(
             "Die technische Lage ist ueberwiegend konstruktiv, aber nicht eindeutig."
         ) in message
@@ -193,7 +193,7 @@ class TestScoreBreakdown:
         assert escape_markdown_v2(DISCLAIMER) in format_score_breakdown(make_result())
 
     def test_contains_total_score(self) -> None:
-        assert "Gesamtscore" in format_score_breakdown(make_result(score=72.0))
+        assert "Total confidence" in format_score_breakdown(make_result(score=72.0))
 
 
 class TestSplitting:
@@ -268,7 +268,7 @@ class TestPaperTradeFormatting:
             _sample_paper_position(),
             reasons=["Trendlage bullisch", "EMA9 ueber EMA20"],
         )
-        assert "Bestaetigungen" in message
+        assert "Confirmations" in message
         assert escape_markdown_v2("Trendlage bullisch") in message
 
     def test_close_message_contains_pnl(self) -> None:
@@ -381,9 +381,10 @@ class TestPaperDigestFormatting:
         plain = message.replace("\\", "")
         assert "Performance Dashboard" in plain
         assert "Alpha Trade Oracle" in plain
-        assert "Wert  $5.142,30" in plain
+        assert "Value  $5.142,30" in plain
         assert "Cash + Open PnL" in plain
-        assert "DEPOT" in plain
+        assert "ACCOUNT" in plain
+        assert "Value" in plain
         assert "PERFORMANCE" not in plain
         assert "Eq +$12,50" not in plain
         assert "+$42,10" in plain

@@ -341,13 +341,13 @@ def _render_png(
         va="center",
     )
     fig.text(
-        0.68,
+        0.86,
         0.955,
         f" {direction_label} ",
         color="#ffffff",
         fontsize=9.5,
         fontweight="bold",
-        ha="center",
+        ha="right",
         va="center",
         bbox={
             "boxstyle": "round,pad=0.35,rounding_size=0.4",
@@ -356,16 +356,7 @@ def _render_png(
             "alpha": 0.95,
         },
     )
-    fig.text(
-        0.86,
-        0.955,
-        f"{score:.0f}/100",
-        color=tv.WARN,
-        fontsize=13,
-        fontweight="bold",
-        ha="right",
-        va="center",
-    )
+    _ = score  # Confidence stays in the Telegram caption, not on the chart.
 
     ax.tick_params(axis="x", labelbottom=False)
     ax_vol.tick_params(axis="x", labelsize=7.5)

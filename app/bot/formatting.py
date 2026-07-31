@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from app.services.paper_trading_service import PaperDigestSnapshot, PaperSummary
 
 #: Pflicht-Risikohinweis. Erscheint in jeder ausgehenden Analyse-Nachricht.
-DISCLAIMER = "Keine Finanzberatung. Kryptowaehrungen sind hochriskant."
+DISCLAIMER = "Not financial advice. Cryptocurrencies are high risk."
 
 #: Telegram-Limit pro Nachricht; mit Sicherheitsabstand.
 TELEGRAM_MAX_LENGTH = 4096
@@ -35,25 +35,25 @@ SPLIT_LENGTH = 3900
 _MDV2_SPECIAL = r"_*[]()~`>#+-=|{}.!"
 
 _DIRECTION_LABELS: dict[SignalDirection, str] = {
-    SignalDirection.STRONG_LONG: "STARKES LONG",
+    SignalDirection.STRONG_LONG: "STRONG LONG",
     SignalDirection.LONG: "LONG",
     SignalDirection.NEUTRAL: "NEUTRAL",
     SignalDirection.SHORT: "SHORT",
-    SignalDirection.STRONG_SHORT: "STARKES SHORT",
-    SignalDirection.NO_TRADE: "KEIN TRADE",
+    SignalDirection.STRONG_SHORT: "STRONG SHORT",
+    SignalDirection.NO_TRADE: "NO TRADE",
 }
 
 _CONFIDENCE_LABELS: dict[Confidence, str] = {
-    Confidence.HIGH: "Hoch",
-    Confidence.MEDIUM: "Mittel",
-    Confidence.LOW: "Niedrig",
+    Confidence.HIGH: "High",
+    Confidence.MEDIUM: "Medium",
+    Confidence.LOW: "Low",
 }
 
 _PHASE_LABELS = {
-    "UPTREND": "Aufwaertstrend",
-    "DOWNTREND": "Abwaertstrend",
-    "RANGE": "Seitwaertsbereich",
-    "VOLATILE": "Hohe Volatilitaet",
+    "UPTREND": "Uptrend",
+    "DOWNTREND": "Downtrend",
+    "RANGE": "Range",
+    "VOLATILE": "High volatility",
 }
 
 
@@ -82,16 +82,16 @@ def format_signal_message(
     display_timezone: str = "Europe/Berlin",
     llm_analysis: LLMAnalysisResponse | None = None,
 ) -> str:
-    """Kompakte Signal-Nachricht: Levels + Plan + Bestaetigungen."""
+    """Compact signal message: levels + confirmations (English)."""
     symbol_label = _pretty_symbol(result.symbol)
     direction = _DIRECTION_LABELS[result.direction]
     lines: list[str] = [
         f"*{escape_markdown_v2(symbol_label)}* · *{escape_markdown_v2(direction)}*",
-        escape_markdown_v2(f"Score: {result.score:.0f}/100"),
+        escape_markdown_v2(f"Confidence: {result.score:.0f}/100"),
     ]
 
     if result.direction == SignalDirection.NO_TRADE and result.no_trade_reason:
-        lines += ["", f"*Grund:* {escape_markdown_v2(result.no_trade_reason)}"]
+        lines += ["", f"*Reason:* {escape_markdown_v2(result.no_trade_reason)}"]
 
     if result.risk is not None and result.direction.is_actionable:
         risk = result.risk
@@ -110,27 +110,27 @@ def format_signal_message(
 
     reasons = llm_analysis.reasons if llm_analysis else result.reasons
     if reasons:
-        lines += ["", "*Bestaetigungen:*"]
+        lines += ["", "*Confirmations:*"]
         lines += [f"• {escape_markdown_v2(item)}" for item in reasons[:8]]
 
     risks = llm_analysis.risks if llm_analysis else result.counter_arguments
     if risks:
-        lines += ["", "*Risiken:*"]
+        lines += ["", "*Risks:*"]
         lines += [f"• {escape_markdown_v2(item)}" for item in risks[:4]]
 
     if result.risk is not None and result.direction.is_actionable and result.risk.invalidation_note:
-        lines += ["", f"*Ungueltig:* {escape_markdown_v2(result.risk.invalidation_note)}"]
+        lines += ["", f"*Invalid if:* {escape_markdown_v2(result.risk.invalidation_note)}"]
 
     phase = _PHASE_LABELS.get(result.market_phase.value, result.market_phase.value)
     meta = (
         f"{result.primary_timeframe} · {phase} · "
-        f"Daten {result.data_quality:.0f}/100"
+        f"Data {result.data_quality:.0f}/100"
     )
     lines += [
         "",
         escape_markdown_v2(meta),
         escape_markdown_v2(
-            f"Bis {format_display_time(result.expires_at, display_timezone)}"
+            f"Until {format_display_time(result.expires_at, display_timezone)}"
         ),
         f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
     ]
@@ -158,18 +158,17 @@ def format_analysis_message(
         extras.append(
             "_"
             + escape_markdown_v2(
-                "Aktuell liegt kein handelbares Setup vor. Die Analyse dient der "
-                "Einordnung der Marktlage."
+                "No tradeable setup right now. This analysis is for market context only."
             )
             + "_"
         )
 
     if llm_analysis and llm_analysis.summary:
-        extras.append(f"*Einordnung:*\n{escape_markdown_v2(llm_analysis.summary)}")
+        extras.append(f"*Context:*\n{escape_markdown_v2(llm_analysis.summary)}")
 
     if llm_analysis and llm_analysis.uncertainty_note:
         extras.append(
-            f"*Unsicherheiten:*\n{escape_markdown_v2(llm_analysis.uncertainty_note)}"
+            f"*Uncertainties:*\n{escape_markdown_v2(llm_analysis.uncertainty_note)}"
         )
 
     if not extras:
@@ -184,18 +183,18 @@ def format_analysis_message(
 
 
 def format_score_breakdown(result: SignalResult) -> str:
-    """Score-Breakdown als eigene Nachricht — nachvollziehbar statt Blackbox."""
-    lines = [f"*{escape_markdown_v2(f'Score-Aufschluesselung {result.symbol}')}*", ""]
+    """Confidence breakdown as a separate message."""
+    lines = [f"*{escape_markdown_v2(f'Confidence breakdown {result.symbol}')}*", ""]
     for component in sorted(result.components, key=lambda c: -abs(c.weighted_score)):
         lines.append(
             escape_markdown_v2(
-                f"{component.category.value}: roh {component.raw_score:+.1f} "
+                f"{component.category.value}: raw {component.raw_score:+.1f} "
                 f"x {component.weight:.3f} = {component.weighted_score:+.2f}"
             )
         )
         if component.detail:
             lines.append(f"  _{escape_markdown_v2(component.detail[:180])}_")
-    lines += ["", escape_markdown_v2(f"Gesamtscore: {result.score:.2f}/100")]
+    lines += ["", escape_markdown_v2(f"Total confidence: {result.score:.2f}/100")]
     lines += ["", f"⚠️ {escape_markdown_v2(DISCLAIMER)}"]
     return "\n".join(lines)
 
@@ -268,9 +267,9 @@ _EXIT_REASON_LABELS: dict[str, str] = {
     ExitReason.TAKE_PROFIT_2.value: "Take-Profit 2",
     ExitReason.TAKE_PROFIT_3.value: "Take-Profit 3",
     ExitReason.STOP_LOSS.value: "Stop-Loss",
-    ExitReason.EXPIRED.value: "Signal abgelaufen",
-    ExitReason.END_OF_DATA.value: "Ende der Daten",
-    ExitReason.RETEST_SKIPPED.value: "Retest uebersprungen",
+    ExitReason.EXPIRED.value: "Signal expired",
+    ExitReason.END_OF_DATA.value: "End of data",
+    ExitReason.RETEST_SKIPPED.value: "Retest skipped",
 }
 
 
@@ -348,15 +347,17 @@ def format_paper_trade_open_message(
         direction = position.direction
     symbol_label = _pretty_symbol(position.symbol)
     quote = _quote_asset(position.symbol)
-    entry_kind = "Retest-Fill" if retest_fill else "Paper-Trade"
+    entry_kind = "Retest Fill" if retest_fill else "Paper Trade"
     lines: list[str] = [
         f"📄 *{escape_markdown_v2(entry_kind)}* · *{escape_markdown_v2(symbol_label)}*",
         f"*{escape_markdown_v2(direction)}*",
     ]
     if position.signal_score is not None:
-        lines.append(escape_markdown_v2(f"Score: {float(position.signal_score):.0f}/100"))
+        lines.append(
+            escape_markdown_v2(f"Confidence: {float(position.signal_score):.0f}/100")
+        )
     if reasons:
-        lines += ["", "*Bestaetigungen:*"]
+        lines += ["", "*Confirmations:*"]
         lines += [f"• {escape_markdown_v2(item)}" for item in reasons[:8]]
     lines += [
         "",
@@ -371,10 +372,10 @@ def format_paper_trade_open_message(
             f"{float(position.leverage):.0f}x · "
             f"Notional {format_price(float(position.notional), 2)}"
         ),
-        escape_markdown_v2(f"Risiko (1R) {format_price(float(position.risk_amount or 0), 2)}"),
+        escape_markdown_v2(f"Risk (1R) {format_price(float(position.risk_amount or 0), 2)}"),
         escape_markdown_v2(
             f"{position.timeframe or '1h'} · "
-            f"Eroeffnet {format_display_time(position.opened_at, display_timezone)}"
+            f"Opened {format_display_time(position.opened_at, display_timezone)}"
         ),
         f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
     ]
@@ -432,12 +433,12 @@ def format_paper_digest_message(
         escape_markdown_v2(f"Alpha Trade Oracle  ·  {stamp}"),
         "",
         escape_markdown_v2(
-            f"Wert  ${format_price(summary.equity, 2)}  ·  "
+            f"Value  ${format_price(summary.equity, 2)}  ·  "
             f"{_signed_usd(equity_delta)}  ({snapshot.equity_return_pct:+.1f}%)"
         ),
         escape_markdown_v2("Cash + Open PnL"),
         "",
-        f"*{escape_markdown_v2('DEPOT')}*",
+        f"*{escape_markdown_v2('ACCOUNT')}*",
         escape_markdown_v2(
             f"Equity    ${format_price(summary.equity, 2)}  "
             f"({snapshot.equity_return_pct:+.1f}%)"
@@ -452,15 +453,15 @@ def format_paper_digest_message(
             f"Expect.   {_signed_usd(_expectancy_usd(summary))}/Trade"
         ),
     ]
-    # 1h / 24h / 7d stehen im Equity-Chart (Header rechts), nicht mehr im Text.
+    # 1h / 24h / 7d are on the equity chart header, not in text.
 
     open_header = (
-        f"OFFEN ({summary.open_positions})  "
+        f"OPEN ({summary.open_positions})  "
         f"uPnL {_signed_usd(snapshot.total_open_upnl_usd)}"
     )
     lines += ["", f"*{escape_markdown_v2(open_header)}*"]
     if not snapshot.open_rows:
-        lines.append(escape_markdown_v2("keine offenen Positionen"))
+        lines.append(escape_markdown_v2("no open positions"))
     else:
         for row in snapshot.open_rows[:max_open]:
             side = _short_direction(row.direction)
@@ -482,11 +483,11 @@ def format_paper_digest_message(
             lines.append(escape_markdown_v2(f"  {_tp_status(row.tp1_filled, row.tp2_filled, row.tp3_filled)}"))
         rest = len(snapshot.open_rows) - max_open
         if rest > 0:
-            lines.append(escape_markdown_v2(f"+{rest} weitere"))
+            lines.append(escape_markdown_v2(f"+{rest} more"))
 
     lines += ["", f"*{escape_markdown_v2('CLOSES (1h)')}*"]
     if not snapshot.hour_closes:
-        lines.append(escape_markdown_v2("keine Abschluesse"))
+        lines.append(escape_markdown_v2("no closes"))
     else:
         for row in snapshot.hour_closes[:max_closes]:
             side = _short_direction(row.direction)
@@ -498,7 +499,7 @@ def format_paper_digest_message(
             lines.append(escape_markdown_v2(body))
         rest_c = len(snapshot.hour_closes) - max_closes
         if rest_c > 0:
-            lines.append(escape_markdown_v2(f"+{rest_c} weitere"))
+            lines.append(escape_markdown_v2(f"+{rest_c} more"))
 
     lines += ["", f"⚠️ {escape_markdown_v2(DISCLAIMER)}"]
     return "\n".join(lines)
@@ -518,19 +519,19 @@ def format_paper_trade_close_message(
     symbol_label = _pretty_symbol(position.symbol)
     reason = _EXIT_REASON_LABELS.get(
         position.exit_reason or "",
-        position.exit_reason or "geschlossen",
+        position.exit_reason or "closed",
     )
     pnl = float(position.realized_pnl)
     pnl_label = f"+{format_price(pnl, 2)}" if pnl >= 0 else format_price(pnl, 2)
     lines: list[str] = [
-        f"📄 *Paper-Trade geschlossen* · *{escape_markdown_v2(symbol_label)}*",
+        f"📄 *Paper Trade closed* · *{escape_markdown_v2(symbol_label)}*",
         f"*{escape_markdown_v2(direction)}* · {escape_markdown_v2(reason)}",
         "",
         escape_markdown_v2(f"Entry  {format_price(float(position.entry_price), price_precision)}"),
         escape_markdown_v2(f"PnL    {pnl_label} USDT"),
         escape_markdown_v2(
-            f"Gebuehren {format_price(float(position.fees), 2)} · "
-            f"Geschlossen {format_display_time(position.closed_at or position.opened_at, display_timezone)}"
+            f"Fees {format_price(float(position.fees), 2)} · "
+            f"Closed {format_display_time(position.closed_at or position.opened_at, display_timezone)}"
         ),
         f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
     ]
