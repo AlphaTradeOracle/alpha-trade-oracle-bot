@@ -293,6 +293,7 @@ class TestPaperDigestFormatting:
             PaperDigestCloseRow,
             PaperDigestOpenRow,
             PaperDigestSnapshot,
+            PaperDigestWindowStats,
             PaperSummary,
         )
 
@@ -346,11 +347,45 @@ class TestPaperDigestFormatting:
             leverage=10.0,
             max_notional=1500.0,
             max_open=20,
+            windows=[
+                PaperDigestWindowStats(
+                    label="1h",
+                    closed_count=1,
+                    closed_pnl=31.0,
+                    closed_r=0.62,
+                    opened_count=1,
+                    win_count=1,
+                    equity_delta=12.5,
+                ),
+                PaperDigestWindowStats(
+                    label="24h",
+                    closed_count=4,
+                    closed_pnl=80.0,
+                    closed_r=1.5,
+                    opened_count=3,
+                    win_count=3,
+                    equity_delta=40.0,
+                ),
+                PaperDigestWindowStats(
+                    label="7d",
+                    closed_count=12,
+                    closed_pnl=98.4,
+                    closed_r=1.92,
+                    opened_count=15,
+                    win_count=7,
+                    equity_delta=142.3,
+                ),
+            ],
         )
         message = format_paper_digest_message(snapshot)
         plain = message.replace("\\", "")
         assert "Paper Digest" in plain
         assert "DEPOT" in plain
+        assert "PERFORMANCE" in plain
+        assert "1h" in plain
+        assert "24h" in plain
+        assert "7d" in plain
+        assert "Eq +$12,50" in plain
         assert "+0.84R" in plain
         assert "TP ✓1 ✓2 ·3" in plain
         assert "rem 50%" in plain

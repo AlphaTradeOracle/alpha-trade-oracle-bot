@@ -98,6 +98,19 @@ class PaperDigestCloseRow:
 
 
 @dataclass
+class PaperDigestWindowStats:
+    """Aggregierte Paper-Performance fuer ein Zeitfenster."""
+
+    label: str
+    closed_count: int
+    closed_pnl: float
+    closed_r: float
+    opened_count: int
+    win_count: int = 0
+    equity_delta: float | None = None
+
+
+@dataclass
 class PaperDigestSnapshot:
     as_of: datetime
     summary: PaperSummary
@@ -116,6 +129,8 @@ class PaperDigestSnapshot:
     max_open: int
     #: Zeitreihe Equity = Cash + Margin + Open PnL (rekonstruiert + Live-Punkt).
     equity_curve: list[tuple[datetime, float]] | None = None
+    #: Fenster: 1h / 24h / 7d.
+    windows: list[PaperDigestWindowStats] | None = None
 
 
 @dataclass
@@ -150,6 +165,25 @@ class PendingResolveResult:
     filled: int = 0
     skipped: int = 0
     still_pending: int = 0
+
+
+def _equity_delta_since(
+    equity_curve: list[tuple[datetime, float]],
+    since: datetime,
+    live_equity: float,
+) -> float | None:
+    """Equity-Aenderung seit ``since`` anhand der rekonstruierten Kurve."""
+    if not equity_curve:
+        return None
+    baseline: float | None = None
+    for at, equity in equity_curve:
+        if at <= since:
+            baseline = equity
+        else:
+            break
+    if baseline is None:
+        baseline = equity_curve[0][1]
+    return float(live_equity) - float(baseline)
 
 
 @dataclass(frozen=True)
@@ -1559,12 +1593,26 @@ class PaperTradingService:
     ) -> PaperDigestSnapshot:
         """Snapshot fuer den stuendlichen Telegram-Paper-Digest."""
         now = utc_now()
-        since = now - window
+        since_1h = now - window
+        since_24h = now - timedelta(hours=24)
+        since_7d = now - timedelta(days=7)
         account = await self.get_or_create_account(session)
         repo = PaperRepository(session)
         open_positions = await repo.list_open_positions(account.id)
-        hour_closed = await repo.list_closed_since(account.id, since, limit=50)
-        hour_opened = await repo.count_opened_since(account.id, since)
+        week_closed = await repo.list_closed_since(account.id, since_7d, limit=500)
+        hour_closed = [
+            pos
+            for pos in week_closed
+            if pos.closed_at is not None and pos.closed_at >= since_1h
+        ]
+        day_closed = [
+            pos
+            for pos in week_closed
+            if pos.closed_at is not None and pos.closed_at >= since_24h
+        ]
+        hour_opened = await repo.count_opened_since(account.id, since_1h)
+        day_opened = await repo.count_opened_since(account.id, since_24h)
+        week_opened = await repo.count_opened_since(account.id, since_7d)
         marks = {key.upper(): value for key, value in (prices or {}).items()}
 
         open_rows: list[PaperDigestOpenRow] = []
@@ -1649,6 +1697,33 @@ class PaperTradingService:
             live_equity=float(summary.equity),
         )
 
+        windows = [
+            self._digest_window_stats(
+                "1h",
+                hour_closed,
+                opened_count=hour_opened,
+                since=since_1h,
+                live_equity=float(summary.equity),
+                equity_curve=equity_curve,
+            ),
+            self._digest_window_stats(
+                "24h",
+                day_closed,
+                opened_count=day_opened,
+                since=since_24h,
+                live_equity=float(summary.equity),
+                equity_curve=equity_curve,
+            ),
+            self._digest_window_stats(
+                "7d",
+                week_closed,
+                opened_count=week_opened,
+                since=since_7d,
+                live_equity=float(summary.equity),
+                equity_curve=equity_curve,
+            ),
+        ]
+
         return PaperDigestSnapshot(
             as_of=now,
             summary=summary,
@@ -1666,6 +1741,38 @@ class PaperTradingService:
             max_notional=float(self._settings.paper_max_notional_usd),
             max_open=int(self._settings.paper_max_open_positions),
             equity_curve=equity_curve,
+            windows=windows,
+        )
+
+    @staticmethod
+    def _digest_window_stats(
+        label: str,
+        closed: list[PaperPosition],
+        *,
+        opened_count: int,
+        since: datetime,
+        live_equity: float,
+        equity_curve: list[tuple[datetime, float]],
+    ) -> PaperDigestWindowStats:
+        closed_pnl = 0.0
+        closed_r = 0.0
+        win_count = 0
+        for pos in closed:
+            pnl = float(pos.realized_pnl)
+            closed_pnl += pnl
+            if pnl > 0:
+                win_count += 1
+            risk = float(pos.risk_amount or 0.0)
+            if risk > 0:
+                closed_r += pnl / risk
+        return PaperDigestWindowStats(
+            label=label,
+            closed_count=len(closed),
+            closed_pnl=closed_pnl,
+            closed_r=closed_r,
+            opened_count=opened_count,
+            win_count=win_count,
+            equity_delta=_equity_delta_since(equity_curve, since, live_equity),
         )
 
     async def _apply_price(
