@@ -26,10 +26,12 @@ def tp_multipliers_from_settings(settings: Settings | None = None) -> tuple[floa
     return settings.parsed_tp_multipliers
 
 #: Vielfache des Risikoabstands R fuer die drei Take-Profit-Ziele.
-#: Default 1/2/3R (MFE-Analyse: ≥2R nur ~24%% live; engere Leiter bankt oefter).
-TP_MULTIPLIERS = (1.0, 2.0, 3.0)
+#: Default 2/4/6R — voller Exit-Replay (4305 STRONG, 6 Monate) zeigt hoeheres E[R]
+#: als 1/2/3R; Scale-out 50/25/25 bankt frueher ohne die Ziele zu verkuerzen.
+TP_MULTIPLIERS = (2.0, 4.0, 6.0)
 DEFAULT_TP_MULTIPLIERS = TP_MULTIPLIERS
-LEGACY_TP_MULTIPLIERS = (2.0, 4.0, 6.0)
+#: Engere Leiter (MFE-Hitrate), im Replay aber schlechterem E[R]/
+TIGHT_TP_MULTIPLIERS = (1.0, 2.0, 3.0)
 
 #: Halbe Breite der Entry-Zone in ATR.
 ENTRY_ZONE_ATR_FRACTION = 0.25

@@ -143,8 +143,8 @@ Anschließende Prüfungen:
 - Stop-Abstand > `MAX_STOP_DISTANCE_PERCENT` (Standard 8 %) ⇒ Signal wird
   markiert (`wide_stop`) und in den Gegenargumenten vermerkt
 
-**Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|` (Default **1/2/3R**,
-konfigurierbar via `TP_MULTIPLIERS`):
+**Take-Profit.** Vielfache des Risikoabstands `R = |entry − stop|` (Default **2/4/6R**,
+konfigurierbar via `TP_MULTIPLIERS`; Scale-out Default **50/25/25**):
 
 ```
 TP1 = entry + 1 × R
@@ -188,7 +188,7 @@ Ablauf:
 3. Long: Fill wenn eine Folgekerze die Zone `[entry − 1.0×ATR, entry − 0.35×ATR]`
    berührt. Short spiegelbildlich darüber.
 4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
-   TPs neu aus konfigurierter Leiter (Default 1/2/3R). Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF); nach TP1 optional 48h (`PAPER_EXPIRY_MULTIPLIER_AFTER_TP1`).
+   TPs neu aus konfigurierter Leiter (Default 2/4/6R). Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF); nach TP1 optional 48h (`PAPER_EXPIRY_MULTIPLIER_AFTER_TP1`).
 5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
    Fenster abläuft oder keine ATR-Historie verfügbar ist (`exit_reason=retest_skipped`).
 
