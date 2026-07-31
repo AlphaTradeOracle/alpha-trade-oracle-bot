@@ -374,20 +374,33 @@ def _serialize_variant(v: Variant) -> dict[str, Any]:
     return {"key": v.key, "label": v.label, "group": v.group, "overrides": overrides}
 
 
-async def _load_symbols(limit: int) -> list[tuple[str, int]]:
+async def _load_symbols(limit: int, *, by_rank: bool = False) -> list[tuple[str, int]]:
+    """Universe-Symbole laden.
+
+    Default: nur ``in_universe``. Mit ``by_rank=True`` alle aktiven Assets mit
+    ``market_cap_rank <= limit`` (fuer 300-vs-500-Vergleiche).
+    """
     async with session_scope() as session:
-        rows = (
-            await session.execute(
+        filters = [
+            Asset.is_active.is_(True),
+            Asset.market_cap_rank.is_not(None),
+        ]
+        if by_rank:
+            filters.append(Asset.market_cap_rank <= limit)
+            stmt = (
                 select(Asset.symbol, Asset.market_cap_rank)
-                .where(
-                    Asset.in_universe.is_(True),
-                    Asset.is_active.is_(True),
-                    Asset.market_cap_rank.is_not(None),
-                )
+                .where(*filters)
+                .order_by(Asset.market_cap_rank.asc())
+            )
+        else:
+            filters.append(Asset.in_universe.is_(True))
+            stmt = (
+                select(Asset.symbol, Asset.market_cap_rank)
+                .where(*filters)
                 .order_by(Asset.market_cap_rank.asc())
                 .limit(limit)
             )
-        ).all()
+        rows = (await session.execute(stmt)).all()
     return [(str(symbol).upper(), int(rank)) for symbol, rank in rows]
 
 
@@ -439,6 +452,11 @@ async def main() -> int:
     parser.add_argument("--slippage", type=float, default=0.05)
     parser.add_argument("--workers", type=int, default=max(2, min(8, (os.cpu_count() or 4))))
     parser.add_argument("--only", default="", help="Comma-separated variant keys")
+    parser.add_argument(
+        "--by-rank",
+        action="store_true",
+        help="Load by market_cap_rank<=top (ignore in_universe)",
+    )
     parser.add_argument("--out", default="exports/optimize_top300_30d.json")
     args = parser.parse_args()
 
@@ -449,7 +467,7 @@ async def main() -> int:
 
     end = utc_now()
     start = end - timedelta(days=args.days)
-    symbols = await _load_symbols(args.top)
+    symbols = await _load_symbols(args.top, by_rank=bool(args.by_rank))
     if not symbols:
         print("No universe symbols", file=sys.stderr)
         await container.aclose()
