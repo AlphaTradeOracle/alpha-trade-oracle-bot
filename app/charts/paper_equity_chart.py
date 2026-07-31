@@ -213,22 +213,33 @@ def _render(
             va="center",
         )
 
+    # Gesamtwert: signed Equity mit $-Suffix (+5.012,33$), darunter Performance-%
     fig.text(
         right,
-        0.935,
-        _fmt_usd_suffix(last),
-        color=tv.TEXT,
-        fontsize=12,
+        0.955,
+        "TOTAL",
+        color=tv.MUTED,
+        fontsize=7.5,
         fontweight="bold",
         ha="right",
         va="center",
     )
     fig.text(
         right,
-        0.895,
+        0.920,
+        _fmt_signed_usd_suffix(last),
+        color=tv.TEXT,
+        fontsize=9.5,
+        fontweight="bold",
+        ha="right",
+        va="center",
+    )
+    fig.text(
+        right,
+        0.885,
         _fmt_signed_pct(delta_pct),
         color=chip_color,
-        fontsize=9.5,
+        fontsize=8,
         fontweight="bold",
         ha="right",
         va="center",
