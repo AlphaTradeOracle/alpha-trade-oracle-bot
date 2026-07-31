@@ -15,6 +15,7 @@ from app.bot.formatting import (
     TELEGRAM_MAX_LENGTH,
     escape_markdown_v2,
     format_analysis_message,
+    format_paper_digest_message,
     format_paper_trade_close_message,
     format_paper_trade_open_message,
     format_price,
@@ -282,3 +283,75 @@ class TestPaperTradeFormatting:
         message = format_paper_trade_close_message(position)
         assert "12,50" in message
         assert DISCLAIMER in message.replace("\\", "")
+
+
+class TestPaperDigestFormatting:
+    def test_digest_contains_open_pnl_and_tp_status(self) -> None:
+        from datetime import UTC, datetime
+
+        from app.services.paper_trading_service import (
+            PaperDigestCloseRow,
+            PaperDigestOpenRow,
+            PaperDigestSnapshot,
+            PaperSummary,
+        )
+
+        snapshot = PaperDigestSnapshot(
+            as_of=datetime(2026, 7, 31, 12, 0, tzinfo=UTC),
+            summary=PaperSummary(
+                cash_balance=4210.0,
+                initial_balance=5000.0,
+                realized_pnl=98.4,
+                open_positions=1,
+                open_margin=100.0,
+                equity=5142.3,
+                win_rate=0.58,
+                closed_trades=12,
+                profit_factor=1.42,
+                pending_positions=2,
+                total_r=1.92,
+                expectancy_r=0.16,
+            ),
+            equity_return_pct=2.8,
+            hour_closed_count=1,
+            hour_closed_r=0.62,
+            hour_closed_pnl=31.0,
+            hour_opened_count=1,
+            open_rows=[
+                PaperDigestOpenRow(
+                    symbol="BTCUSDT",
+                    direction="LONG",
+                    unrealized_usd=42.1,
+                    unrealized_r=0.84,
+                    mark=68420.0,
+                    current_stop=67100.0,
+                    rem_pct=50.0,
+                    tp1_filled=True,
+                    tp2_filled=True,
+                    tp3_filled=False,
+                )
+            ],
+            hour_closes=[
+                PaperDigestCloseRow(
+                    symbol="SOLUSDT",
+                    direction="LONG",
+                    realized_usd=31.0,
+                    realized_r=0.62,
+                    exit_reason="take_profit_1",
+                )
+            ],
+            total_open_upnl_usd=42.1,
+            total_open_upnl_r=0.84,
+            risk_per_trade=50.0,
+            leverage=10.0,
+            max_notional=1500.0,
+            max_open=20,
+        )
+        message = format_paper_digest_message(snapshot)
+        plain = message.replace("\\", "")
+        assert "Paper Digest" in plain
+        assert "DEPOT" in plain
+        assert "+0.84R" in plain
+        assert "TP ✓1 ✓2 ·3" in plain
+        assert "rem 50%" in plain
+        assert DISCLAIMER in plain

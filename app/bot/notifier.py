@@ -12,6 +12,7 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 
 from app.bot.formatting import (
+    format_paper_digest_message,
     format_signal_message,
     infer_price_precision,
     signal_result_from_paper_position,
@@ -53,6 +54,33 @@ class TelegramNotifier:
             if message_id is not None:
                 message_ids.append(message_id)
         return message_ids
+
+    async def notify_allowed_chats(self, text: str) -> int:
+        """Text an alle TELEGRAM_ALLOWED_CHAT_IDS senden. Rueckgabe: Chat-Anzahl."""
+        sent = 0
+        for chat_id in sorted(self._settings.allowed_chat_ids):
+            try:
+                await self.send(chat_id, text)
+                sent += 1
+            except Exception as exc:
+                logger.warning(
+                    "telegram_allowed_notify_failed",
+                    chat_id=chat_id,
+                    error=str(exc),
+                )
+        return sent
+
+    async def notify_paper_digest(self, snapshot: object) -> int:
+        """Stuendlichen Paper-Digest formatieren und versenden."""
+        from app.services.paper_trading_service import PaperDigestSnapshot
+
+        if not isinstance(snapshot, PaperDigestSnapshot):
+            raise TypeError("snapshot must be PaperDigestSnapshot")
+        text = format_paper_digest_message(
+            snapshot,
+            display_timezone=self._settings.display_timezone,
+        )
+        return await self.notify_allowed_chats(text)
 
     async def send_photo(
         self, chat_id: int, photo: bytes, caption: str | None = None

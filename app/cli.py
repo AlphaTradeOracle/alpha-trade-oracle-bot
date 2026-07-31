@@ -169,6 +169,17 @@ def paper_reset() -> None:
     asyncio.run(_run_paper_reset())
 
 
+@paper_app.command("digest")
+def paper_digest(
+    send: Annotated[
+        bool,
+        typer.Option("--send/--no-send", help="An Telegram senden (sonst nur ausgeben)"),
+    ] = True,
+) -> None:
+    """Paper-Performance-Digest jetzt erzeugen (optional an Telegram)."""
+    asyncio.run(_run_paper_digest_once(send=send))
+
+
 @cli.command()
 def backtest(
     symbol: Annotated[str, typer.Option("--symbol", help="Handelspaar, z. B. BTCUSDT")],
@@ -294,6 +305,7 @@ async def _run_worker() -> None:
         paper_trading=container.paper_trading,
         provider=container.provider,
         providers=container.universe_providers,
+        notifier=telegram_notifier,
     )
 
     stop_event = asyncio.Event()
@@ -634,6 +646,55 @@ async def _run_paper_reset() -> None:
         f"  open/pending/closed: {summary.open_positions}/"
         f"{summary.pending_positions}/{summary.closed_trades}"
     )
+    await container.aclose()
+
+
+async def _run_paper_digest_once(*, send: bool = True) -> None:
+    """Paper-Digest bauen und optional an Telegram senden."""
+    from telegram import Bot
+
+    from app.bot.formatting import format_paper_digest_message
+    from app.bot.notifier import TelegramNotifier
+    from app.repositories.paper_repository import PaperRepository
+    from app.scheduler.jobs import _collect_prices
+
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
+    container = build_container(settings)
+
+    async with session_scope() as session:
+        account = await container.paper_trading.get_or_create_account(session)
+        open_positions = await PaperRepository(session).list_open_positions(account.id)
+        symbols = [position.symbol for position in open_positions]
+        prices = (
+            await _collect_prices(
+                container.provider,
+                symbols,
+                providers=container.universe_providers,
+            )
+            if symbols
+            else {}
+        )
+        snapshot = await container.paper_trading.build_digest(session, prices)
+
+    text = format_paper_digest_message(
+        snapshot, display_timezone=settings.display_timezone
+    )
+    typer.echo(text.replace("\\", ""))
+
+    chats = 0
+    if send:
+        if not settings.telegram_configured:
+            typer.secho("TELEGRAM_BOT_TOKEN fehlt — Digest nicht gesendet.", fg=typer.colors.RED)
+        elif not settings.allowed_chat_ids:
+            typer.secho("TELEGRAM_ALLOWED_CHAT_IDS leer — Digest nicht gesendet.", fg=typer.colors.RED)
+        else:
+            notifier = TelegramNotifier(
+                Bot(settings.telegram_bot_token.get_secret_value()), settings
+            )
+            chats = await notifier.notify_paper_digest(snapshot)
+            typer.secho(f"Digest an {chats} Chat(s) gesendet.", fg=typer.colors.GREEN)
+
     await container.aclose()
 
 

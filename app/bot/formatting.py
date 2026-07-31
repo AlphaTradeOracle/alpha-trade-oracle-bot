@@ -20,6 +20,7 @@ from app.signals.types import RiskParameters, SignalResult
 
 if TYPE_CHECKING:
     from app.models.paper import PaperPosition
+    from app.services.paper_trading_service import PaperDigestSnapshot
 
 #: Pflicht-Risikohinweis. Erscheint in jeder ausgehenden Analyse-Nachricht.
 DISCLAIMER = "Keine Finanzberatung. Kryptowaehrungen sind hochriskant."
@@ -374,6 +375,140 @@ def format_paper_trade_open_message(
         escape_markdown_v2(
             f"{position.timeframe or '1h'} · "
             f"Eroeffnet {format_display_time(position.opened_at, display_timezone)}"
+        ),
+        f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
+    ]
+    return "\n".join(lines)
+
+
+def _signed_usd(value: float) -> str:
+    absolute = format_price(abs(value), 2)
+    return f"+${absolute}" if value >= 0 else f"-${absolute}"
+
+
+def _signed_r(value: float) -> str:
+    return f"{value:+.2f}R"
+
+
+def _tp_status(tp1: bool, tp2: bool, tp3: bool) -> str:
+    def mark(hit: bool, n: int) -> str:
+        return f"✓{n}" if hit else f"·{n}"
+
+    return f"TP {mark(tp1, 1)} {mark(tp2, 2)} {mark(tp3, 3)}"
+
+
+def _short_direction(direction: str) -> str:
+    try:
+        parsed = SignalDirection(direction)
+    except ValueError:
+        return direction
+    if parsed.is_long:
+        return "LONG"
+    if parsed.is_short:
+        return "SHORT"
+    return direction
+
+
+def format_paper_digest_message(
+    snapshot: PaperDigestSnapshot,
+    *,
+    display_timezone: str = "Europe/Berlin",
+    max_open: int = 5,
+    max_closes: int = 5,
+) -> str:
+    """Stuendlicher Paper-Performance-Digest fuer Telegram."""
+    summary = snapshot.summary
+    stamp = format_display_time(snapshot.as_of, display_timezone)
+    lines: list[str] = [
+        f"*{escape_markdown_v2('Paper Digest')}* · {escape_markdown_v2(stamp)}",
+        "",
+        f"*{escape_markdown_v2('DEPOT')}*",
+        escape_markdown_v2(
+            f"Equity    ${format_price(summary.equity, 2)}  "
+            f"({snapshot.equity_return_pct:+.1f}%)"
+        ),
+        escape_markdown_v2(f"Cash      ${format_price(summary.cash_balance, 2)}"),
+        escape_markdown_v2(
+            f"Realized  {_signed_usd(summary.realized_pnl)}  ·  {_signed_r(summary.total_r)}"
+        ),
+        escape_markdown_v2(
+            f"Win-Rate  {summary.win_rate * 100:.0f}%  ·  "
+            f"PF {summary.profit_factor:.2f}  ·  n={summary.closed_trades}"
+        ),
+        escape_markdown_v2(f"Expect.   {_signed_r(summary.expectancy_r)}/Trade"),
+        "",
+        f"*{escape_markdown_v2('LETZTE STUNDE')}*",
+        escape_markdown_v2(
+            f"Closed {snapshot.hour_closed_count}  ·  "
+            f"{_signed_r(snapshot.hour_closed_r)}  ·  "
+            f"{_signed_usd(snapshot.hour_closed_pnl)}"
+        ),
+        escape_markdown_v2(
+            f"Opened {snapshot.hour_opened_count}  ·  "
+            f"Pending {summary.pending_positions}"
+        ),
+    ]
+
+    open_header = (
+        f"OFFEN ({summary.open_positions})  "
+        f"uPnL {_signed_usd(snapshot.total_open_upnl_usd)}  "
+        f"({_signed_r(snapshot.total_open_upnl_r)})"
+    )
+    lines += ["", f"*{escape_markdown_v2(open_header)}*"]
+    if not snapshot.open_rows:
+        lines.append(escape_markdown_v2("keine offenen Positionen"))
+    else:
+        for row in snapshot.open_rows[:max_open]:
+            side = _short_direction(row.direction)
+            if row.unrealized_r is None or row.unrealized_usd is None:
+                pnl_line = f"{_pretty_symbol(row.symbol)} {side}  uPnL n/a"
+            else:
+                pnl_line = (
+                    f"{_pretty_symbol(row.symbol)} {side}  "
+                    f"{_signed_r(row.unrealized_r)}  {_signed_usd(row.unrealized_usd)}"
+                )
+            mark_txt = format_price(row.mark, infer_price_precision(row.mark)) if row.mark is not None else "n/a"
+            stop_txt = format_price(row.current_stop, infer_price_precision(row.current_stop))
+            lines.append(escape_markdown_v2(pnl_line))
+            lines.append(
+                escape_markdown_v2(
+                    f"  mark {mark_txt}  SL {stop_txt}  rem {row.rem_pct:.0f}%"
+                )
+            )
+            lines.append(escape_markdown_v2(f"  {_tp_status(row.tp1_filled, row.tp2_filled, row.tp3_filled)}"))
+        rest = len(snapshot.open_rows) - max_open
+        if rest > 0:
+            lines.append(escape_markdown_v2(f"+{rest} weitere"))
+
+    lines += ["", f"*{escape_markdown_v2('CLOSES (1h)')}*"]
+    if not snapshot.hour_closes:
+        lines.append(escape_markdown_v2("keine Abschluesse"))
+    else:
+        for row in snapshot.hour_closes[:max_closes]:
+            side = _short_direction(row.direction)
+            reason = _EXIT_REASON_LABELS.get(row.exit_reason or "", row.exit_reason or "-")
+            if row.realized_r is None:
+                body = (
+                    f"{_pretty_symbol(row.symbol)} {side}  "
+                    f"{_signed_usd(row.realized_usd)}  {reason}"
+                )
+            else:
+                body = (
+                    f"{_pretty_symbol(row.symbol)} {side}  "
+                    f"{_signed_r(row.realized_r)}  {reason}"
+                )
+            lines.append(escape_markdown_v2(body))
+        rest_c = len(snapshot.hour_closes) - max_closes
+        if rest_c > 0:
+            lines.append(escape_markdown_v2(f"+{rest_c} weitere"))
+
+    lines += [
+        "",
+        escape_markdown_v2(
+            f"Risiko ${format_price(snapshot.risk_per_trade, 0)} · "
+            f"{snapshot.leverage:.0f}x · "
+            f"Cap ${format_price(snapshot.max_notional, 0)} · "
+            f"Open {summary.open_positions}/{snapshot.max_open}"
         ),
         f"⚠️ {escape_markdown_v2(DISCLAIMER)}",
     ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -153,6 +153,34 @@ class PaperRepository:
             .limit(limit)
         )
         return list(result.scalars())
+
+    async def list_closed_since(
+        self, account_id: int, since: datetime, *, limit: int = 50
+    ) -> list[PaperPosition]:
+        result = await self._session.execute(
+            select(PaperPosition)
+            .where(
+                PaperPosition.account_id == account_id,
+                PaperPosition.status == "closed",
+                PaperPosition.closed_at.is_not(None),
+                PaperPosition.closed_at >= since,
+            )
+            .order_by(PaperPosition.closed_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars())
+
+    async def count_opened_since(self, account_id: int, since: datetime) -> int:
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(PaperPosition)
+            .where(
+                PaperPosition.account_id == account_id,
+                PaperPosition.opened_at >= since,
+                PaperPosition.status.in_(("open", "pending", "closed")),
+            )
+        )
+        return int(result.scalar_one())
 
     async def add_position(self, position: PaperPosition) -> PaperPosition:
         self._session.add(position)

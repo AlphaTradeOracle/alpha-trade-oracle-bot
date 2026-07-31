@@ -187,6 +187,9 @@ class Settings(BaseSettings):
     paper_fee_percent: float = 0.05
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
+    #: Stuendlicher Paper-Performance-Digest an TELEGRAM_ALLOWED_CHAT_IDS.
+    paper_hourly_digest_enabled: bool = True
+    paper_digest_interval_minutes: int = 60
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
     paper_retest_entry_enabled: bool = True
     paper_retest_zone_near: float = 0.55

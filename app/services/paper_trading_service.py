@@ -75,6 +75,48 @@ class PaperSummary:
 
 
 @dataclass
+class PaperDigestOpenRow:
+    symbol: str
+    direction: str
+    unrealized_usd: float | None
+    unrealized_r: float | None
+    mark: float | None
+    current_stop: float
+    rem_pct: float
+    tp1_filled: bool
+    tp2_filled: bool
+    tp3_filled: bool
+
+
+@dataclass
+class PaperDigestCloseRow:
+    symbol: str
+    direction: str
+    realized_usd: float
+    realized_r: float | None
+    exit_reason: str | None
+
+
+@dataclass
+class PaperDigestSnapshot:
+    as_of: datetime
+    summary: PaperSummary
+    equity_return_pct: float
+    hour_closed_count: int
+    hour_closed_r: float
+    hour_closed_pnl: float
+    hour_opened_count: int
+    open_rows: list[PaperDigestOpenRow]
+    hour_closes: list[PaperDigestCloseRow]
+    total_open_upnl_usd: float
+    total_open_upnl_r: float
+    risk_per_trade: float
+    leverage: float
+    max_notional: float
+    max_open: int
+
+
+@dataclass
 class PaperBackfillResult:
     considered: int = 0
     opened: int = 0
@@ -1504,6 +1546,106 @@ class PaperTradingService:
             expectancy_r=(total_r / len(r_multiples)) if r_multiples else 0.0,
             fees_r=fees_r,
             r_trades=len(r_multiples),
+        )
+
+    async def build_digest(
+        self,
+        session: AsyncSession,
+        prices: dict[str, float] | None = None,
+        *,
+        window: timedelta = timedelta(hours=1),
+    ) -> PaperDigestSnapshot:
+        """Snapshot fuer den stuendlichen Telegram-Paper-Digest."""
+        now = utc_now()
+        since = now - window
+        account = await self.get_or_create_account(session)
+        repo = PaperRepository(session)
+        open_positions = await repo.list_open_positions(account.id)
+        hour_closed = await repo.list_closed_since(account.id, since, limit=50)
+        hour_opened = await repo.count_opened_since(account.id, since)
+        marks = {key.upper(): value for key, value in (prices or {}).items()}
+
+        open_rows: list[PaperDigestOpenRow] = []
+        total_upnl = 0.0
+        total_upnl_r = 0.0
+        for pos in open_positions:
+            mark = marks.get(pos.symbol.upper())
+            initial_qty = float(pos.initial_quantity) or 0.0
+            remaining = float(pos.remaining_quantity)
+            rem_pct = (remaining / initial_qty * 100.0) if initial_qty > 0 else 0.0
+            upnl: float | None = None
+            upnl_r: float | None = None
+            if mark is not None:
+                try:
+                    direction = SignalDirection(pos.direction)
+                    sign = 1.0 if direction.is_long else -1.0
+                except ValueError:
+                    sign = 1.0
+                upnl = (mark - float(pos.entry_price)) * remaining * sign
+                total_upnl += upnl
+                risk = float(pos.risk_amount or 0.0)
+                if risk > 0:
+                    upnl_r = upnl / risk
+                    total_upnl_r += upnl_r
+            open_rows.append(
+                PaperDigestOpenRow(
+                    symbol=pos.symbol,
+                    direction=pos.direction,
+                    unrealized_usd=upnl,
+                    unrealized_r=upnl_r,
+                    mark=mark,
+                    current_stop=float(pos.current_stop),
+                    rem_pct=rem_pct,
+                    tp1_filled=bool(pos.tp1_filled),
+                    tp2_filled=bool(pos.tp2_filled),
+                    tp3_filled=bool(pos.tp3_filled),
+                )
+            )
+        open_rows.sort(
+            key=lambda row: row.unrealized_r if row.unrealized_r is not None else float("-inf"),
+            reverse=True,
+        )
+
+        close_rows: list[PaperDigestCloseRow] = []
+        hour_pnl = 0.0
+        hour_r = 0.0
+        for pos in hour_closed:
+            pnl = float(pos.realized_pnl)
+            hour_pnl += pnl
+            risk = float(pos.risk_amount or 0.0)
+            realized_r = (pnl / risk) if risk > 0 else None
+            if realized_r is not None:
+                hour_r += realized_r
+            close_rows.append(
+                PaperDigestCloseRow(
+                    symbol=pos.symbol,
+                    direction=pos.direction,
+                    realized_usd=pnl,
+                    realized_r=realized_r,
+                    exit_reason=pos.exit_reason,
+                )
+            )
+
+        summary = await self.summary(session, prices=marks or None)
+        initial = summary.initial_balance or 1.0
+        equity_return_pct = ((summary.equity - initial) / initial) * 100.0
+
+        return PaperDigestSnapshot(
+            as_of=now,
+            summary=summary,
+            equity_return_pct=equity_return_pct,
+            hour_closed_count=len(hour_closed),
+            hour_closed_r=hour_r,
+            hour_closed_pnl=hour_pnl,
+            hour_opened_count=hour_opened,
+            open_rows=open_rows,
+            hour_closes=close_rows,
+            total_open_upnl_usd=total_upnl,
+            total_open_upnl_r=total_upnl_r,
+            risk_per_trade=float(self._settings.paper_risk_per_trade_usd),
+            leverage=float(self._settings.paper_leverage),
+            max_notional=float(self._settings.paper_max_notional_usd),
+            max_open=int(self._settings.paper_max_open_positions),
         )
 
     async def _apply_price(

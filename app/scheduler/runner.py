@@ -10,14 +10,17 @@ from __future__ import annotations
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.bot.notifier import TelegramNotifier
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.database.session import session_scope
 from app.repositories.event_repository import ScheduledJobRepository
 from app.scheduler.jobs import (
     market_scan_job,
+    paper_digest_job,
     paper_update_job,
     run_market_scan,
+    run_paper_digest,
     run_paper_update,
     run_universe_refresh,
     universe_refresh_job,
@@ -44,6 +47,7 @@ class SchedulerRunner:
         paper_trading: PaperTradingService | None = None,
         provider: MarketDataProvider | None = None,
         providers: dict[str, MarketDataProvider] | None = None,
+        notifier: TelegramNotifier | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._scan_service = scan_service
@@ -52,6 +56,7 @@ class SchedulerRunner:
         self._paper = paper_trading
         self._provider = provider
         self._providers = providers or {}
+        self._notifier = notifier
         self._scheduler = AsyncIOScheduler(timezone="UTC")
 
     async def start(self) -> None:
@@ -66,6 +71,7 @@ class SchedulerRunner:
             definitions.append(universe_refresh_job(self._settings.universe_refresh_hours))
 
         paper_definition = None
+        digest_definition = None
         if (
             self._paper is not None
             and self._provider is not None
@@ -73,6 +79,14 @@ class SchedulerRunner:
         ):
             paper_definition = paper_update_job(self._settings.paper_update_interval_minutes)
             definitions.append(paper_definition)
+            if (
+                self._notifier is not None
+                and self._settings.paper_hourly_digest_enabled
+            ):
+                digest_definition = paper_digest_job(
+                    self._settings.paper_digest_interval_minutes
+                )
+                definitions.append(digest_definition)
 
         async with session_scope() as session:
             jobs = ScheduledJobRepository(session)
@@ -124,6 +138,29 @@ class SchedulerRunner:
                 coalesce=True,
                 max_instances=1,
                 misfire_grace_time=120,
+            )
+
+        if (
+            digest_definition is not None
+            and self._paper is not None
+            and self._provider is not None
+            and self._notifier is not None
+        ):
+            self._scheduler.add_job(
+                run_paper_digest,
+                trigger=IntervalTrigger(seconds=digest_definition.interval_seconds),
+                kwargs={
+                    "paper": self._paper,
+                    "provider": self._provider,
+                    "notifier": self._notifier,
+                    "job_key": digest_definition.key,
+                    "providers": self._providers,
+                },
+                id=digest_definition.key,
+                name=digest_definition.description,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=300,
             )
 
         self._scheduler.start()
