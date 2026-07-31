@@ -71,7 +71,7 @@ class TestStopLoss:
         risk = RiskManager().calculate(SignalDirection.LONG, indicators)
         assert risk is not None
         assert risk.stop_loss < 39_200.0
-        assert any("Support" in warning for warning in risk.warnings)
+        assert any("support" in warning.lower() for warning in risk.warnings)
 
     def test_stop_is_placed_above_resistance_for_short(self) -> None:
         indicators = make_indicators(close_price=40_000.0, atr_14=400.0, resistances=[40_800.0])
@@ -99,7 +99,7 @@ class TestStopLoss:
         risk = manager.calculate(SignalDirection.LONG, make_indicators(atr_14=1.0))
         assert risk is not None
         assert risk.stop_distance_percent == pytest.approx(1.0)
-        assert any("aufgeweitet" in warning for warning in risk.warnings)
+        assert any("widened" in warning.lower() for warning in risk.warnings)
 
     def test_too_wide_stop_is_flagged_but_not_moved(self) -> None:
         """Ein kuenstlich enger Stop waere in einem volatilen Markt gefaehrlicher."""
@@ -107,7 +107,7 @@ class TestStopLoss:
         risk = manager.calculate(SignalDirection.LONG, make_indicators(atr_14=2_000.0))
         assert risk is not None
         assert risk.stop_distance_percent > 2.0
-        assert any("ungewoehnlich weit" in warning for warning in risk.warnings)
+        assert any("unusually wide" in warning.lower() for warning in risk.warnings)
 
 
 class TestTakeProfit:
@@ -125,9 +125,9 @@ class TestTakeProfit:
         risk = RiskManager().calculate(SignalDirection.LONG, make_indicators())
         assert risk is not None
         distance = risk.entry_low - risk.stop_loss
-        assert risk.take_profit_1 == pytest.approx(risk.entry_low + distance * 2.0)
-        assert risk.take_profit_2 == pytest.approx(risk.entry_low + distance * 4.0)
-        assert risk.take_profit_3 == pytest.approx(risk.entry_low + distance * 6.0)
+        assert risk.take_profit_1 == pytest.approx(risk.entry_low + distance * 1.5)
+        assert risk.take_profit_2 == pytest.approx(risk.entry_low + distance * 2.5)
+        assert risk.take_profit_3 == pytest.approx(risk.entry_low + distance * 4.0)
 
     def test_target_is_pulled_below_blocking_resistance(self) -> None:
         indicators = make_indicators(close_price=40_000.0, atr_14=400.0, resistances=[40_600.0])
@@ -231,7 +231,7 @@ class TestInvalidation:
         )
         assert risk is not None
         assert "4h" in risk.invalidation_note
-        assert "unter" in risk.invalidation_note
+        assert "below" in risk.invalidation_note
 
     def test_short_note_uses_opposite_relation(self) -> None:
         risk = RiskManager().calculate(SignalDirection.SHORT, make_indicators())

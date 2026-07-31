@@ -163,7 +163,7 @@ class TestNoTradeRules:
         result = SignalEngine().generate("BTCUSDT", uptrend_indicators, data_quality=40.0, now=NOW)
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
-        assert "Datenqualitaet" in result.no_trade_reason
+        assert "Data quality" in result.no_trade_reason
 
     def test_excessive_volatility_forces_no_trade(
         self, uptrend_indicators: dict[str, IndicatorSet]
@@ -172,7 +172,7 @@ class TestNoTradeRules:
         result = engine.generate("BTCUSDT", uptrend_indicators, now=NOW)
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
-        assert "Volatilitaet" in result.no_trade_reason
+        assert "Volatility" in result.no_trade_reason
 
     def test_insufficient_risk_reward_forces_no_trade(
         self, uptrend_indicators: dict[str, IndicatorSet]
@@ -190,7 +190,7 @@ class TestNoTradeRules:
         rr = next(c for c in result.components if c.category.value == "risk_reward")
         assert rr.weight == 0.0
         assert rr.raw_score == 0.0
-        assert "Gate" in rr.detail or "Minimum" in rr.detail
+        assert "gate" in rr.detail.lower() or "minimum" in rr.detail.lower()
 
     def test_neutral_direction_gets_no_no_trade_reason(
         self, sideways_indicators: dict[str, IndicatorSet]
