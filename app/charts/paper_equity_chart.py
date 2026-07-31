@@ -177,36 +177,15 @@ def _render(
         .replace("X", ".")
     )
 
-    # Gleicher Spaltenabstand: Gesamtwert | 1H | 24H | 7D, rechtsbuendig
+    # Gleicher Spaltenabstand: 1H | 24H | 7D | Gesamtwert (ganz rechts)
     cols = list(windows[-3:]) if windows else []
     right = 0.975
     col_w = 0.105
     n_cols = 1 + len(cols)
     start_x = right - col_w * (n_cols - 0.5)
 
-    fig.text(
-        start_x,
-        0.945,
-        tv.fmt_usd(last),
-        color=tv.TEXT,
-        fontsize=12,
-        fontweight="bold",
-        ha="center",
-        va="center",
-    )
-    fig.text(
-        start_x,
-        0.900,
-        delta_label,
-        color=chip_color,
-        fontsize=9.5,
-        fontweight="bold",
-        ha="center",
-        va="center",
-    )
-
     for i, (label, eq_delta) in enumerate(cols):
-        cx = start_x + (i + 1) * col_w
+        cx = start_x + i * col_w
         color = tv.UP if eq_delta >= 0 else tv.DOWN
         fig.text(
             cx,
@@ -228,6 +207,28 @@ def _render(
             ha="center",
             va="center",
         )
+
+    total_x = start_x + len(cols) * col_w
+    fig.text(
+        total_x,
+        0.945,
+        tv.fmt_usd(last),
+        color=tv.TEXT,
+        fontsize=12,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
+    fig.text(
+        total_x,
+        0.900,
+        delta_label,
+        color=chip_color,
+        fontsize=9.5,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
 
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor(), edgecolor="none")
