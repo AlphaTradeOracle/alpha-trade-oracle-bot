@@ -192,6 +192,16 @@ class PaperRepository:
         await self._session.flush()
         return fill
 
+    async def list_fills_for_account(self, account_id: int) -> list[PaperFill]:
+        """Alle Fills des Kontos chronologisch (fuer Equity-Kurve)."""
+        result = await self._session.execute(
+            select(PaperFill)
+            .join(PaperPosition, PaperFill.position_id == PaperPosition.id)
+            .where(PaperPosition.account_id == account_id)
+            .order_by(PaperFill.filled_at.asc(), PaperFill.id.asc())
+        )
+        return list(result.scalars())
+
     async def update_cash(self, account_id: int, cash_balance: Decimal, realized_pnl: Decimal) -> None:
         await self._session.execute(
             update(PaperAccount)

@@ -71,7 +71,8 @@ class TelegramNotifier:
         return sent
 
     async def notify_paper_digest(self, snapshot: object) -> int:
-        """Stuendlichen Paper-Digest formatieren und versenden."""
+        """Stuendlichen Paper-Digest formatieren und versenden (Equity-Chart oben)."""
+        from app.charts.paper_equity_chart import build_paper_equity_chart
         from app.services.paper_trading_service import PaperDigestSnapshot
 
         if not isinstance(snapshot, PaperDigestSnapshot):
@@ -80,7 +81,29 @@ class TelegramNotifier:
             snapshot,
             display_timezone=self._settings.display_timezone,
         )
-        return await self.notify_allowed_chats(text)
+        chart: bytes | None = None
+        curve = snapshot.equity_curve or []
+        if len(curve) >= 2:
+            chart = build_paper_equity_chart(
+                curve,
+                initial=float(snapshot.summary.initial_balance),
+            )
+        if chart is None:
+            return await self.notify_allowed_chats(text)
+
+        sent = 0
+        for chat_id in sorted(self._settings.allowed_chat_ids):
+            try:
+                ids = await self.send_with_chart(chat_id, text, chart)
+                if ids:
+                    sent += 1
+            except Exception as exc:
+                logger.warning(
+                    "telegram_paper_digest_failed",
+                    chat_id=chat_id,
+                    error=str(exc),
+                )
+        return sent
 
     async def send_photo(
         self, chat_id: int, photo: bytes, caption: str | None = None

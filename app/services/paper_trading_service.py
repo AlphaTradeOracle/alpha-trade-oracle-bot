@@ -114,6 +114,8 @@ class PaperDigestSnapshot:
     leverage: float
     max_notional: float
     max_open: int
+    #: Zeitreihe Equity = Cash + Margin + Open PnL (rekonstruiert + Live-Punkt).
+    equity_curve: list[tuple[datetime, float]] | None = None
 
 
 @dataclass
@@ -1630,6 +1632,23 @@ class PaperTradingService:
         initial = summary.initial_balance or 1.0
         equity_return_pct = ((summary.equity - initial) / initial) * 100.0
 
+        from app.charts.paper_equity_chart import build_equity_curve_points
+
+        fills = await repo.list_fills_for_account(account.id)
+        fill_rows = [
+            (fill.filled_at, float(fill.pnl), float(fill.fee)) for fill in fills
+        ]
+        start_at = getattr(account, "created_at", None) or now
+        if fill_rows and fill_rows[0][0] < start_at:
+            start_at = fill_rows[0][0]
+        equity_curve = build_equity_curve_points(
+            initial=float(summary.initial_balance),
+            start_at=start_at,
+            fills=fill_rows,
+            as_of=now,
+            live_equity=float(summary.equity),
+        )
+
         return PaperDigestSnapshot(
             as_of=now,
             summary=summary,
@@ -1646,6 +1665,7 @@ class PaperTradingService:
             leverage=float(self._settings.paper_leverage),
             max_notional=float(self._settings.paper_max_notional_usd),
             max_open=int(self._settings.paper_max_open_positions),
+            equity_curve=equity_curve,
         )
 
     async def _apply_price(
