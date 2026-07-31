@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     regime_timeframe: str = "4h"
 
     # --- Scheduler / Daten -------------------------------------------------
-    scan_interval_minutes: int = 30
+    scan_interval_minutes: int = 15
     candle_limit: int = 500
     min_candles_required: int = 210
     universe_size: int = 1000

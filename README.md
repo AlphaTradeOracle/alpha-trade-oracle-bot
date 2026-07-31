@@ -165,7 +165,7 @@ Makefile-Äquivalente: `make analyze`, `make scan`, `make backtest`, `make check
    und mappt die ersten `UNIVERSE_TARGET_COUNT` (Default 300) handelbaren Paare
    nach Market-Cap-Rang; `data prune` trimmt danach auf dieselbe Top-N.
 2. Der Scheduler refreshed alle `UNIVERSE_REFRESH_HOURS` (Default 24) und scannt
-   alle `SCAN_INTERVAL_MINUTES` (Default 30) bis zu `UNIVERSE_SCAN_BATCH_SIZE`
+   alle `SCAN_INTERVAL_MINUTES` (Default 15) bis zu `UNIVERSE_SCAN_BATCH_SIZE`
    Symbole (Default 300 — deckt das volle Universe pro Zyklus ab;
    Round-Robin über `last_scanned_at`).
 3. Bulk-Scans laufen ohne LLM; Telegram-Versand nur für Symbole auf einer
