@@ -15,17 +15,17 @@ import {
   Text,
 } from "cursor/canvas";
 
-const GENERATED = "2026-07-31 20:42 Europe/Berlin \u00b7 closed from snapshot \u00b7 open/pending live";
+const GENERATED = "2026-07-31 21:09 Europe/Berlin \u00b7 closed from snapshot \u00b7 open/pending live";
 const KPI = {
   "start": 5000.0,
-  "cash": 4698.5,
+  "cash": 4547.75,
   "book": 5507.20334906,
-  "equity": 4698.5,
+  "equity": 4547.75,
   "realized": 507.20334906,
   "closedRpnl": 120.09,
-  "openN": 2,
+  "openN": 3,
   "closedN": 58,
-  "pendingN": 3,
+  "pendingN": 2,
   "cancelledN": 44,
   "wr": 36.2,
   "wins": 21,
@@ -121,7 +121,7 @@ const STRATEGY = {
   "scanMinutes": 30,
   "pills": [
     "Closed: VPS snapshot (pre reset)",
-    "Live now: 2 open / 3 pending",
+    "Live now: 3 open / 2 pending",
     "BTC regime filter",
     "Retest entry \u00b7 Scratch 12h",
     "Risk-normalized \u00b7 TP ladder"
@@ -1985,21 +1985,21 @@ const TRADE_ROWS = [
     "\u2014"
   ],
   [
-    "1520",
-    "WUSDT",
+    "1521",
+    "ATOMUSDT",
     "SHORT",
-    "pending",
-    "0.00798000",
-    "0.00812186",
-    "0.00781788",
-    "0.00769629",
-    "0.00751390",
+    "open",
+    "1.24082465",
+    "1.25722082",
+    "1.21623039",
+    "1.19983422",
+    "1.17523997",
     "\u2014",
     "+0.00R",
-    "$26.66",
+    "$19.82",
     "$+0.00",
     "\u2014",
-    "2026-07-31 16:36",
+    "2026-07-31 17:00",
     "\u2014"
   ],
   [
@@ -2021,24 +2021,6 @@ const TRADE_ROWS = [
     "\u2014"
   ],
   [
-    "1521",
-    "ATOMUSDT",
-    "SHORT",
-    "open",
-    "1.24082465",
-    "1.25722082",
-    "1.21623039",
-    "1.19983422",
-    "1.17523997",
-    "\u2014",
-    "+0.00R",
-    "$19.82",
-    "$+0.00",
-    "\u2014",
-    "2026-07-31 17:00",
-    "\u2014"
-  ],
-  [
     "1522",
     "BATUSDT",
     "SHORT",
@@ -2054,6 +2036,24 @@ const TRADE_ROWS = [
     "$+0.00",
     "\u2014",
     "2026-07-31 17:49",
+    "\u2014"
+  ],
+  [
+    "1520",
+    "WUSDT",
+    "SHORT",
+    "open",
+    "0.00802454",
+    "0.00816640",
+    "0.00781175",
+    "0.00766989",
+    "0.00745710",
+    "\u2014",
+    "+0.00R",
+    "$26.52",
+    "$+0.00",
+    "\u2014",
+    "2026-07-31 18:00",
     "\u2014"
   ]
 ] as const;
@@ -3105,6 +3105,24 @@ const CLOSED_ROWS = [
 ] as const;
 const OPEN_ROWS = [
   [
+    "1521",
+    "ATOMUSDT",
+    "SHORT",
+    "open",
+    "1.24082465",
+    "1.25722082",
+    "1.21623039",
+    "1.19983422",
+    "1.17523997",
+    "\u2014",
+    "+0.00R",
+    "$19.82",
+    "$+0.00",
+    "\u2014",
+    "2026-07-31 17:00",
+    "\u2014"
+  ],
+  [
     "1518",
     "IMXUSDT",
     "SHORT",
@@ -3123,21 +3141,21 @@ const OPEN_ROWS = [
     "\u2014"
   ],
   [
-    "1521",
-    "ATOMUSDT",
+    "1520",
+    "WUSDT",
     "SHORT",
     "open",
-    "1.24082465",
-    "1.25722082",
-    "1.21623039",
-    "1.19983422",
-    "1.17523997",
+    "0.00802454",
+    "0.00816640",
+    "0.00781175",
+    "0.00766989",
+    "0.00745710",
     "\u2014",
     "+0.00R",
-    "$19.82",
+    "$26.52",
     "$+0.00",
     "\u2014",
-    "2026-07-31 17:00",
+    "2026-07-31 18:00",
     "\u2014"
   ]
 ] as const;
@@ -3158,24 +3176,6 @@ const PENDING_ROWS = [
     "$+0.00",
     "\u2014",
     "2026-07-31 16:32",
-    "\u2014"
-  ],
-  [
-    "1520",
-    "WUSDT",
-    "SHORT",
-    "pending",
-    "0.00798000",
-    "0.00812186",
-    "0.00781788",
-    "0.00769629",
-    "0.00751390",
-    "\u2014",
-    "+0.00R",
-    "$26.66",
-    "$+0.00",
-    "\u2014",
-    "2026-07-31 16:36",
     "\u2014"
   ],
   [
@@ -3279,14 +3279,14 @@ export default function PaperTradesPerformance() {
       <Stack gap={6}>
         <H1>Paper Trades — Live Strategy</H1>
         <Text tone="secondary">
-          Production VPS · since 2026-07-28 · Stand 2026-07-31 20:42 Europe/Berlin · closed from snapshot · open/pending live · commit {STRATEGY.commit}
+          Production VPS · since 2026-07-28 · Stand 2026-07-31 21:09 Europe/Berlin · closed from snapshot · open/pending live · commit {STRATEGY.commit}
         </Text>
       </Stack>
 
       <Callout tone="warning">
-        Live-DB Paper-Ledger wurde resettet (aktuell nur 2 open / 3 pending, 0 closed). Closed-Performance
-        unten kommt aus dem letzten VPS-Snapshot vor dem Reset (58 closed). Cash live $4,698.50 · Snapshot-Realized
-        +$507. Gates: Regime · Short-Guard · Retest · Scratch 12h · TP-Leiter.
+        Live-DB Paper-Ledger ist resettet (aktuell 3 open / 2 pending, 0 closed).
+        Closed-Performance kommt aus dem letzten VPS-Snapshot vor dem Reset (58 closed, WR 36.2%, PF 1.14).
+        Live Cash $4,547.75.
       </Callout>
 
       <Grid columns={{ sm: 2, md: 4 }} gap={12}>
