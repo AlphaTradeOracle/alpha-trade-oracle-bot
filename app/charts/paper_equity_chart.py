@@ -170,63 +170,64 @@ def _render(
     )
 
     chip_color = tv.UP if up else tv.DOWN
-    value_x = 0.52 if windows else 0.84
-    fig.text(
-        value_x,
-        0.935,
-        tv.fmt_usd(last),
-        color=tv.TEXT,
-        fontsize=13,
-        fontweight="bold",
-        ha="right",
-        va="center",
-    )
     delta_label = (
         f"{delta:+,.2f}  ({delta_pct:+.1f}%)"
         .replace(",", "X")
         .replace(".", ",")
         .replace("X", ".")
     )
+
+    # Gleicher Spaltenabstand: Gesamtwert | 1H | 24H | 7D, rechtsbuendig
+    cols = list(windows[-3:]) if windows else []
+    right = 0.975
+    col_w = 0.105
+    n_cols = 1 + len(cols)
+    start_x = right - col_w * (n_cols - 0.5)
+
     fig.text(
-        value_x,
-        0.895,
+        start_x,
+        0.945,
+        tv.fmt_usd(last),
+        color=tv.TEXT,
+        fontsize=12,
+        fontweight="bold",
+        ha="center",
+        va="center",
+    )
+    fig.text(
+        start_x,
+        0.900,
         delta_label,
         color=chip_color,
-        fontsize=10,
+        fontsize=9.5,
         fontweight="bold",
-        ha="right",
+        ha="center",
         va="center",
     )
 
-    if windows:
-        # Drei kompakte Spalten am rechten Rand: Label oben, Equity-Δ darunter
-        cols = windows[-3:]
-        right = 0.975
-        col_w = 0.105
-        start_x = right - col_w * (len(cols) - 0.5)
-        for i, (label, eq_delta) in enumerate(cols):
-            cx = start_x + i * col_w
-            color = tv.UP if eq_delta >= 0 else tv.DOWN
-            fig.text(
-                cx,
-                0.945,
-                str(label).upper(),
-                color=tv.MUTED,
-                fontsize=8,
-                fontweight="bold",
-                ha="center",
-                va="center",
-            )
-            fig.text(
-                cx,
-                0.900,
-                _fmt_signed_usd(eq_delta),
-                color=color,
-                fontsize=9.5,
-                fontweight="bold",
-                ha="center",
-                va="center",
-            )
+    for i, (label, eq_delta) in enumerate(cols):
+        cx = start_x + (i + 1) * col_w
+        color = tv.UP if eq_delta >= 0 else tv.DOWN
+        fig.text(
+            cx,
+            0.945,
+            str(label).upper(),
+            color=tv.MUTED,
+            fontsize=8,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
+        fig.text(
+            cx,
+            0.900,
+            _fmt_signed_usd(eq_delta),
+            color=color,
+            fontsize=9.5,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
 
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor(), edgecolor="none")
