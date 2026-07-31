@@ -23,8 +23,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 CHART_CANDLES = 80
-FIGURE_SIZE = (10.5, 6.0)
+FIGURE_SIZE = (10.5, 7.0)
 DPI = 140
+#: Hoehenverhaeltnis Preis-Panel : Volumen-Panel.
+_HEIGHT_RATIOS = (3.2, 1.0)
 
 _BG = "#0b1016"
 _PANEL = "#10161e"
@@ -36,6 +38,8 @@ _DOWN = "#ef5b67"
 _ENTRY = "#f0c75e"
 _SL = "#ff5c6a"
 _TP = ("#6bcf8e", "#4caf75", "#2f9e5f")
+_VOL_UP = "#1f9d66"
+_VOL_DOWN = "#b8444e"
 
 
 def resolve_paper_chart_timeframe(primary_timeframe: str, settings: Settings) -> str:
@@ -164,8 +168,17 @@ def _render_png(
     tp3: float,
     price_precision: int,
 ) -> bytes:
-    fig, ax = plt.subplots(figsize=FIGURE_SIZE, facecolor=_BG)
+    fig, (ax, ax_vol) = plt.subplots(
+        2,
+        1,
+        figsize=FIGURE_SIZE,
+        facecolor=_BG,
+        sharex=True,
+        gridspec_kw={"height_ratios": list(_HEIGHT_RATIOS), "hspace": 0.05},
+        layout="constrained",
+    )
     ax.set_facecolor(_PANEL)
+    ax_vol.set_facecolor(_PANEL)
 
     width = 0.62
     for i, candle in enumerate(candles):
@@ -185,6 +198,18 @@ def _render_png(
                 linewidth=0.4,
             )
         )
+        vol_color = _VOL_UP if bullish else _VOL_DOWN
+        ax_vol.add_patch(
+            mpatches.Rectangle(
+                (i - width / 2, 0.0),
+                width,
+                max(float(candle.volume), 0.0),
+                facecolor=vol_color,
+                edgecolor=vol_color,
+                linewidth=0.0,
+                alpha=0.85,
+            )
+        )
 
     ax.axhspan(entry_low, entry_high, color=_ENTRY, alpha=0.14, zorder=0)
     ax.axhline(entry_low, color=_ENTRY, linewidth=1.15, alpha=0.9)
@@ -198,7 +223,13 @@ def _render_png(
     y_max = max(max(c.high for c in candles), max(levels))
     pad = (y_max - y_min) * 0.09 or abs(y_max) * 0.02 or 1.0
     ax.set_ylim(y_min - pad, y_max + pad)
-    ax.set_xlim(-1.2, len(candles) + 8)
+
+    x_right = len(candles) + 8
+    ax.set_xlim(-1.2, x_right)
+    ax_vol.set_xlim(-1.2, x_right)
+
+    max_vol = max((float(c.volume) for c in candles), default=0.0)
+    ax_vol.set_ylim(0.0, max_vol * 1.18 if max_vol > 0 else 1.0)
 
     label_x = len(candles) + 0.4
     _level_label(ax, label_x, (entry_low + entry_high) / 2, "Entry", entry_low, entry_high, _ENTRY, price_precision)
@@ -217,17 +248,27 @@ def _render_png(
         fontweight="bold",
         loc="left",
     )
-    ax.tick_params(colors=_MUTED, labelsize=8, length=0)
-    ax.grid(True, color=_GRID, linewidth=0.6, alpha=0.85)
-    ax.set_axisbelow(True)
-    for spine in ax.spines.values():
-        spine.set_color(_GRID)
-        spine.set_linewidth(0.8)
+
+    for axis in (ax, ax_vol):
+        axis.tick_params(colors=_MUTED, labelsize=8, length=0)
+        axis.grid(True, color=_GRID, linewidth=0.6, alpha=0.85)
+        axis.set_axisbelow(True)
+        for spine in axis.spines.values():
+            spine.set_color(_GRID)
+            spine.set_linewidth(0.8)
+        # Preis- und Volumen-Skala rechts (TradingView-Stil).
+        axis.yaxis.tick_right()
+        axis.yaxis.set_label_position("right")
+        axis.spines["left"].set_visible(False)
+        axis.spines["right"].set_visible(True)
+
+    ax.tick_params(axis="x", labelbottom=False)
+    ax_vol.tick_params(axis="x", labelsize=7.5)
 
     step = max(1, len(candles) // 6)
     tick_positions = list(range(0, len(candles), step))
-    ax.set_xticks(tick_positions)
-    ax.set_xticklabels(
+    ax_vol.set_xticks(tick_positions)
+    ax_vol.set_xticklabels(
         [candles[i].open_time.strftime("%d.%m %H:%M") for i in tick_positions],
         rotation=0,
         ha="center",
@@ -237,8 +278,18 @@ def _render_png(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: _fmt_price(float(value), price_precision))
     )
+    ax_vol.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: _fmt_volume(float(value))))
+    ax_vol.text(
+        0.01,
+        0.92,
+        "Vol",
+        transform=ax_vol.transAxes,
+        color=_MUTED,
+        fontsize=8,
+        va="top",
+        ha="left",
+    )
 
-    fig.tight_layout(pad=1.1)
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png", dpi=DPI, facecolor=fig.get_facecolor())
     plt.close(fig)
@@ -249,6 +300,19 @@ def _render_png(
 def _fmt_price(value: float, precision: int) -> str:
     formatted = f"{value:,.{precision}f}"
     return formatted.replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
+
+
+def _fmt_volume(value: float) -> str:
+    abs_value = abs(value)
+    if abs_value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if abs_value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs_value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    if abs_value >= 10:
+        return f"{value:.0f}"
+    return f"{value:.2f}"
 
 
 def _price_label(ax, x: float, y: float, name: str, color: str, precision: int) -> None:
