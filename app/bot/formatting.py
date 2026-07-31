@@ -420,7 +420,8 @@ def format_paper_digest_message(
     summary = snapshot.summary
     stamp = format_display_time(snapshot.as_of, display_timezone)
     lines: list[str] = [
-        f"*{escape_markdown_v2('Paper Digest')}* · {escape_markdown_v2(stamp)}",
+        f"*{escape_markdown_v2('Performance Dashboard')}*",
+        escape_markdown_v2(f"Alpha Trade Oracle  ·  {stamp}"),
         "",
         f"*{escape_markdown_v2('DEPOT')}*",
         escape_markdown_v2(
@@ -475,7 +476,8 @@ def format_paper_digest_message(
         lines.append(
             escape_markdown_v2(f"Opened {snapshot.hour_opened_count}")
         )
-    lines.append(escape_markdown_v2(f"Pending {summary.pending_positions}"))
+    if summary.pending_positions > 0:
+        lines.append(escape_markdown_v2(f"Signal {summary.pending_positions}"))
 
     open_header = (
         f"OFFEN ({summary.open_positions})  "

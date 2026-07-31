@@ -1,4 +1,4 @@
-"""Equity-Chart fuer den stuendlichen Paper-Digest (Cash + Open PnL)."""
+"""Equity-Chart im TradingView-Stil fuer das Performance-Dashboard."""
 
 from __future__ import annotations
 
@@ -11,23 +11,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import numpy as np
 
+from app.charts import theme as tv
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-FIGURE_SIZE = (10.5, 5.2)
-DPI = 140
-
-_BG = "#0b1016"
-_PANEL = "#10161e"
-_GRID = "#1c2530"
-_TEXT = "#e8eef5"
-_MUTED = "#8b98a5"
-_UP = "#2ecc8a"
-_DOWN = "#ef5b67"
-_LINE = "#5eb8ff"
-_START = "#f0c75e"
+FIGURE_SIZE = (11.2, 5.6)
 
 
 def build_equity_curve_points(
@@ -54,7 +45,6 @@ def build_equity_curve_points(
         points[-1] = (as_of, float(live_equity))
 
     if len(points) == 1:
-        # Matplotlib braucht mind. 2 Punkte fuer eine Linie.
         twin = as_of if as_of != points[0][0] else start_at
         points.append((twin, float(live_equity)))
     return points
@@ -64,7 +54,7 @@ def build_paper_equity_chart(
     points: Sequence[tuple[datetime, float]],
     *,
     initial: float,
-    title: str = "Paper Equity",
+    title: str = "EQUITY",
     subtitle: str = "Cash + Open PnL",
 ) -> bytes | None:
     """PNG-Bytes fuer Telegram; None bei zu wenigen/ungueltigen Punkten."""
@@ -85,88 +75,141 @@ def _render(
     subtitle: str,
 ) -> bytes:
     xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    last = ys[-1]
+    ys = np.asarray([p[1] for p in points], dtype=float)
+    last = float(ys[-1])
     up = last >= initial
-    accent = _UP if up else _DOWN
-    fill_alpha = 0.22
+    accent = tv.UP if up else tv.DOWN
+    line_color = "#4fc3f7" if up else "#ff8a80"
 
-    fig, ax = plt.subplots(figsize=FIGURE_SIZE, dpi=DPI)
-    fig.patch.set_facecolor(_BG)
-    ax.set_facecolor(_PANEL)
+    fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+    tv.style_figure(fig)
+    tv.style_axes(ax)
+    tv.watermark(ax, alpha=0.045)
 
-    ax.plot(xs, ys, color=_LINE, linewidth=2.4, solid_capstyle="round", zorder=3)
-    ax.fill_between(xs, ys, initial, where=[y >= initial for y in ys],
-                     interpolate=True, color=_UP, alpha=fill_alpha, zorder=2)
-    ax.fill_between(xs, ys, initial, where=[y < initial for y in ys],
-                     interpolate=True, color=_DOWN, alpha=fill_alpha, zorder=2)
-    ax.axhline(initial, color=_START, linewidth=1.1, linestyle="--", alpha=0.85, zorder=2)
+    # Soft glow under line
+    ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
+    ax.plot(xs, ys, color=line_color, linewidth=2.35, solid_capstyle="round", zorder=3)
 
-    y_min = min(min(ys), initial)
-    y_max = max(max(ys), initial)
-    pad = max((y_max - y_min) * 0.18, abs(initial) * 0.004, 8.0)
+    # Gradient-like fill vs start
+    above = ys >= initial
+    below = ys < initial
+    ax.fill_between(xs, ys, initial, where=above, interpolate=True, color=tv.UP, alpha=0.16, zorder=1.5)
+    ax.fill_between(xs, ys, initial, where=below, interpolate=True, color=tv.DOWN, alpha=0.16, zorder=1.5)
+
+    # Start / baseline
+    ax.axhline(initial, color=tv.WARN, linewidth=1.15, linestyle=(0, (5, 3.5)), alpha=0.9, zorder=2)
+    ax.axhline(last, color=accent, linewidth=0.7, linestyle=(0, (1.5, 3)), alpha=0.45, zorder=2)
+
+    y_min = float(min(ys.min(), initial))
+    y_max = float(max(ys.max(), initial))
+    pad = max((y_max - y_min) * 0.20, abs(initial) * 0.004, 10.0)
     ax.set_ylim(y_min - pad, y_max + pad)
 
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m\n%H:%M"))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=3, maxticks=7))
-    ax.tick_params(colors=_MUTED, labelsize=9)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _p: f"${v:,.0f}"))
-    ax.grid(True, color=_GRID, linewidth=0.8, alpha=0.9)
-    for spine in ax.spines.values():
-        spine.set_color(_GRID)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _p: tv.fmt_usd(float(v), decimals=0)))
+    ax.tick_params(axis="x", labelsize=8, pad=6)
 
-    ax.set_title(title, color=_TEXT, fontsize=15, fontweight="bold", loc="left", pad=14)
-    ax.text(
-        0.0,
-        1.02,
-        subtitle,
-        transform=ax.transAxes,
-        color=_MUTED,
-        fontsize=10,
-        ha="left",
-        va="bottom",
+    # Right-side TV tags
+    x_span = mdates.date2num(xs[-1]) - mdates.date2num(xs[0])
+    tag_x = mdates.date2num(xs[-1]) + max(x_span * 0.02, 0.01)
+    ax.set_xlim(
+        mdates.date2num(xs[0]) - max(x_span * 0.03, 0.01),
+        mdates.date2num(xs[-1]) + max(x_span * 0.22, 0.08),
     )
 
     delta = last - initial
     delta_pct = (delta / initial * 100.0) if initial else 0.0
-    badge = f"${last:,.2f}  ({delta:+,.2f} · {delta_pct:+.1f}%)"
-    ax.annotate(
-        badge,
-        xy=(xs[-1], last),
-        xytext=(-8, 12),
-        textcoords="offset points",
+    _equity_tag(ax, tag_x, last, f"{tv.fmt_usd(last)}  {delta_pct:+.1f}%", accent)
+    _equity_tag(ax, tag_x, initial, f"Start  {tv.fmt_usd(initial)}", tv.WARN, alpha=0.88)
+
+    # End marker
+    ax.scatter(
+        [xs[-1]],
+        [last],
+        s=70,
         color=accent,
+        edgecolors=tv.BG,
+        linewidths=1.6,
+        zorder=5,
+    )
+    ax.scatter([xs[-1]], [last], s=180, color=accent, alpha=0.18, zorder=4)
+
+    # Header
+    fig.subplots_adjust(left=0.05, right=0.84, top=0.86, bottom=0.14)
+    fig.text(
+        0.05,
+        0.935,
+        title,
+        color=tv.TEXT,
+        fontsize=15,
+        fontweight="bold",
+        ha="left",
+        va="center",
+    )
+    fig.text(
+        0.05,
+        0.895,
+        subtitle,
+        color=tv.MUTED,
+        fontsize=10,
+        ha="left",
+        va="center",
+    )
+    fig.text(
+        0.84,
+        0.935,
+        tv.BRAND,
+        color=tv.MUTED,
+        fontsize=10,
+        ha="right",
+        va="center",
+    )
+
+    # Delta chip
+    chip_color = tv.UP if up else tv.DOWN
+    fig.text(
+        0.84,
+        0.895,
+        f"{delta:+,.2f} USD".replace(",", "X").replace(".", ",").replace("X", "."),
+        color=chip_color,
         fontsize=11,
         fontweight="bold",
         ha="right",
-        va="bottom",
-        zorder=4,
+        va="center",
+    )
+
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor(), edgecolor="none")
+    plt.close(fig)
+    return buffer.getvalue()
+
+
+def _equity_tag(
+    ax,
+    x: float,
+    y: float,
+    text: str,
+    color: str,
+    *,
+    alpha: float = 1.0,
+) -> None:
+    ax.annotate(
+        f" {text} ",
+        xy=(x, y),
+        xytext=(8, 0),
+        textcoords="offset points",
+        color="#ffffff",
+        fontsize=8.2,
+        fontweight="bold",
+        va="center",
+        ha="left",
+        clip_on=False,
+        zorder=6,
         bbox={
-            "boxstyle": "round,pad=0.35",
-            "facecolor": _BG,
-            "edgecolor": accent,
-            "linewidth": 1.0,
-            "alpha": 0.92,
+            "boxstyle": "round,pad=0.30,rounding_size=0.35",
+            "facecolor": color,
+            "edgecolor": "none",
+            "alpha": alpha,
         },
     )
-    ax.scatter([xs[-1]], [last], color=accent, s=36, zorder=4, edgecolors=_BG, linewidths=1.2)
-
-    ax.text(
-        0.0,
-        -0.14,
-        f"Start ${initial:,.2f}",
-        transform=ax.transAxes,
-        color=_START,
-        fontsize=9,
-        ha="left",
-        va="top",
-    )
-
-    fig.tight_layout(pad=1.2)
-    # Platz fuer Title/Subtitle
-    fig.subplots_adjust(top=0.86, bottom=0.16)
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", facecolor=fig.get_facecolor(), edgecolor="none")
-    plt.close(fig)
-    return buf.getvalue()

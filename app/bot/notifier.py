@@ -87,6 +87,8 @@ class TelegramNotifier:
             chart = build_paper_equity_chart(
                 curve,
                 initial=float(snapshot.summary.initial_balance),
+                title="EQUITY",
+                subtitle="Cash + Open PnL  ·  Performance Dashboard",
             )
         if chart is None:
             return await self.notify_allowed_chats(text)

@@ -1,4 +1,4 @@
-"""Kerzenchart mit Entry-, Stop- und Take-Profit-Levels fuer Telegram."""
+"""Kerzenchart im TradingView-Stil mit Entry/SL/TP-Strukturen fuer Telegram."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from app.charts import theme as tv
 from app.core.logging import get_logger
 from app.core.time import next_higher_timeframe
 from app.market_data.types import CandleSeries
@@ -23,23 +24,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 CHART_CANDLES = 80
-FIGURE_SIZE = (10.5, 7.0)
-DPI = 140
+FIGURE_SIZE = (11.2, 7.4)
 #: Hoehenverhaeltnis Preis-Panel : Volumen-Panel.
-_HEIGHT_RATIOS = (3.2, 1.0)
-
-_BG = "#0b1016"
-_PANEL = "#10161e"
-_GRID = "#1c2530"
-_TEXT = "#e8eef5"
-_MUTED = "#8b98a5"
-_UP = "#2ecc8a"
-_DOWN = "#ef5b67"
-_ENTRY = "#f0c75e"
-_SL = "#ff5c6a"
-_TP = ("#6bcf8e", "#4caf75", "#2f9e5f")
-_VOL_UP = "#1f9d66"
-_VOL_DOWN = "#b8444e"
+_HEIGHT_RATIOS = (3.45, 1.0)
 
 
 def resolve_paper_chart_timeframe(primary_timeframe: str, settings: Settings) -> str:
@@ -172,22 +159,109 @@ def _render_png(
         2,
         1,
         figsize=FIGURE_SIZE,
-        facecolor=_BG,
+        facecolor=tv.BG,
         sharex=True,
-        gridspec_kw={"height_ratios": list(_HEIGHT_RATIOS), "hspace": 0.05},
-        layout="constrained",
+        gridspec_kw={"height_ratios": list(_HEIGHT_RATIOS), "hspace": 0.028},
     )
-    ax.set_facecolor(_PANEL)
-    ax_vol.set_facecolor(_PANEL)
+    tv.style_figure(fig)
+    tv.style_axes(ax)
+    tv.style_axes(ax_vol)
+    tv.watermark(ax)
 
-    width = 0.62
+    n = len(candles)
+    last_i = n - 1
+    entry_mid = (entry_low + entry_high) / 2.0
+    is_long = "SHORT" not in direction.upper()
+
+    # Risk / Reward Zonen (TV-aehnlich, weich)
+    zone_left = -0.6
+    zone_right = n + 6.5
+    risk_top = max(entry_mid, stop_loss)
+    risk_bot = min(entry_mid, stop_loss)
+    reward_top = max(entry_mid, tp3)
+    reward_bot = min(entry_mid, tp3)
+    ax.axhspan(risk_bot, risk_top, xmin=0, xmax=1, color=tv.SL, alpha=0.07, zorder=0.5)
+    ax.axhspan(reward_bot, reward_top, color=tv.UP, alpha=0.055, zorder=0.5)
+
+    # Gestaffelte TP-Baender
+    tp_levels = (tp1, tp2, tp3)
+    for idx, price in enumerate(tp_levels):
+        lo = min(entry_mid, price)
+        hi = max(entry_mid, price)
+        ax.axhspan(lo, hi, color=tv.TP[idx], alpha=0.03 + idx * 0.01, zorder=0.6)
+
+    # Entry-Zone
+    ax.axhspan(entry_low, entry_high, color=tv.ENTRY, alpha=0.16, zorder=1)
+    ax.hlines(
+        entry_low,
+        zone_left,
+        zone_right,
+        colors=tv.ENTRY,
+        linewidths=1.0,
+        linestyles=(0, (4, 3)),
+        alpha=0.85,
+        zorder=2,
+    )
+    ax.hlines(
+        entry_high,
+        zone_left,
+        zone_right,
+        colors=tv.ENTRY,
+        linewidths=1.0,
+        linestyles=(0, (4, 3)),
+        alpha=0.85,
+        zorder=2,
+    )
+    ax.hlines(
+        entry_mid,
+        zone_left,
+        zone_right,
+        colors=tv.ENTRY,
+        linewidths=1.55,
+        linestyles="solid",
+        alpha=0.95,
+        zorder=2.2,
+    )
+
+    # SL / TP Rays
+    ax.hlines(
+        stop_loss,
+        zone_left,
+        zone_right,
+        colors=tv.SL,
+        linewidths=1.65,
+        linestyles=(0, (6, 3)),
+        alpha=0.98,
+        zorder=2.3,
+    )
+    for idx, price in enumerate(tp_levels):
+        ax.hlines(
+            price,
+            zone_left,
+            zone_right,
+            colors=tv.TP[idx],
+            linewidths=1.35,
+            linestyles=(0, (2, 2.4)),
+            alpha=0.95,
+            zorder=2.2,
+        )
+
+    # Candles
+    width = 0.68
     for i, candle in enumerate(candles):
         bullish = candle.close >= candle.open
-        color = _UP if bullish else _DOWN
+        color = tv.UP if bullish else tv.DOWN
         body_low = min(candle.open, candle.close)
         body_high = max(candle.open, candle.close)
-        ax.plot([i, i], [candle.low, candle.high], color=color, linewidth=1.0, solid_capstyle="round")
-        height = max(body_high - body_low, (candle.high - candle.low) * 0.04)
+        ax.plot(
+            [i, i],
+            [candle.low, candle.high],
+            color=color,
+            linewidth=1.05,
+            solid_capstyle="round",
+            zorder=3,
+        )
+        height = max(body_high - body_low, (candle.high - candle.low) * 0.035)
         ax.add_patch(
             mpatches.Rectangle(
                 (i - width / 2, body_low),
@@ -195,161 +269,181 @@ def _render_png(
                 height,
                 facecolor=color,
                 edgecolor=color,
-                linewidth=0.4,
+                linewidth=0.0,
+                zorder=3.1,
             )
         )
-        vol_color = _VOL_UP if bullish else _VOL_DOWN
+        vol_color = tv.VOL_UP if bullish else tv.VOL_DOWN
         ax_vol.add_patch(
             mpatches.Rectangle(
                 (i - width / 2, 0.0),
                 width,
                 max(float(candle.volume), 0.0),
                 facecolor=vol_color,
-                edgecolor=vol_color,
-                linewidth=0.0,
-                alpha=0.85,
+                edgecolor="none",
+                alpha=0.55,
+                zorder=2,
             )
         )
 
-    ax.axhspan(entry_low, entry_high, color=_ENTRY, alpha=0.14, zorder=0)
-    ax.axhline(entry_low, color=_ENTRY, linewidth=1.15, alpha=0.9)
-    ax.axhline(entry_high, color=_ENTRY, linewidth=1.15, alpha=0.9)
-    ax.axhline(stop_loss, color=_SL, linewidth=1.55, linestyle=(0, (5, 3)), alpha=0.95)
-    for price, color in ((tp1, _TP[0]), (tp2, _TP[1]), (tp3, _TP[2])):
-        ax.axhline(price, color=color, linewidth=1.25, linestyle=(0, (1.5, 2.5)), alpha=0.95)
+    # Vertikale "Jetzt"-Linie
+    ax.axvline(last_i + 0.5, color=tv.MUTED, linewidth=0.7, linestyle=(0, (2, 3)), alpha=0.55, zorder=1.5)
 
     levels = [entry_low, entry_high, stop_loss, tp1, tp2, tp3]
     y_min = min(min(c.low for c in candles), min(levels))
     y_max = max(max(c.high for c in candles), max(levels))
-    pad = (y_max - y_min) * 0.09 or abs(y_max) * 0.02 or 1.0
+    pad = (y_max - y_min) * 0.10 or abs(y_max) * 0.02 or 1.0
     ax.set_ylim(y_min - pad, y_max + pad)
 
-    x_right = len(candles) + 8
-    ax.set_xlim(-1.2, x_right)
-    ax_vol.set_xlim(-1.2, x_right)
+    x_right = n + 7.2
+    ax.set_xlim(-1.0, x_right)
+    ax_vol.set_xlim(-1.0, x_right)
 
     max_vol = max((float(c.volume) for c in candles), default=0.0)
-    ax_vol.set_ylim(0.0, max_vol * 1.18 if max_vol > 0 else 1.0)
+    ax_vol.set_ylim(0.0, max_vol * 1.22 if max_vol > 0 else 1.0)
 
-    label_x = len(candles) + 0.4
-    _level_label(ax, label_x, (entry_low + entry_high) / 2, "Entry", entry_low, entry_high, _ENTRY, price_precision)
-    _price_label(ax, label_x, stop_loss, "SL", _SL, price_precision)
-    _price_label(ax, label_x, tp1, "TP1", _TP[0], price_precision)
-    _price_label(ax, label_x, tp2, "TP2", _TP[1], price_precision)
-    _price_label(ax, label_x, tp3, "TP3", _TP[2], price_precision)
+    # TV-Style Price Tags rechts
+    tag_x = n + 0.55
+    _tv_tag(
+        ax,
+        tag_x,
+        entry_mid,
+        f"ENTRY  {tv.fmt_price(entry_low, price_precision)}–{tv.fmt_price(entry_high, price_precision)}"
+        if abs(entry_high - entry_low) / max(abs(entry_mid), 1e-9) >= 0.0015
+        else f"ENTRY  {tv.fmt_price(entry_mid, price_precision)}",
+        tv.ENTRY,
+    )
+    _tv_tag(ax, tag_x, stop_loss, f"SL  {tv.fmt_price(stop_loss, price_precision)}", tv.SL)
+    _tv_tag(ax, tag_x, tp1, f"TP1  {tv.fmt_price(tp1, price_precision)}", tv.TP[0])
+    _tv_tag(ax, tag_x, tp2, f"TP2  {tv.fmt_price(tp2, price_precision)}", tv.TP[1])
+    _tv_tag(ax, tag_x, tp3, f"TP3  {tv.fmt_price(tp3, price_precision)}", tv.TP[2])
+
+    # Last close tag
+    last_close = float(candles[-1].close)
+    last_color = tv.UP if candles[-1].close >= candles[-1].open else tv.DOWN
+    _tv_tag(ax, tag_x, last_close, tv.fmt_price(last_close, price_precision), last_color, alpha=0.92)
 
     pretty = symbol.replace("USDT", "/USDT") if symbol.endswith("USDT") else symbol
-    direction_label = direction.replace("_", " ")
-    ax.set_title(
-        f"{pretty}   {timeframe}   {direction_label}   {score:.0f}/100",
-        color=_TEXT,
-        fontsize=13,
-        pad=14,
-        fontweight="bold",
-        loc="left",
-    )
+    direction_label = direction.replace("_", " ").upper()
+    side_color = tv.UP if is_long else tv.DOWN
 
-    for axis in (ax, ax_vol):
-        axis.tick_params(colors=_MUTED, labelsize=8, length=0)
-        axis.grid(True, color=_GRID, linewidth=0.6, alpha=0.85)
-        axis.set_axisbelow(True)
-        for spine in axis.spines.values():
-            spine.set_color(_GRID)
-            spine.set_linewidth(0.8)
-        # Preis- und Volumen-Skala rechts (TradingView-Stil).
-        axis.yaxis.tick_right()
-        axis.yaxis.set_label_position("right")
-        axis.spines["left"].set_visible(False)
-        axis.spines["right"].set_visible(True)
+    # Header-Leiste
+    ax.set_title("")
+    fig.subplots_adjust(left=0.04, right=0.86, top=0.90, bottom=0.07, hspace=0.04)
+    fig.text(
+        0.04,
+        0.955,
+        f"{pretty}  ·  {timeframe}",
+        color=tv.TEXT,
+        fontsize=14.5,
+        fontweight="bold",
+        ha="left",
+        va="center",
+    )
+    fig.text(
+        0.68,
+        0.955,
+        f" {direction_label} ",
+        color="#ffffff",
+        fontsize=9.5,
+        fontweight="bold",
+        ha="center",
+        va="center",
+        bbox={
+            "boxstyle": "round,pad=0.35,rounding_size=0.4",
+            "facecolor": side_color,
+            "edgecolor": "none",
+            "alpha": 0.95,
+        },
+    )
+    fig.text(
+        0.86,
+        0.955,
+        f"{score:.0f}/100",
+        color=tv.WARN,
+        fontsize=13,
+        fontweight="bold",
+        ha="right",
+        va="center",
+    )
 
     ax.tick_params(axis="x", labelbottom=False)
     ax_vol.tick_params(axis="x", labelsize=7.5)
 
-    step = max(1, len(candles) // 6)
-    tick_positions = list(range(0, len(candles), step))
+    step = max(1, n // 6)
+    tick_positions = list(range(0, n, step))
     ax_vol.set_xticks(tick_positions)
     ax_vol.set_xticklabels(
         [candles[i].open_time.strftime("%d.%m %H:%M") for i in tick_positions],
         rotation=0,
         ha="center",
         fontsize=7.5,
-        color=_MUTED,
+        color=tv.MUTED,
     )
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: _fmt_price(float(value), price_precision))
+        plt.FuncFormatter(lambda value, _: tv.fmt_price(float(value), price_precision))
     )
-    ax_vol.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: _fmt_volume(float(value))))
+    ax_vol.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: tv.fmt_volume(float(value))))
     ax_vol.text(
-        0.01,
-        0.92,
-        "Vol",
+        0.012,
+        0.90,
+        "Volume",
         transform=ax_vol.transAxes,
-        color=_MUTED,
+        color=tv.MUTED,
         fontsize=8,
         va="top",
         ha="left",
     )
 
+    # RR-Hinweis unten links
+    risk_dist = abs(entry_mid - stop_loss)
+    reward_dist = abs(tp3 - entry_mid)
+    rr = (reward_dist / risk_dist) if risk_dist > 0 else 0.0
+    ax.text(
+        0.012,
+        0.035,
+        f"R:R to TP3  {rr:.2f}  ·  Risk zone / Reward zone",
+        transform=ax.transAxes,
+        color=tv.MUTED,
+        fontsize=8,
+        ha="left",
+        va="bottom",
+        zorder=5,
+    )
+
     buffer = io.BytesIO()
-    fig.savefig(buffer, format="png", dpi=DPI, facecolor=fig.get_facecolor())
+    fig.savefig(buffer, format="png", dpi=tv.DPI, facecolor=fig.get_facecolor())
     plt.close(fig)
     buffer.seek(0)
     return buffer.read()
 
 
-def _fmt_price(value: float, precision: int) -> str:
-    formatted = f"{value:,.{precision}f}"
-    return formatted.replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
-
-
-def _fmt_volume(value: float) -> str:
-    abs_value = abs(value)
-    if abs_value >= 1_000_000_000:
-        return f"{value / 1_000_000_000:.1f}B"
-    if abs_value >= 1_000_000:
-        return f"{value / 1_000_000:.1f}M"
-    if abs_value >= 1_000:
-        return f"{value / 1_000:.1f}K"
-    if abs_value >= 10:
-        return f"{value:.0f}"
-    return f"{value:.2f}"
-
-
-def _price_label(ax, x: float, y: float, name: str, color: str, precision: int) -> None:
-    ax.text(
-        x,
-        y,
-        f" {name}  {_fmt_price(y, precision)}",
-        color=color,
-        fontsize=8,
-        va="center",
-        ha="left",
-        fontweight="bold",
-        clip_on=False,
-    )
-
-
-def _level_label(
+def _tv_tag(
     ax,
     x: float,
     y: float,
-    name: str,
-    low: float,
-    high: float,
+    text: str,
     color: str,
-    precision: int,
+    *,
+    alpha: float = 1.0,
 ) -> None:
-    if abs(high - low) / max(abs(high), 1e-9) < 0.0015:
-        _price_label(ax, x, y, name, color, precision)
-        return
-    ax.text(
-        x,
-        y,
-        f" {name}  {_fmt_price(low, precision)}–{_fmt_price(high, precision)}",
-        color=color,
-        fontsize=8,
+    """TradingView-aehnliches Preis-Label rechts an der Level-Linie."""
+    ax.annotate(
+        f" {text} ",
+        xy=(x, y),
+        xytext=(6, 0),
+        textcoords="offset points",
+        color="#ffffff",
+        fontsize=7.8,
+        fontweight="bold",
         va="center",
         ha="left",
-        fontweight="bold",
         clip_on=False,
+        zorder=6,
+        bbox={
+            "boxstyle": "round,pad=0.28,rounding_size=0.35",
+            "facecolor": color,
+            "edgecolor": "none",
+            "alpha": alpha,
+        },
     )

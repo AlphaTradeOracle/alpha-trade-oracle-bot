@@ -379,7 +379,8 @@ class TestPaperDigestFormatting:
         )
         message = format_paper_digest_message(snapshot)
         plain = message.replace("\\", "")
-        assert "Paper Digest" in plain
+        assert "Performance Dashboard" in plain
+        assert "Alpha Trade Oracle" in plain
         assert "DEPOT" in plain
         assert "PERFORMANCE" in plain
         assert "1h" in plain
