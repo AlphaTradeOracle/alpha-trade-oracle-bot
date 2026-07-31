@@ -87,7 +87,8 @@ class Settings(BaseSettings):
 
     # --- Signal- und Risikoparameter --------------------------------------
     signal_min_score: float = 75.0
-    signal_require_strong: bool = True
+    #: false = LONG/SHORT ab Score-Schwelle erlaubt (Frequenz-Test 2026-07; ADX/Score bleiben).
+    signal_require_strong: bool = False
     #: Fuer Shorts: Score darf maximal so hoch sein (Spiegel zu min_score).
     signal_short_max_score: float = 25.0
     signal_cooldown_minutes: int = 120

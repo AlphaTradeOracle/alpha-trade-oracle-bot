@@ -214,7 +214,7 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 
 | Gate | Standard |
 |---|---|
-| Richtung | actionable (STRONG_LONG/SHORT bei `SIGNAL_REQUIRE_STRONG=true`) |
+| Richtung | actionable (`LONG`/`SHORT`/`STRONG_*`; bei `SIGNAL_REQUIRE_STRONG=true` nur STRONG) |
 | Long-Score | ≥ `SIGNAL_MIN_SCORE` (75) |
 | Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (25) und > `SIGNAL_SHORT_MIN_SCORE` (18, exkl.) |
 | Short-Erschöpfung | Score ≤ `SIGNAL_SHORT_MIN_SCORE` (18) |

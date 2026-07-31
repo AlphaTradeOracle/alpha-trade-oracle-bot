@@ -64,7 +64,7 @@ class BacktestConfig:
     timeframes: tuple[str, ...] = ("15m", "1h", "4h", "1d")
     use_multi_timeframe: bool = False
     cooldown_minutes: int = 120
-    require_strong_signals: bool = True
+    require_strong_signals: bool = False
     block_range_market: bool = True
     min_adx: float = 20.0
     rsi_long_max: float = 75.0
