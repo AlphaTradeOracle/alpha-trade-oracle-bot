@@ -166,7 +166,7 @@ def _render_png(
     tv.style_figure(fig)
     tv.style_axes(ax)
     tv.style_axes(ax_vol)
-    tv.watermark(ax, alpha=0.30, zoom=0.147, loc="top_left", xycoords="figure fraction")
+    tv.watermark(ax, alpha=0.32, zoom=0.191, loc="top_left", xycoords="figure fraction")
 
     n = len(candles)
     last_i = n - 1
@@ -331,7 +331,7 @@ def _render_png(
     ax.set_title("")
     fig.subplots_adjust(left=0.04, right=0.86, top=0.90, bottom=0.07, hspace=0.04)
     fig.text(
-        0.195,
+        0.225,
         0.955,
         f"{pretty}  ·  {timeframe}",
         color=tv.TEXT,

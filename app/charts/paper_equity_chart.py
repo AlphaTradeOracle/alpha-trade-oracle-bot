@@ -96,7 +96,7 @@ def _render(
     fig, ax = plt.subplots(figsize=FIGURE_SIZE)
     tv.style_figure(fig)
     tv.style_axes(ax)
-    tv.watermark(ax, alpha=0.30, zoom=0.147, loc="top_left", xycoords="figure fraction")
+    tv.watermark(ax, alpha=0.32, zoom=0.191, loc="top_left", xycoords="figure fraction")
 
     # Soft glow under line
     ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
@@ -150,7 +150,7 @@ def _render(
     # Header: Titel links; Gesamtwert mittig-rechts; 1h/24h/7d ganz rechts
     fig.subplots_adjust(left=0.05, right=0.84, top=0.84, bottom=0.14)
     fig.text(
-        0.195,
+        0.225,
         0.935,
         title,
         color=tv.TEXT,
@@ -160,7 +160,7 @@ def _render(
         va="center",
     )
     fig.text(
-        0.195,
+        0.225,
         0.895,
         subtitle,
         color=tv.MUTED,
@@ -177,15 +177,15 @@ def _render(
         .replace("X", ".")
     )
 
-    # Gleicher Spaltenabstand: 1H | 24H | 7D | Gesamtwert (ganz rechts)
+    # 1H | 24H | 7D | Gesamtwert — Gesamtwert am rechten Rand, Fenster gleichmaessig links
     cols = list(windows[-3:]) if windows else []
-    right = 0.975
-    col_w = 0.105
-    n_cols = 1 + len(cols)
-    start_x = right - col_w * (n_cols - 0.5)
+    right = 0.985
+    win_w = 0.095
+    total_w = 0.13
+    cluster_left = right - total_w - win_w * len(cols)
 
     for i, (label, eq_delta) in enumerate(cols):
-        cx = start_x + i * col_w
+        cx = cluster_left + win_w * (i + 0.5)
         color = tv.UP if eq_delta >= 0 else tv.DOWN
         fig.text(
             cx,
@@ -208,25 +208,24 @@ def _render(
             va="center",
         )
 
-    total_x = start_x + len(cols) * col_w
     fig.text(
-        total_x,
+        right,
         0.945,
         tv.fmt_usd(last),
         color=tv.TEXT,
         fontsize=12,
         fontweight="bold",
-        ha="center",
+        ha="right",
         va="center",
     )
     fig.text(
-        total_x,
+        right,
         0.900,
         delta_label,
         color=chip_color,
         fontsize=9.5,
         fontweight="bold",
-        ha="center",
+        ha="right",
         va="center",
     )
 
