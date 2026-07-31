@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     #: Shorts mit Score <= diesem Wert gelten als ueberverkauft/Erschoepfung (NO_TRADE).
     signal_short_min_score: float = 18.0
     signal_block_range_market: bool = True
-    signal_min_adx: float = 20.0
+    signal_min_adx: float = 30.0
     atr_multiplier: float = 1.5
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
