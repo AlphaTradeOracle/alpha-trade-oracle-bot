@@ -1,0 +1,15 @@
+{
+  "totalCapital": 5000,
+  "equity": 4721.4,
+  "cash": 4547.75,
+  "marginLocked": 450,
+  "realizedPnl": 507.2,
+  "openUpnl": -76.35,
+  "openR": -1.42,
+  "totalReturnPct": -5.57,
+  "openPositions": 3,
+  "pendingOrders": 3,
+  "closedTrades": 58,
+  "equityChangePct": -0.84,
+  "realizedChangePct": 2.1
+}
