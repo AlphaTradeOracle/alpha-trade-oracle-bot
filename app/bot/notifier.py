@@ -161,19 +161,10 @@ class TelegramNotifier:
     async def send_analysis(
         self, chat_id: int, outcome: AnalysisOutcome, text: str
     ) -> list[int]:
-        """Chart oben mit Caption wenn moeglich, sonst voller Text (inkl. Levels)."""
+        """Chart oben mit Caption wenn moeglich, sonst Chart + Text darunter."""
         from app.charts.signal_chart import build_signal_chart
 
         chart = build_signal_chart(outcome)
-        if chart is not None:
-            # Score/Entry/SL/TP stehen im Chart — Caption ohne diese Zahlen.
-            text = format_signal_message(
-                outcome.result,
-                price_precision=outcome.price_precision,
-                display_timezone=self._settings.display_timezone,
-                llm_analysis=outcome.llm_analysis,
-                include_levels=False,
-            )
         return await self.send_with_chart(chat_id, text, chart)
 
     async def _send_part(self, chat_id: int, text: str) -> int | None:
@@ -339,6 +330,11 @@ class TelegramPaperTradeNotifier:
 
         result = signal_result_from_paper_position(position, reasons=reasons)
         price_precision = infer_price_precision(float(position.entry_price))
+        text = format_signal_message(
+            result,
+            price_precision=price_precision,
+            display_timezone=self._settings.display_timezone,
+        )
 
         chart_tf = resolve_paper_chart_timeframe(
             position.timeframe or self._settings.primary_timeframe,
@@ -364,13 +360,6 @@ class TelegramPaperTradeNotifier:
                 timeframe=chart_tf,
                 error=str(exc),
             )
-
-        text = format_signal_message(
-            result,
-            price_precision=price_precision,
-            display_timezone=self._settings.display_timezone,
-            include_levels=chart is None,
-        )
 
         for chat_id in chat_ids:
             try:
