@@ -74,15 +74,15 @@ def watermark(
     text: str = BRAND,
     *,
     alpha: float = 0.22,
-    zoom: float = 0.11,
+    zoom: float = 0.15,
     loc: str = "top_left",
     xycoords: str = "figure fraction",
     zorder: float = 12,
 ) -> None:
     """Dezentes Logo-Wasserzeichen — Standard: oben links (figure)."""
     positions: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {
-        # xy, box_alignment
-        "top_left": ((0.018, 0.985), (0.0, 1.0)),
+        # xy, box_alignment — leicht eingerueckt, oben an der Ecke
+        "top_left": ((0.012, 0.988), (0.0, 1.0)),
         "center": ((0.5, 0.52), (0.5, 0.5)),
     }
     xy, align = positions.get(loc, positions["top_left"])

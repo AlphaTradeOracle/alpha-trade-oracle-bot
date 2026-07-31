@@ -96,7 +96,7 @@ def _render(
     fig, ax = plt.subplots(figsize=FIGURE_SIZE)
     tv.style_figure(fig)
     tv.style_axes(ax)
-    tv.watermark(ax, alpha=0.28, zoom=0.105, loc="top_left", xycoords="figure fraction")
+    tv.watermark(ax, alpha=0.30, zoom=0.147, loc="top_left", xycoords="figure fraction")
 
     # Soft glow under line
     ax.plot(xs, ys, color=line_color, linewidth=4.8, alpha=0.18, solid_capstyle="round", zorder=2)
@@ -150,7 +150,7 @@ def _render(
     # Header: Titel links; Gesamtwert mittig-rechts; 1h/24h/7d ganz rechts
     fig.subplots_adjust(left=0.05, right=0.84, top=0.84, bottom=0.14)
     fig.text(
-        0.145,
+        0.195,
         0.935,
         title,
         color=tv.TEXT,
@@ -160,7 +160,7 @@ def _render(
         va="center",
     )
     fig.text(
-        0.145,
+        0.195,
         0.895,
         subtitle,
         color=tv.MUTED,
