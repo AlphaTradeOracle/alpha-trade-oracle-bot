@@ -589,6 +589,7 @@ async def _run_paper_backfill(
     typer.echo(f"  skipped_existing:   {result.skipped_existing}")
     typer.echo(f"  skipped_filters:    {result.skipped_filters}")
     typer.echo(f"  skipped_cash:       {result.skipped_cash}")
+    typer.echo(f"  skipped_limits:     {result.skipped_limits}")
     typer.echo(f"  price_updates:      {updated}")
     if result.opened_symbols:
         typer.echo(f"  symbols:            {', '.join(result.opened_symbols)}")

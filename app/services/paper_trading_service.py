@@ -36,6 +36,13 @@ logger = get_logger(__name__)
 
 SCALE_OUT_FRACTIONS = (Decimal("0.33333333"), Decimal("0.33333333"), Decimal("0.33333334"))
 
+SKIP_PORTFOLIO_RISK = "skipped_portfolio_risk"
+SKIP_MAX_POSITIONS = "skipped_max_positions"
+SKIP_DIRECTION_CAP = "skipped_direction_cap"
+PORTFOLIO_LIMIT_SKIPS = frozenset(
+    {SKIP_PORTFOLIO_RISK, SKIP_MAX_POSITIONS, SKIP_DIRECTION_CAP}
+)
+
 
 @dataclass
 class PaperSummary:
@@ -64,6 +71,7 @@ class PaperBackfillResult:
     skipped_existing: int = 0
     skipped_filters: int = 0
     skipped_cash: int = 0
+    skipped_limits: int = 0
     opened_symbols: list[str] | None = None
 
     def __post_init__(self) -> None:
@@ -111,9 +119,15 @@ class PaperTradingService:
         self._settings = settings or get_settings()
         self._notifier = notifier
         self._notify_enabled = True
+        self._last_skip_reason: str | None = None
 
     def set_notifier(self, notifier: PaperTradeNotifier | None) -> None:
         self._notifier = notifier
+
+    @property
+    def last_skip_reason(self) -> str | None:
+        """Grund des letzten abgelehnten Entry-Versuchs (siehe ``skipped_*``)."""
+        return self._last_skip_reason
 
     @contextmanager
     def _without_notifications(self) -> Iterator[None]:
@@ -203,6 +217,69 @@ class PaperTradingService:
             risk_amount=quantity * stop_distance,
         )
 
+    @staticmethod
+    def _open_risk_used(positions: list[PaperPosition]) -> Decimal:
+        """Offenes Restrisiko: 1R skaliert mit der noch offenen Stueckzahl.
+
+        Nach einem TP-Teilverkauf steht nur noch der Rest im Feuer, sonst wuerde
+        eine zu drei Vierteln geschlossene Position das Budget voll blockieren.
+        """
+        used = Decimal("0")
+        for position in positions:
+            risk = Decimal(str(position.risk_amount or 0))
+            initial = Decimal(str(position.initial_quantity or 0))
+            if risk <= 0 or initial <= 0:
+                continue
+            share = Decimal(str(position.remaining_quantity or 0)) / initial
+            if share <= 0:
+                continue
+            used += risk * min(share, Decimal("1"))
+        return used
+
+    @staticmethod
+    def _equity_base(account: PaperAccount, positions: list[PaperPosition]) -> Decimal:
+        return Decimal(str(account.cash_balance)) + sum(
+            (Decimal(str(p.margin_used)) for p in positions), Decimal("0")
+        )
+
+    async def _portfolio_limit_breach(
+        self,
+        session: AsyncSession,
+        account: PaperAccount,
+        *,
+        direction: str,
+        risk_amount: Decimal,
+    ) -> str | None:
+        """``skipped_*``-Grund, wenn der Entry ein Portfolio-Limit reissen wuerde.
+
+        Pending Retest-Entries zaehlen nicht mit: sie binden weder Margin noch
+        Risiko, geprueft wird erst beim Fill.
+        """
+        open_positions = await PaperRepository(session).list_open_positions(account.id)
+
+        max_open = int(self._settings.paper_max_open_positions)
+        if max_open > 0 and len(open_positions) >= max_open:
+            return SKIP_MAX_POSITIONS
+
+        per_direction = int(self._settings.paper_max_open_per_direction)
+        if per_direction > 0:
+            is_long = SignalDirection(direction).is_long
+            same_side = sum(
+                1
+                for p in open_positions
+                if SignalDirection(p.direction).is_long == is_long
+            )
+            if same_side >= per_direction:
+                return SKIP_DIRECTION_CAP
+
+        risk_pct = Decimal(str(self._settings.paper_max_portfolio_risk_pct))
+        if risk_pct > 0 and risk_amount > 0:
+            budget = self._equity_base(account, open_positions) * risk_pct / Decimal("100")
+            if self._open_risk_used(open_positions) + risk_amount > budget:
+                return SKIP_PORTFOLIO_RISK
+
+        return None
+
     async def get_or_create_account(self, session: AsyncSession) -> PaperAccount:
         repo = PaperRepository(session)
         return await repo.get_or_create_account(
@@ -221,6 +298,7 @@ class PaperTradingService:
     ) -> PaperPosition | None:
         if not self.enabled:
             return None
+        self._last_skip_reason = None
         result = outcome.result
         if not result.direction.is_actionable or result.risk is None:
             return None
@@ -230,6 +308,7 @@ class PaperTradingService:
 
         existing = await repo.get_active_by_symbol(account.id, result.symbol)
         if existing is not None:
+            self._last_skip_reason = "skipped_existing"
             logger.info(
                 "paper_skip_already_open",
                 symbol=result.symbol,
@@ -249,8 +328,26 @@ class PaperTradingService:
         if sizing is None:
             return None
 
+        breach = await self._portfolio_limit_breach(
+            session,
+            account,
+            direction=result.direction.value,
+            risk_amount=sizing.risk_amount,
+        )
+        if breach is not None:
+            self._last_skip_reason = breach
+            logger.info(
+                "paper_skip_portfolio_limit",
+                symbol=result.symbol,
+                direction=result.direction.value,
+                reason=breach,
+                risk_amount=float(sizing.risk_amount),
+            )
+            return None
+
         margin = sizing.margin
         if account.cash_balance < margin:
+            self._last_skip_reason = "skipped_cash"
             logger.warning(
                 "paper_insufficient_cash",
                 cash=float(account.cash_balance),
@@ -501,6 +598,33 @@ class PaperTradingService:
             )
             return False
 
+        breach = await self._portfolio_limit_breach(
+            session,
+            account,
+            direction=position.direction,
+            risk_amount=sizing.risk_amount,
+        )
+        if breach is not None:
+            self._last_skip_reason = breach
+            logger.info(
+                "paper_retest_activate_portfolio_limit",
+                symbol=position.symbol,
+                direction=position.direction,
+                reason=breach,
+                risk_amount=float(sizing.risk_amount),
+            )
+            await self._cancel_pending_retest(
+                session,
+                position,
+                RetestArmResult(
+                    status=breach,
+                    note="portfolio_limit_at_fill",
+                    zone_lo=arm.zone_lo,
+                    zone_hi=arm.zone_hi,
+                ),
+            )
+            return False
+
         margin = sizing.margin
         if account.cash_balance < margin:
             logger.warning(
@@ -663,6 +787,9 @@ class PaperTradingService:
                     session, signal, symbol=symbol, extend_expiry=not self.retest_enabled
                 )
                 if position is None:
+                    if self._last_skip_reason in PORTFOLIO_LIMIT_SKIPS:
+                        result.skipped_limits += 1
+                        continue
                     account = await self.get_or_create_account(session)
                     existing = await PaperRepository(session).get_active_by_symbol(
                         account.id, symbol
@@ -923,7 +1050,10 @@ class PaperTradingService:
                 extend_expiry=not self.retest_enabled,
             )
             if position is None:
-                backfill.skipped_cash += 1
+                if self._last_skip_reason in PORTFOLIO_LIMIT_SKIPS:
+                    backfill.skipped_limits += 1
+                else:
+                    backfill.skipped_cash += 1
                 continue
 
             backfill.opened += 1

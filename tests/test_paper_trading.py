@@ -12,6 +12,7 @@ from app.core.config import Settings
 from app.core.enums import ExitReason, SignalDirection, SuppressionReason
 from app.core.time import ensure_utc
 from app.market_data.types import Candle, CandleSeries
+from app.models.paper import PaperPosition
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.paper_repository import PaperRepository
 from app.services.analysis_service import AnalysisOutcome
@@ -42,6 +43,22 @@ def _long_risk(entry: float = 100.0, stop_distance: float = 5.0) -> RiskParamete
 
 def _tight_long_risk(entry: float = 100.0) -> RiskParameters:
     return _long_risk(entry, 5.0)
+
+
+def _short_risk(entry: float = 100.0, stop_distance: float = 5.0) -> RiskParameters:
+    return RiskParameters(
+        entry_low=entry - 1.0,
+        entry_high=entry + 1.0,
+        stop_loss=entry + stop_distance,
+        take_profit_1=entry - stop_distance,
+        take_profit_2=entry - 2 * stop_distance,
+        take_profit_3=entry - 3 * stop_distance,
+        risk_reward_ratio=3.0,
+        risk_percent=1.0,
+        suggested_position_size=0.1,
+        stop_distance_percent=stop_distance / entry * 100.0,
+        invalidation_note="test",
+    )
 
 
 class TestShortScoreGate:
@@ -261,6 +278,233 @@ class TestRiskNormalizedSizing:
         assert sizing is not None
         assert float(sizing.margin) == pytest.approx(100.0)
         assert float(sizing.notional) == pytest.approx(1000.0)
+
+
+class TestPortfolioRiskLimits:
+    def _settings(self, **overrides: object) -> Settings:
+        base: dict[str, object] = {
+            "enable_paper_trading": True,
+            "paper_initial_balance": 5000.0,
+            "paper_margin_per_trade": 100.0,
+            "paper_leverage": 10.0,
+            "paper_risk_per_trade_usd": 50.0,
+            "paper_max_notional_usd": 1500.0,
+            "paper_fee_percent": 0.0,
+            "paper_retest_entry_enabled": False,
+        }
+        base.update(overrides)
+        return Settings(**base)  # type: ignore[arg-type]
+
+    async def _open(
+        self,
+        service: PaperTradingService,
+        session: AsyncSession,
+        symbol: str,
+        *,
+        direction: SignalDirection = SignalDirection.STRONG_LONG,
+    ):
+        result = make_result(
+            direction=direction,
+            score=80.0 if direction.is_long else 18.0,
+            entry_mid=100.0,
+            fingerprint=f"limit-{symbol}",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.symbol = symbol
+        result.risk = (
+            _tight_long_risk(100.0) if direction.is_long else _short_risk(100.0)
+        )
+        return await service.open_from_signal(
+            session, AnalysisOutcome(result=result, price_precision=2)
+        )
+
+    @pytest.mark.asyncio
+    async def test_portfolio_risk_cap_rejects_further_entries(
+        self, session: AsyncSession
+    ) -> None:
+        # 5% von 5.000 = 250 USD Budget, also genau fuenf Trades a 50 USD.
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=5.0,
+                paper_max_open_positions=0,
+                paper_max_open_per_direction=0,
+            )
+        )
+        for index in range(5):
+            assert await self._open(service, session, f"AAA{index}USDT") is not None
+
+        blocked = await self._open(service, session, "AAA5USDT")
+        assert blocked is None
+        assert service.last_skip_reason == "skipped_portfolio_risk"
+
+        summary = await service.summary(session)
+        assert summary.open_positions == 5
+
+    @pytest.mark.asyncio
+    async def test_partial_close_frees_portfolio_risk_budget(
+        self, session: AsyncSession
+    ) -> None:
+        # 4.8% von 5.000 = 240 USD Budget: vier Trades a 50 USD passen, der
+        # fuenfte erst, wenn ein Drittel eines 1R wieder frei ist.
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=4.8,
+                paper_max_open_positions=0,
+                paper_max_open_per_direction=0,
+                paper_move_stop_to_breakeven=False,
+            )
+        )
+        # Referenzen halten: sonst laedt SQLAlchemy die Position neu und SQLite
+        # liefert das expires_at ohne Zeitzone zurueck.
+        opened = [
+            await self._open(service, session, f"BBB{index}USDT") for index in range(4)
+        ]
+        assert all(position is not None for position in opened)
+        assert await self._open(service, session, "BBB4USDT") is None
+        assert service.last_skip_reason == "skipped_portfolio_risk"
+
+        # TP1 nimmt ein Drittel vom Tisch -> ein Drittel 1R wird wieder frei.
+        await service.update_open_positions(session, {"BBB0USDT": 105.0})
+        assert float(opened[0].remaining_quantity) == pytest.approx(6.6666667)
+        assert await self._open(service, session, "BBB4USDT") is not None
+
+    @pytest.mark.asyncio
+    async def test_max_open_positions_cap(self, session: AsyncSession) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=0.0,
+                paper_max_open_positions=3,
+                paper_max_open_per_direction=0,
+            )
+        )
+        for index in range(3):
+            assert await self._open(service, session, f"CCC{index}USDT") is not None
+
+        blocked = await self._open(service, session, "CCC3USDT")
+        assert blocked is None
+        assert service.last_skip_reason == "skipped_max_positions"
+
+    @pytest.mark.asyncio
+    async def test_max_open_per_direction_cap(self, session: AsyncSession) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=0.0,
+                paper_max_open_positions=0,
+                paper_max_open_per_direction=2,
+                signal_short_max_score=25.0,
+            )
+        )
+        for index in range(2):
+            assert await self._open(service, session, f"DDD{index}USDT") is not None
+
+        blocked = await self._open(service, session, "DDD2USDT")
+        assert blocked is None
+        assert service.last_skip_reason == "skipped_direction_cap"
+
+        # Die andere Richtung ist davon unberuehrt.
+        short = await self._open(
+            service, session, "EEEUSDT", direction=SignalDirection.STRONG_SHORT
+        )
+        assert short is not None
+
+    @pytest.mark.asyncio
+    async def test_pending_retest_does_not_consume_risk_budget(
+        self, session: AsyncSession
+    ) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=5.0,
+                paper_max_open_positions=0,
+                paper_max_open_per_direction=0,
+                paper_retest_entry_enabled=True,
+            )
+        )
+        for index in range(6):
+            position = await self._open(service, session, f"FFF{index}USDT")
+            assert position is not None
+            assert position.status == "pending"
+        assert service.last_skip_reason is None
+
+    @pytest.mark.asyncio
+    async def test_retest_fill_blocked_by_limit_at_fill_time(
+        self, session: AsyncSession
+    ) -> None:
+        settings = self._settings(
+            paper_max_portfolio_risk_pct=0.0,
+            paper_max_open_positions=1,
+            paper_max_open_per_direction=0,
+            paper_retest_entry_enabled=True,
+            signal_expiry_multiplier=24,
+        )
+        service = PaperTradingService(settings)
+        armed_at = datetime(2024, 6, 1, 12, tzinfo=UTC)
+
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="limit-retest-fill",
+            created_at=armed_at,
+        )
+        result.symbol = "GGGUSDT"
+        result.risk = _tight_long_risk(100.0)
+        pending = await service.open_from_signal(
+            session, AnalysisOutcome(result=result, price_precision=2), opened_at=armed_at
+        )
+        assert pending is not None and pending.status == "pending"
+
+        # Der einzige Platz wird zwischen Arming und Fill von einer IST-Position belegt.
+        blocker = PaperPosition(
+            account_id=pending.account_id,
+            symbol="HHHUSDT",
+            direction=SignalDirection.STRONG_LONG.value,
+            status="open",
+            timeframe="1h",
+            entry_price=Decimal("100"),
+            stop_loss=Decimal("95"),
+            current_stop=Decimal("95"),
+            take_profit_1=Decimal("105"),
+            take_profit_2=Decimal("110"),
+            take_profit_3=Decimal("115"),
+            initial_quantity=Decimal("10"),
+            remaining_quantity=Decimal("10"),
+            margin_used=Decimal("100"),
+            notional=Decimal("1000"),
+            leverage=10.0,
+            fees=Decimal("0"),
+            risk_amount=Decimal("50"),
+            opened_at=armed_at,
+        )
+        await PaperRepository(session).add_position(blocker)
+
+        candles = _flat_candles(armed_at - timedelta(hours=30), 31)
+        pullback_time = armed_at + timedelta(hours=2)
+        candles.append(
+            Candle(
+                open_time=pullback_time,
+                close_time=pullback_time + timedelta(hours=1),
+                open=100.0,
+                high=100.0,
+                low=98.5,
+                close=99.0,
+                volume=1000.0,
+            )
+        )
+
+        out = await service.resolve_pending_retest(
+            session,
+            _StubCandleProvider(candles),
+            end_time=armed_at + timedelta(hours=6),
+        )
+        assert out.filled == 0
+        assert out.skipped == 1
+        assert pending.status == "cancelled"
+        assert pending.exit_reason == ExitReason.RETEST_SKIPPED.value
+        assert "skipped_max_positions" in (pending.notes or "")
+        assert "portfolio_limit_at_fill" in (pending.notes or "")
+
+        account = await service.get_or_create_account(session)
+        assert float(account.cash_balance) == pytest.approx(5000.0)
 
 
 class TestPaperTrading:

@@ -153,6 +153,15 @@ class Settings(BaseSettings):
     #: Obergrenze fuer das Nominal, damit sehr enge Stops keinen absurden Hebel
     #: erzeugen (0 = keine Grenze).
     paper_max_notional_usd: float = 1_500.0
+    #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
+    #: Im Ledger standen bis zu 32 Positionen gleichzeitig offen — mit 50 USD je
+    #: Trade waeren das 32% des Kontos in einem Zug (0 = keine Grenze).
+    paper_max_portfolio_risk_pct: float = 10.0
+    #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
+    paper_max_open_positions: int = 10
+    #: Obergrenze je Richtung. Altcoin-Shorts korrelieren mit ~0.85, neun davon
+    #: in einer Stunde sind effektiv eine Wette in neunfacher Groesse.
+    paper_max_open_per_direction: int = 6
     #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
     #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
     paper_fee_percent: float = 0.05
