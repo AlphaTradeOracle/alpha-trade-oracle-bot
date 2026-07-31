@@ -51,11 +51,11 @@ TIMELINE = [
     {
         "phase": "Retest1 + Scratch12h",
         "date": "2026-07-31",
-        "closed": 0,
-        "wr": 0.0,
-        "pf": 0.0,
-        "rpnl": 0.0,
-        "note": "6M sweep: min_bars=1 (+39R) · scratch 12h (+11R); paper ledger rebuilt",
+        "closed": 29,
+        "wr": 41.4,
+        "pf": 1.54,
+        "rpnl": 205.0,
+        "note": "Paper rebuild since 2026-07-28 · +2.14R · E[R]+0.074 · min_bars=1 · scratch 12h",
     },
 ]
 
