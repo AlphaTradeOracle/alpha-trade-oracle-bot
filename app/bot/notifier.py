@@ -12,7 +12,6 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 
 from app.bot.formatting import (
-    escape_markdown_v2,
     format_paper_digest_message,
     format_signal_message,
     infer_price_precision,
@@ -162,29 +161,11 @@ class TelegramNotifier:
     async def send_analysis(
         self, chat_id: int, outcome: AnalysisOutcome, text: str
     ) -> list[int]:
-        """Signal als professionelles Report-Bild (+ Kerzenchart), Text nur als Fallback."""
+        """Chart oben mit Caption wenn moeglich, sonst Chart + Text darunter."""
         from app.charts.signal_chart import build_signal_chart
-        from app.charts.signal_report_card import build_signal_report_card, compose_signal_report
 
         chart = build_signal_chart(outcome)
-        report = build_signal_report_card(
-            outcome,
-            display_timezone=self._settings.display_timezone,
-        )
-        composed = compose_signal_report(report, chart)
-        if composed is None:
-            return await self.send(chat_id, text)
-
-        result = outcome.result
-        symbol = result.symbol.replace("USDT", "/USDT") if result.symbol.endswith("USDT") else result.symbol
-        caption = escape_markdown_v2(
-            f"{symbol}  ·  {result.direction.value.replace('_', ' ')}  ·  "
-            f"{result.score:.0f}/100"
-        )
-        photo_id = await self.send_photo(chat_id, composed, caption=caption)
-        if photo_id is not None:
-            return [photo_id]
-        return await self.send(chat_id, text)
+        return await self.send_with_chart(chat_id, text, chart)
 
     async def _send_part(self, chat_id: int, text: str) -> int | None:
         """Einen Nachrichtenteil senden.
