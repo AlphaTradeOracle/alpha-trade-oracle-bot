@@ -394,4 +394,8 @@ class TestPaperDigestFormatting:
         assert "rem 50%" in plain
         assert "+$31,00" in plain
         assert "+$8,20/Trade" in plain
+        assert "Risiko $50" in plain
+        assert "10x" in plain
+        assert "Cap $1.500" in plain
+        assert "Open 1/20" in plain
         assert DISCLAIMER in plain
