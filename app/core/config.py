@@ -117,8 +117,9 @@ class Settings(BaseSettings):
     #: Pausendauer nach Symbol-Circuit-Breaker in Stunden.
     paper_symbol_circuit_breaker_hours: int = 24
     #: UTC-Blackout fuer neue Signale/Paper-Entries (``HH:MM-HH:MM``). Leer = aus.
-    signal_entry_blackout_utc: str = "21:00-01:00"
-    paper_entry_blackout_utc: str = "21:00-01:00"
+    #: Leer = aus. Frueher 21:00-01:00 UTC; abgeschaltet, wenn alle anderen Gates greifen.
+    signal_entry_blackout_utc: str = ""
+    paper_entry_blackout_utc: str = ""
     #: Nach TP1: Expiry auf N x Primary-TF verlaengern (0 = unveraendert 24h ab Fill).
     paper_expiry_multiplier_after_tp1: int = 48
     #: BTC-Regime-Filter: Shorts in Bull-Regime / Longs in Bear-Regime blockieren.

@@ -74,7 +74,7 @@ STRATEGY = {
         "Retest 0.55×6 · min 1 bar",
         "Early scratch 12h / 0.5R",
         "Portfolio 10% / 10 / 6",
-        "Blackout 21:00–01:00 UTC",
+        "No entry blackout",
         "Circuit breaker 2L/24h",
         "Telegram: paper opens only",
     ],

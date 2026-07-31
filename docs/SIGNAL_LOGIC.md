@@ -231,8 +231,8 @@ ADX (`SIGNAL_MIN_ADX=20`) wird bei der Signal-Generierung geprüft, nicht erneut
 |---|---|---|
 | `PAPER_SYMBOL_CIRCUIT_BREAKER_LOSSES` | `2` | Nach N Verlusten in Folge auf dem Symbol pausieren |
 | `PAPER_SYMBOL_CIRCUIT_BREAKER_HOURS` | `24` | Pausendauer in Stunden |
-| `SIGNAL_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Keine neuen Signale/Paper-Entries in diesem UTC-Fenster |
-| `PAPER_ENTRY_BLACKOUT_UTC` | `21:00-01:00` | Backfill-Gate für Paper (leer = aus) |
+| `SIGNAL_ENTRY_BLACKOUT_UTC` | *(leer)* | Keine neuen Signale in UTC-Fenster; leer = aus |
+| `PAPER_ENTRY_BLACKOUT_UTC` | *(leer)* | Paper-Entry-Blackout; leer = aus |
 | `REGIME_FILTER_ENABLED` | `true` | BTC-4h-Regime blockiert konträre Richtungen |
 | `REGIME_BTC_SYMBOL` | `BTCUSDT` | Referenz fuer Regime |
 | `REGIME_TIMEFRAME` | `4h` | Timeframe fuer Regime |

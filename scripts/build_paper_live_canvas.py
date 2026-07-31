@@ -24,6 +24,7 @@ STRATEGY = {
         "Retest 0.55×6 · min 1 bar",
         "Early scratch 12h / 0.5R",
         "Portfolio 10% / 10 / 6",
+        "No entry blackout",
     ],
 }
 
