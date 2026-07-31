@@ -77,7 +77,7 @@ class TestScoreComposition:
         result = engine.generate("BTCUSDT", uptrend_indicators, sentiment_score=None, now=NOW)
         component = next(c for c in result.components if c.category is ScoreCategory.SENTIMENT)
         assert component.raw_score == 0.0
-        assert "Keine Sentiment-Daten" in component.detail
+        assert "No sentiment data" in component.detail
 
     def test_disabled_sentiment_redistributes_weight(
         self, uptrend_indicators: dict[str, IndicatorSet]
@@ -181,7 +181,7 @@ class TestNoTradeRules:
         result = engine.generate("BTCUSDT", uptrend_indicators, now=NOW)
         assert result.direction is SignalDirection.NO_TRADE
         assert result.no_trade_reason is not None
-        assert "Chance-Risiko" in result.no_trade_reason
+        assert "Risk/reward" in result.no_trade_reason
 
     def test_risk_reward_is_gate_only_not_score_weight(
         self, uptrend_indicators: dict[str, IndicatorSet]
@@ -235,7 +235,7 @@ class TestNoTradeRules:
         result = SignalEngine().generate("BTCUSDT", sideways_indicators, now=NOW)
         if result.direction is SignalDirection.NO_TRADE:
             assert result.no_trade_reason is not None
-            assert "Seitwaertsmarkt" in result.no_trade_reason
+            assert "Range market" in result.no_trade_reason
 
     def test_low_adx_blocks_trade(self, uptrend_indicators: dict[str, IndicatorSet]) -> None:
         modified = dict(uptrend_indicators)

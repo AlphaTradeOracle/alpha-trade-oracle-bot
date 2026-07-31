@@ -78,7 +78,7 @@ def multi_timeframe_agreement(
     Widerspruch zwischen Makro- und Setup-Timeframe wird es gedaempft.
     """
     if not assessments:
-        return 0.0, "Keine Timeframes verfuegbar"
+        return 0.0, "No timeframes available"
 
     weighted_sum = sum(
         assessment.directional_score * assessment.role_weight for assessment in assessments.values()
@@ -95,13 +95,13 @@ def multi_timeframe_agreement(
     notes: list[str] = []
     if non_neutral and all(s > 0 for s in non_neutral):
         weighted_sum *= 1.15
-        notes.append("Alle aussagekraeftigen Timeframes bullisch")
+        notes.append("All meaningful timeframes bullish")
     elif non_neutral and all(s < 0 for s in non_neutral):
         weighted_sum *= 1.15
-        notes.append("Alle aussagekraeftigen Timeframes baerisch")
+        notes.append("All meaningful timeframes bearish")
     elif 1 in non_neutral and -1 in non_neutral:
         weighted_sum *= 0.6
-        notes.append("Timeframes widersprechen sich")
+        notes.append("Timeframes disagree")
 
     macro = assessments.get("1d")
     setup = assessments.get("1h")
@@ -110,12 +110,12 @@ def multi_timeframe_agreement(
         setup_dir = setup.indicators.trend_direction
         if macro_dir != TrendDirection.NEUTRAL and setup_dir != TrendDirection.NEUTRAL:
             if macro_dir == setup_dir:
-                notes.append(f"Makrotrend (1d) und Setup (1h) beide {macro_dir.value.lower()}")
+                notes.append(f"Macro trend (1d) and setup (1h) both {macro_dir.value.lower()}")
             else:
                 weighted_sum *= 0.75
-                notes.append("Setup laeuft gegen den Makrotrend (1d)")
+                notes.append("Setup runs against the macro trend (1d)")
 
-    detail = "; ".join(notes) if notes else "Timeframes ohne klare Tendenz"
+    detail = "; ".join(notes) if notes else "Timeframes without a clear bias"
     return max(-100.0, min(100.0, weighted_sum)), detail
 
 
@@ -156,8 +156,8 @@ def describe_timeframe_trends(assessments: dict[str, TimeframeAssessment]) -> li
     )
 
     labels = {
-        TrendDirection.BULLISH: "bullisch",
-        TrendDirection.BEARISH: "baerisch",
+        TrendDirection.BULLISH: "bullish",
+        TrendDirection.BEARISH: "bearish",
         TrendDirection.NEUTRAL: "neutral",
     }
     return [

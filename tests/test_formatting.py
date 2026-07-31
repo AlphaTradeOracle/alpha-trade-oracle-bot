@@ -108,12 +108,12 @@ class TestSignalMessage:
     def test_includes_confirmations(self) -> None:
         result = make_result()
         result.reasons = [
-            "Trendlage: 4h bullisch, 1h bullisch, 15m bullisch",
-            "EMA9 ueber EMA20; Supertrend bullisch",
+            "Trend stack: 4h bullish, 1h bullish, 15m bullish",
+            "EMA9 above EMA20; Supertrend bullish",
         ]
         message = format_signal_message(result)
         assert "*Confirmations:*" in message
-        assert escape_markdown_v2("Trendlage: 4h bullisch, 1h bullisch, 15m bullisch") in message
+        assert escape_markdown_v2("Trend stack: 4h bullish, 1h bullish, 15m bullish") in message
 
     def test_fits_telegram_limit(self) -> None:
         message = format_signal_message(make_result())
@@ -266,10 +266,10 @@ class TestPaperTradeFormatting:
     def test_open_message_includes_reasons(self) -> None:
         message = format_paper_trade_open_message(
             _sample_paper_position(),
-            reasons=["Trendlage bullisch", "EMA9 ueber EMA20"],
+            reasons=["Trend stack bullish", "EMA9 above EMA20"],
         )
         assert "Confirmations" in message
-        assert escape_markdown_v2("Trendlage bullisch") in message
+        assert escape_markdown_v2("Trend stack bullish") in message
 
     def test_close_message_contains_pnl(self) -> None:
         from decimal import Decimal

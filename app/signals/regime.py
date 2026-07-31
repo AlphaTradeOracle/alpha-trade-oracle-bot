@@ -107,11 +107,11 @@ def regime_block_reason(
         return None
     if regime is MarketRegime.BULLISH and direction.is_short:
         return (
-            f"Marktregime bullisch ({regime.value}) — keine neuen Short-Entries"
+            f"Market regime bullish ({regime.value}) — no new short entries"
         )
     if regime is MarketRegime.BEARISH and direction.is_long:
         return (
-            f"Marktregime baerisch ({regime.value}) — keine neuen Long-Entries"
+            f"Market regime bearish ({regime.value}) — no new long entries"
         )
     return None
 

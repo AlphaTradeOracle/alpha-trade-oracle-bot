@@ -266,7 +266,7 @@ class SignalEngine:
                         category=ScoreCategory.SENTIMENT,
                         raw_score=0.0,
                         weight=sentiment_weight,
-                        detail="Keine Sentiment-Daten verfuegbar (neutral bewertet)",
+                        detail="No sentiment data available (scored neutral)",
                     )
                 )
             else:
@@ -275,7 +275,7 @@ class SignalEngine:
                         category=ScoreCategory.SENTIMENT,
                         raw_score=max(-100.0, min(100.0, sentiment_score)),
                         weight=sentiment_weight,
-                        detail=f"Sentiment-Rohwert {sentiment_score:+.1f}",
+                        detail=f"Sentiment raw score {sentiment_score:+.1f}",
                     )
                 )
 
@@ -285,13 +285,13 @@ class SignalEngine:
     def _risk_reward_info_component(self, risk: object | None) -> ScoreComponent:
         """Informativer R:R-Eintrag im Breakdown ohne Score-Beitrag."""
         if risk is None:
-            detail = "Kein Chance-Risiko-Verhaeltnis berechnet (kein handelbares Setup)"
+            detail = "No risk/reward calculated (no tradeable setup)"
             ratio = 0.0
         else:
             ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
             detail = (
-                f"Chance-Risiko-Verhaeltnis {ratio:.2f} "
-                f"(Minimum {self._config.min_risk_reward_ratio:.2f}, nur Gate)"
+                f"Risk/reward {ratio:.2f} "
+                f"(minimum {self._config.min_risk_reward_ratio:.2f}, gate only)"
             )
         return ScoreComponent(
             category=ScoreCategory.RISK_REWARD,
@@ -347,8 +347,8 @@ class SignalEngine:
             and score <= self._config.short_min_score
         ):
             return (
-                f"Short-Score {score:.1f} in Erschoepfungsband "
-                f"(Minimum {self._config.short_min_score:.0f})"
+                f"Short score {score:.1f} in exhaustion band "
+                f"(minimum {self._config.short_min_score:.0f})"
             )
 
         if self._config.regime_filter_enabled and market_regime is not None:
@@ -358,8 +358,8 @@ class SignalEngine:
 
         if data_quality < MIN_DATA_QUALITY:
             return (
-                f"Datenqualitaet {data_quality:.0f} liegt unter dem Minimum "
-                f"von {MIN_DATA_QUALITY:.0f}"
+                f"Data quality {data_quality:.0f} is below the minimum "
+                f"of {MIN_DATA_QUALITY:.0f}"
             )
 
         if self._config.block_range_market and market_phase is MarketPhase.RANGE:
@@ -368,24 +368,24 @@ class SignalEngine:
                 if indicators.adx_14 is not None
                 else ""
             )
-            return f"Seitwaertsmarkt ohne Trendstaerke{adx_text} — kein klares Setup"
+            return f"Range market without trend strength{adx_text} — no clear setup"
 
         if indicators.adx_14 is not None and indicators.adx_14 < self._config.min_adx:
             return (
-                f"Trendstaerke zu gering (ADX {indicators.adx_14:.1f} "
-                f"unter Minimum {self._config.min_adx:.1f})"
+                f"Trend strength too low (ADX {indicators.adx_14:.1f} "
+                f"below minimum {self._config.min_adx:.1f})"
             )
 
         if indicators.rsi_14 is not None:
             if direction.is_long and indicators.rsi_14 > self._config.rsi_long_max:
                 return (
-                    f"RSI {indicators.rsi_14:.1f} ueberkauft "
-                    f"(Maximum fuer Longs: {self._config.rsi_long_max:.0f})"
+                    f"RSI {indicators.rsi_14:.1f} overbought "
+                    f"(long maximum: {self._config.rsi_long_max:.0f})"
                 )
             if direction.is_short and indicators.rsi_14 < self._config.rsi_short_min:
                 return (
-                    f"RSI {indicators.rsi_14:.1f} ueberverkauft "
-                    f"(Minimum fuer Shorts: {self._config.rsi_short_min:.0f})"
+                    f"RSI {indicators.rsi_14:.1f} oversold "
+                    f"(short minimum: {self._config.rsi_short_min:.0f})"
                 )
 
         if (
@@ -393,18 +393,18 @@ class SignalEngine:
             and indicators.atr_percent > self._config.max_atr_percent
         ):
             return (
-                f"Volatilitaet zu hoch (ATR {indicators.atr_percent:.2f}% "
-                f"ueber dem Grenzwert von {self._config.max_atr_percent:.2f}%)"
+                f"Volatility too high (ATR {indicators.atr_percent:.2f}% "
+                f"above limit {self._config.max_atr_percent:.2f}%)"
             )
 
         if risk is None:
-            return "Keine belastbaren Risikoparameter berechenbar"
+            return "No reliable risk parameters available"
 
         ratio = float(getattr(risk, "risk_reward_ratio", 0.0))
         if ratio < self._config.min_risk_reward_ratio:
             return (
-                f"Chance-Risiko-Verhaeltnis {ratio:.2f} unter dem Minimum "
-                f"von {self._config.min_risk_reward_ratio:.2f}"
+                f"Risk/reward {ratio:.2f} below the minimum "
+                f"of {self._config.min_risk_reward_ratio:.2f}"
             )
 
         return None
@@ -449,11 +449,14 @@ class SignalEngine:
         counters: list[str] = []
 
         for component in components:
-            if not component.detail or component.detail == "Noch nicht bewertet":
+            if not component.detail or component.detail in {
+                "Noch nicht bewertet",
+                "Not yet scored",
+            }:
                 continue
             aligned = component.raw_score * sign
             if sign == 0.0:
-                # Neutrales Signal: alles als Beobachtung fuehren.
+                # Neutral signal: keep everything as observation.
                 reasons.append(component.detail)
             elif aligned > 5.0:
                 reasons.append(component.detail)
@@ -463,13 +466,13 @@ class SignalEngine:
         for assessment in assessments.values():
             structure = assessment.indicators.structure
             if structure.failed_breakout_up and direction.is_long:
-                counters.append(f"{assessment.timeframe}: Fehlausbruch nach oben")
+                counters.append(f"{assessment.timeframe}: failed breakout up")
             if structure.failed_breakout_down and direction.is_short:
-                counters.append(f"{assessment.timeframe}: Fehlausbruch nach unten")
+                counters.append(f"{assessment.timeframe}: failed breakout down")
             if structure.bearish_divergence and direction.is_long:
-                counters.append(f"{assessment.timeframe}: baerische Divergenz")
+                counters.append(f"{assessment.timeframe}: bearish divergence")
             if structure.bullish_divergence and direction.is_short:
-                counters.append(f"{assessment.timeframe}: bullische Divergenz")
+                counters.append(f"{assessment.timeframe}: bullish divergence")
 
         if risk is not None:
             for warning in getattr(risk, "warnings", []):
@@ -477,7 +480,7 @@ class SignalEngine:
 
         trends = describe_timeframe_trends(assessments)
         if trends:
-            reasons.insert(0, "Trendlage: " + ", ".join(trends))
+            reasons.insert(0, "Trend stack: " + ", ".join(trends))
 
         return _unique(reasons), _unique(counters)
 

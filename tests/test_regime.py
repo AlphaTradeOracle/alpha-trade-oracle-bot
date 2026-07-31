@@ -92,7 +92,7 @@ class TestEngineRegimeAndExhaustion:
         if result.direction.is_short or result.direction is SignalDirection.NO_TRADE:
             assert result.direction is SignalDirection.NO_TRADE
             assert result.no_trade_reason is not None
-            assert "bullisch" in result.no_trade_reason.lower()
+            assert "bullish" in result.no_trade_reason.lower()
 
     def test_short_exhaustion_score_blocks_trade(
         self, downtrend_indicators: dict[str, IndicatorSet]
@@ -184,4 +184,4 @@ class TestRegimeBlockReason:
     def test_reason_for_bullish_short(self) -> None:
         reason = regime_block_reason(MarketRegime.BULLISH, SignalDirection.STRONG_SHORT)
         assert reason is not None
-        assert "bullisch" in reason.lower()
+        assert "bullish" in reason.lower()

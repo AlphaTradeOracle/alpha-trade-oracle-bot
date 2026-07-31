@@ -133,8 +133,8 @@ class RiskManager:
 
         if risk_reward < self._config.min_risk_reward_ratio:
             warnings.append(
-                f"Chance-Risiko-Verhaeltnis {risk_reward:.2f} unter dem Minimum "
-                f"von {self._config.min_risk_reward_ratio:.2f}"
+                f"Risk/reward {risk_reward:.2f} below the minimum "
+                f"of {self._config.min_risk_reward_ratio:.2f}"
             )
 
         return RiskParameters(
@@ -190,14 +190,14 @@ class RiskManager:
             if support < entry and (entry - support) <= atr_value * LEVEL_RELEVANCE_ATR:
                 candidate = support * buffer
                 if candidate < atr_stop:
-                    return candidate, "Stop unter den naechsten Support gelegt"
+                    return candidate, "Stop placed below nearest support"
 
         if not is_long and structure.nearest_resistance is not None:
             resistance = structure.nearest_resistance
             if resistance > entry and (resistance - entry) <= atr_value * LEVEL_RELEVANCE_ATR:
                 candidate = resistance * (1.0 + LEVEL_BUFFER_PERCENT / 100.0)
                 if candidate > atr_stop:
-                    return candidate, "Stop ueber den naechsten Widerstand gelegt"
+                    return candidate, "Stop placed above nearest resistance"
 
         return atr_stop, None
 
@@ -218,20 +218,19 @@ class RiskManager:
                 stop_loss,
                 required,
                 self._config.min_stop_distance_percent,
-                f"Stop war zu eng und wurde auf "
-                f"{self._config.min_stop_distance_percent:.2f}% aufgeweitet",
+                f"Stop was too tight and widened to "
+                f"{self._config.min_stop_distance_percent:.2f}%",
             )
 
         if stop_distance_percent > self._config.max_stop_distance_percent:
-            # Nicht verschieben, sondern kennzeichnen: ein kuenstlich enger Stop
-            # waere in einem volatilen Markt gefaehrlicher als ein weiter. Das
-            # Dollar-Risiko begrenzt das risikonormierte Sizing; ein harter
-            # Reject laeuft ueber ``RiskConfig.reject_wide_stops``.
+            # Don't move it — flag only. An artificially tight stop in a volatile
+            # market is worse than a wide one. Dollar risk caps sizing; hard
+            # rejects go through ``RiskConfig.reject_wide_stops``.
             return (
                 stop_loss,
                 stop_distance,
                 stop_distance_percent,
-                f"Stop-Abstand {stop_distance_percent:.2f}% ist ungewoehnlich weit",
+                f"Stop distance {stop_distance_percent:.2f}% is unusually wide",
             )
 
         return stop_loss, stop_distance, stop_distance_percent, None
@@ -330,5 +329,5 @@ class RiskManager:
     @staticmethod
     def _invalidation_note(stop_loss: float, timeframe: str, *, is_long: bool) -> str:
         """Invalidierung auf Schlusskursbasis — nicht auf ein kurzes Durchstechen."""
-        relation = "unter" if is_long else "ueber"
-        return f"{timeframe}-Schlusskurs {relation} {stop_loss:.6g}"
+        relation = "below" if is_long else "above"
+        return f"{timeframe} close {relation} {stop_loss:.6g}"

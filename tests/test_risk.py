@@ -78,7 +78,7 @@ class TestStopLoss:
         risk = RiskManager().calculate(SignalDirection.SHORT, indicators)
         assert risk is not None
         assert risk.stop_loss > 40_800.0
-        assert any("Widerstand" in warning for warning in risk.warnings)
+        assert any("resistance" in warning.lower() for warning in risk.warnings)
 
     def test_support_above_atr_stop_leaves_stop_untouched(self) -> None:
         """Liegt der Support ueber dem ATR-Stop, ist der Stop bereits sicher."""
@@ -164,7 +164,7 @@ class TestRiskRewardRatio:
         risk = manager.calculate(SignalDirection.LONG, make_indicators())
         assert risk is not None
         assert risk.risk_reward_ratio < 5.0
-        assert any("Chance-Risiko" in warning for warning in risk.warnings)
+        assert any("Risk/reward" in warning for warning in risk.warnings)
 
 
 class TestPositionSize:
@@ -236,4 +236,4 @@ class TestInvalidation:
     def test_short_note_uses_opposite_relation(self) -> None:
         risk = RiskManager().calculate(SignalDirection.SHORT, make_indicators())
         assert risk is not None
-        assert "ueber" in risk.invalidation_note
+        assert "above" in risk.invalidation_note
