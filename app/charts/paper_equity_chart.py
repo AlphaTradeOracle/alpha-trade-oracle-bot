@@ -213,7 +213,7 @@ def _render(
             va="center",
         )
 
-    # Gesamtwert: signed Equity mit $-Suffix (+5.012,33$), darunter Performance-%
+    # TOTAL: $ PnL since start, percent underneath (same layout as 1H/24H/7D)
     fig.text(
         right,
         0.955,
@@ -227,8 +227,8 @@ def _render(
     fig.text(
         right,
         0.920,
-        _fmt_signed_usd_suffix(last),
-        color=tv.TEXT,
+        _fmt_signed_usd_suffix(delta),
+        color=chip_color,
         fontsize=9.5,
         fontweight="bold",
         ha="right",
