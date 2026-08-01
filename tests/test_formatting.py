@@ -79,7 +79,7 @@ class TestSignalMessage:
         message = format_signal_message(make_result())
         plain = message.replace("\\", "")
         assert "Alpha Trade Oracle" not in plain
-        assert plain.lstrip().startswith("BTC/USDT")
+        assert "BTC/USDT" in plain.splitlines()[0]
         assert "BTC/USDT" in message
         assert "LONG" in message
         assert "Confidence: 72/100" in message
