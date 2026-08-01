@@ -1,8 +1,6 @@
 import {
-  BarChart3,
   ClipboardList,
   LayoutDashboard,
-  Settings,
   CircleDot,
   Hourglass,
 } from 'lucide-react'
@@ -14,8 +12,6 @@ const nav = [
   { to: '/open', label: 'Open Trades', icon: CircleDot },
   { to: '/pending', label: 'Pending Trades', icon: Hourglass },
   { to: '/closed', label: 'Closed Trades', icon: ClipboardList },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 interface SidebarProps {
@@ -25,8 +21,8 @@ interface SidebarProps {
 export function Sidebar({ onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-full w-[240px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/90 backdrop-blur">
-      <div className="border-b border-[var(--color-border-subtle)] px-5 py-5">
-        <BrandLockup size={40} />
+      <div className="border-b border-[color-mix(in_srgb,var(--color-accent)_35%,var(--color-border-subtle))] px-5 py-5">
+        <BrandLockup size={48} />
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -38,15 +34,25 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             onClick={onNavigate}
             className={({ isActive }) =>
               [
-                'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors',
+                'relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors',
                 isActive
-                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-text)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]',
+                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-muted)]',
               ].join(' ')
             }
           >
-            <item.icon size={16} strokeWidth={1.8} />
-            {item.label}
+            {({ isActive }) => (
+              <>
+                {isActive ? (
+                  <span
+                    aria-hidden
+                    className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full bg-[var(--color-accent)]"
+                  />
+                ) : null}
+                <item.icon size={16} strokeWidth={1.8} />
+                {item.label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
