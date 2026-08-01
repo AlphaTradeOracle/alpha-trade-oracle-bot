@@ -23,6 +23,29 @@ function isBookTrade(trade: Trade): boolean {
   return trade.exit != null
 }
 
+/**
+ * Static JSON is only an offline/demo seed. Never show OPEN/PENDING from it —
+ * those go stale (e.g. cancelled KAVA) and flash on every hard refresh until
+ * `/desk/snapshot` replaces the book.
+ */
+function seedTrades(): Trade[] {
+  return (tradesFallback as Trade[])
+    .filter((t) => t.status === 'CLOSED')
+    .filter(isBookTrade)
+}
+
+function seedPortfolio(): PortfolioSnapshot {
+  const base = portfolioFallback as PortfolioSnapshot
+  return {
+    ...base,
+    openPositions: 0,
+    pendingOrders: 0,
+    openUpnl: 0,
+    openR: 0,
+    marginLocked: 0,
+  }
+}
+
 interface RefreshOptions {
   /** Skip the full-page loading flag (background poll). */
   silent?: boolean
@@ -42,12 +65,8 @@ const DeskDataContext = createContext<DeskDataValue | null>(null)
 
 export function DeskDataProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(
-    () => portfolioFallback as PortfolioSnapshot,
-  )
-  const [trades, setTrades] = useState<Trade[]>(() =>
-    (tradesFallback as Trade[]).filter(isBookTrade),
-  )
+  const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(seedPortfolio)
+  const [trades, setTrades] = useState<Trade[]>(seedTrades)
   const [equity, setEquity] = useState<EquityPoint[]>(
     () => equityFallback as EquityPoint[],
   )
