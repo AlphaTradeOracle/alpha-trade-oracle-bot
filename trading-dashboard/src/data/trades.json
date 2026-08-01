@@ -22,19 +22,19 @@
       {
         "label": "TP1",
         "price": 0.1642357,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.1583027,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.1494032,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -66,19 +66,19 @@
       {
         "label": "TP1",
         "price": 0.00046069,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.00041693,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.00038603,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -110,19 +110,19 @@
       {
         "label": "TP1",
         "price": 0.00025013,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.00023921,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.00022282,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -154,19 +154,19 @@
       {
         "label": "TP1",
         "price": 0.54551296,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.54079769,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.53372477,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -198,19 +198,19 @@
       {
         "label": "TP1",
         "price": 0.04018528,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.03955793,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.03861691,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -242,19 +242,19 @@
       {
         "label": "TP1",
         "price": 0.05465289,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.05378815,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.05249104,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -286,19 +286,19 @@
       {
         "label": "TP1",
         "price": 0.20329788,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.20060195,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.19655805,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -330,19 +330,19 @@
       {
         "label": "TP1",
         "price": 50.78454927,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 49.83916437,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 48.42108702,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -374,19 +374,19 @@
       {
         "label": "TP1",
         "price": 0.8694742,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.8497417,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.82014295,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -418,19 +418,19 @@
       {
         "label": "TP1",
         "price": 0.01664105,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.01637183,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.01596801,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -462,19 +462,19 @@
       {
         "label": "TP1",
         "price": 0.00781175,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.00766989,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.0074571,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -506,19 +506,19 @@
       {
         "label": "TP1",
         "price": 1.21623039,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 1.19983422,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 1.17523997,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -550,19 +550,19 @@
       {
         "label": "TP1",
         "price": 0.10247409,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.09991179,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.09606834,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
@@ -594,19 +594,19 @@
       {
         "label": "TP1",
         "price": 0.104156,
-        "size": 0.33,
+        "size": 0.5,
         "hit": false
       },
       {
         "label": "TP2",
         "price": 0.09736042,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       },
       {
         "label": "TP3",
         "price": 0.09296724,
-        "size": 0.33,
+        "size": 0.25,
         "hit": false
       }
     ],
