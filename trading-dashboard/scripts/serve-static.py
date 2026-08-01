@@ -26,6 +26,13 @@ class SpaHandler(SimpleHTTPRequestHandler):
             self.path = "/index.html"
         return super().send_head()
 
+    def end_headers(self):  # noqa: D102 - stdlib override
+        # Prototype builds change often; never let a proxy or browser pin them.
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def log_message(self, *args):  # noqa: D102 - quieter output
         pass
 
