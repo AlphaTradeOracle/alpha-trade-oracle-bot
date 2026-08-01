@@ -8,7 +8,7 @@ export interface DeskSnapshot {
 }
 
 /** Same-origin in production (Nginx proxies `/api`). Override for local Vite. */
-function apiBase(): string {
+export function apiBase(): string {
   const raw = import.meta.env.VITE_DESK_API_BASE
   if (typeof raw === 'string' && raw.length > 0) {
     return raw.replace(/\/$/, '')

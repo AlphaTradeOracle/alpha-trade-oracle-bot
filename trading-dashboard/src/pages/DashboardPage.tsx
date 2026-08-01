@@ -102,6 +102,7 @@ export function DashboardPage() {
         open={equityOpen}
         onClose={() => setEquityOpen(false)}
         portfolio={portfolio}
+        equityPoints={equity}
         closedTrades={closed}
       />
     </div>

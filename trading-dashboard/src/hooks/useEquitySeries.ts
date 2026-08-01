@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getRange, type EquityRangeId } from '../components/equity/EquityFilters'
 import {
   HistoricalEquityProvider,
-  createMockEquityData,
+  createDeskEquityData,
   type EquitySample,
 } from '../services/equityData'
-import type { PortfolioSnapshot } from '../types/trade'
+import type { EquityPoint, PortfolioSnapshot } from '../types/trade'
 
 const PAGE_POINTS = 600
 
@@ -22,15 +22,11 @@ export interface EquitySeriesResult {
 }
 
 /**
- * Supplies the equity chart with samples for the selected period.
- *
- * Each period picks its own sampling resolution so the point count stays
- * readable. History is paged through `HistoricalEquityProvider`, so replacing
- * the mock source with a REST or WebSocket adapter needs no changes here or in
- * the chart.
+ * Supplies the equity chart from live desk fill-curve points.
  */
 export function useEquitySeries(
   portfolio: PortfolioSnapshot,
+  equityPoints: EquityPoint[],
   rangeId: EquityRangeId,
 ): EquitySeriesResult {
   const [samples, setSamples] = useState<EquitySample[]>([])
@@ -41,15 +37,15 @@ export function useEquitySeries(
 
   const providerRef = useRef<HistoricalEquityProvider | null>(null)
 
-  const source = useMemo(
-    () =>
-      createMockEquityData({
-        startCapital: portfolio.totalCapital,
-        currentEquity: portfolio.equity,
-        openUpnl: portfolio.openUpnl,
-      }),
-    [portfolio.totalCapital, portfolio.equity, portfolio.openUpnl],
-  )
+  const source = useMemo(() => {
+    const points =
+      equityPoints.length > 0
+        ? equityPoints
+        : [
+            { t: new Date().toISOString(), equity: portfolio.equity },
+          ]
+    return createDeskEquityData(points)
+  }, [equityPoints, portfolio.equity])
 
   const range = getRange(rangeId)
 
@@ -93,7 +89,6 @@ export function useEquitySeries(
 
   const loadOlder = useCallback(() => {
     const provider = providerRef.current
-    // Fixed periods stay fixed; only the full history keeps growing.
     if (!provider || provider.exhausted || range.seconds != null) return
     setLoadingHistory((busy) => {
       if (busy) return busy

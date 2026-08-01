@@ -31,14 +31,15 @@ export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
   const start = data[0]?.equity ?? 0
   const end = data[data.length - 1]?.equity ?? 0
   const up = end >= start
-  const stroke = up ? '#3dcf8e' : '#f07178'
-  const fillId = up ? 'equityFillUp' : 'equityFillDown'
+  // Brand gold line; PnL direction stays in the end-value color.
+  const stroke = '#c9a24d'
+  const fillId = 'equityFillGold'
 
   return (
     <section
       onClick={onOpenDetails}
       className={[
-        'panel p-4 transition-colors sm:p-5',
+        'panel panel-brand p-4 transition-colors sm:p-5',
         onOpenDetails ? 'cursor-pointer hover:bg-[var(--color-surface-hover)]/40' : '',
       ].join(' ')}
     >
@@ -58,25 +59,21 @@ export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient id="equityFillUp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3dcf8e" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="#3dcf8e" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="equityFillDown" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f07178" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="#f07178" stopOpacity={0} />
+              <linearGradient id="equityFillGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#c9a24d" stopOpacity={0.26} />
+                <stop offset="100%" stopColor="#c9a24d" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid stroke="#243041" strokeDasharray="3 6" vertical={false} />
+            <CartesianGrid stroke="#2a3a4f" strokeDasharray="3 6" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fill: '#6d7f93', fontSize: 11 }}
+              tick={{ fill: '#7a8ba3', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               minTickGap={28}
             />
             <YAxis
-              tick={{ fill: '#6d7f93', fontSize: 11 }}
+              tick={{ fill: '#7a8ba3', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               width={56}
@@ -85,8 +82,8 @@ export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
             />
             <Tooltip
               contentStyle={{
-                background: '#141b24',
-                border: '1px solid #243041',
+                background: '#162234',
+                border: '1px solid #2a3a4f',
                 borderRadius: 10,
                 fontSize: 12,
               }}

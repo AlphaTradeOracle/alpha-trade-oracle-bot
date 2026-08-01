@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------
-   Alpha Desk — Design Tokens
-   Dark trading desk aesthetic: charcoal surfaces, crisp mono figures,
-   green/red for directional PnL. No neon/glow.
+   Alpha Desk — Oracle Gold Design Tokens
+   Logo-aligned navy surfaces, gold brand accent, steel meta text.
+   Green/red reserved for directional PnL. No neon/glow.
 ------------------------------------------------------------------- */
 @theme {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  --color-bg: #0b0f14;
-  --color-bg-elevated: #10161e;
-  --color-surface: #141b24;
-  --color-surface-hover: #1a2330;
-  --color-border: #243041;
-  --color-border-subtle: #1a2433;
+  --color-bg: #0b1524;
+  --color-bg-elevated: #121c2c;
+  --color-surface: #162234;
+  --color-surface-hover: #1c2a3f;
+  --color-border: #2a3a4f;
+  --color-border-subtle: #1e2c3f;
 
   --color-text: #e8eef4;
   --color-text-secondary: #9aabbd;
-  --color-text-muted: #6d7f93;
+  --color-text-muted: #7a8ba3;
 
-  --color-accent: #4aa3ff;
-  --color-accent-soft: color-mix(in srgb, #4aa3ff 16%, transparent);
+  --color-accent: #c9a24d;
+  --color-accent-soft: color-mix(in srgb, #c9a24d 14%, transparent);
 
   --color-long: #3dcf8e;
   --color-long-soft: color-mix(in srgb, #3dcf8e 14%, transparent);
@@ -52,7 +52,7 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Subtle atmosphere — not a flat void */
+  /* Subtle navy + gold atmosphere — no neon */
   body::before {
     content: "";
     position: fixed;
@@ -60,13 +60,13 @@
     pointer-events: none;
     z-index: -1;
     background:
-      radial-gradient(1000px 500px at 10% -10%, rgba(74, 163, 255, 0.08), transparent 55%),
-      radial-gradient(800px 420px at 90% 0%, rgba(61, 207, 142, 0.05), transparent 50%),
-      linear-gradient(180deg, #0d1219 0%, #0b0f14 40%, #0a0e13 100%);
+      radial-gradient(900px 420px at 8% -8%, rgba(201, 162, 77, 0.07), transparent 55%),
+      radial-gradient(700px 380px at 92% 0%, rgba(90, 110, 140, 0.06), transparent 50%),
+      linear-gradient(180deg, #0e1a2c 0%, #0b1524 42%, #0a1320 100%);
   }
 
   ::selection {
-    background: color-mix(in srgb, #4aa3ff 35%, transparent);
+    background: color-mix(in srgb, #c9a24d 35%, transparent);
   }
 
   input,
@@ -87,6 +87,10 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: 14px;
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  }
+
+  .panel-brand {
+    border-top: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
   }
 
   /* Dialog entrance — subtle, no bounce */

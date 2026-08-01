@@ -3,18 +3,18 @@
  *
  * To swap the logo, drop your file into `public/brand/` and point
  * `logoSrc` at it — no component changes required.
- * Recommended: square PNG/SVG, at least 512×512, transparent or dark background.
+ * Recommended: square SVG mark (transparent). PNG only as fallback asset.
  */
 export const branding = {
   projectName: 'Alpha Trade Oracle',
   shortName: 'Alpha Desk',
-  tagline: 'Local trading console',
+  tagline: 'Live Dashboard',
   version: '0.1 Alpha',
   copyrightYear: 2026,
-  /** Primary logo file served from `public/`. */
-  logoSrc: '/brand/logo.png',
-  /** Rendered when the logo file is missing (keeps the shell intact). */
-  logoFallbackSrc: '/brand/logo-fallback.svg',
+  /** Primary logo — SVG stays sharp at small sidebar sizes. */
+  logoSrc: '/brand/logo.svg',
+  /** Legacy raster mark (optional). */
+  logoFallbackSrc: '/brand/logo.png',
 } as const
 
 export type Branding = typeof branding

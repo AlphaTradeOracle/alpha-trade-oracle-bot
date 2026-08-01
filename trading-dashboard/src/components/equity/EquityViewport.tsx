@@ -50,7 +50,7 @@ const HISTORY_TRIGGER_POINTS = 30
 const LATEST_WINDOW_POINTS = 180
 
 const colorOf = (id: EquityOverlayId) =>
-  EQUITY_OVERLAYS.find((o) => o.id === id)?.color ?? '#4aa3ff'
+  EQUITY_OVERLAYS.find((o) => o.id === id)?.color ?? '#c9a24d'
 
 /**
  * Thin wrapper around Lightweight Charts for the equity curve.
@@ -90,7 +90,7 @@ export function EquityViewport({
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#6d7f93',
+        textColor: '#7a8ba3',
         fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
         fontSize: 11,
         attributionLogo: false,
@@ -102,13 +102,13 @@ export function EquityViewport({
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#4aa3ff88',
+          color: '#c9a24d88',
           width: 1,
           style: LineStyle.Dashed,
           labelBackgroundColor: '#1a2330',
         },
         horzLine: {
-          color: '#4aa3ff88',
+          color: '#c9a24d88',
           width: 1,
           style: LineStyle.Dashed,
           labelBackgroundColor: '#1a2330',

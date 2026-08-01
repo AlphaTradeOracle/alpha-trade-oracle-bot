@@ -24,11 +24,11 @@ import { formatPrice } from '../../../utils/format'
 export const CHART_COLORS = {
   up: '#3dcf8e',
   down: '#f07178',
-  entry: '#4aa3ff',
+  entry: '#c9a24d',
   stop: '#f07178',
   tp: '#3dcf8e',
   grid: 'rgba(36, 48, 65, 0.5)',
-  text: '#6d7f93',
+  text: '#7a8ba3',
 } as const
 
 /** Imperative handle so the toolbar can drive the viewport. */
@@ -145,13 +145,13 @@ export function ChartViewport({
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#4aa3ff88',
+          color: '#c9a24d88',
           width: 1,
           style: LineStyle.Dashed,
           labelBackgroundColor: '#1a2330',
         },
         horzLine: {
-          color: '#4aa3ff88',
+          color: '#c9a24d88',
           width: 1,
           style: LineStyle.Dashed,
           labelBackgroundColor: '#1a2330',

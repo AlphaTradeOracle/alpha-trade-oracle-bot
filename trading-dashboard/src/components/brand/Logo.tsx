@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { branding } from '../../config/branding'
 
 interface LogoProps {
@@ -8,27 +7,25 @@ interface LogoProps {
 }
 
 /**
- * Brand mark.
- * Loads `branding.logoSrc` and falls back to the bundled SVG when the
- * file has not been dropped in yet, so the shell never breaks.
+ * Brand mark — SVG primary so edges stay sharp at sidebar sizes.
  */
-export function Logo({ size = 40, className = '' }: LogoProps) {
-  const [src, setSrc] = useState<string>(branding.logoSrc)
-
+export function Logo({ size = 44, className = '' }: LogoProps) {
   return (
     <img
-      src={src}
-      onError={() => setSrc(branding.logoFallbackSrc)}
+      src={branding.logoSrc}
       alt={`${branding.projectName} logo`}
       width={size}
       height={size}
       loading="eager"
       decoding="async"
-      className={[
-        'shrink-0 rounded-lg object-contain',
-        className,
-      ].join(' ')}
-      style={{ width: size, height: size }}
+      draggable={false}
+      className={['shrink-0 object-contain', className].join(' ')}
+      style={{
+        width: size,
+        height: size,
+        // Prefer crisp vector scaling; avoid soft browser resampling.
+        imageRendering: 'auto',
+      }}
     />
   )
 }

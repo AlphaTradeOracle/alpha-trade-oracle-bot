@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { EquitySample } from '../../services/equityData'
-import type { PortfolioSnapshot, Trade } from '../../types/trade'
+import type { EquityPoint, PortfolioSnapshot, Trade } from '../../types/trade'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
 import { EquityAnalysisChart } from './EquityAnalysisChart'
@@ -10,6 +10,7 @@ interface EquityDetailsModalProps {
   open: boolean
   onClose: () => void
   portfolio: PortfolioSnapshot
+  equityPoints: EquityPoint[]
   closedTrades: Trade[]
 }
 
@@ -21,6 +22,7 @@ export function EquityDetailsModal({
   open,
   onClose,
   portfolio,
+  equityPoints,
   closedTrades,
 }: EquityDetailsModalProps) {
   const [samples, setSamples] = useState<EquitySample[]>([])
@@ -41,7 +43,11 @@ export function EquityDetailsModal({
       }
     >
       <div className="space-y-4">
-        <EquityAnalysisChart portfolio={portfolio} onSamplesChange={setSamples} />
+        <EquityAnalysisChart
+          portfolio={portfolio}
+          equityPoints={equityPoints}
+          onSamplesChange={setSamples}
+        />
         <EquityStatistics samples={samples} closedTrades={closedTrades} />
       </div>
     </Modal>

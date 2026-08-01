@@ -36,6 +36,7 @@ export class HistoricalDataProvider {
   private oldestLoaded: number | null = null
   private newestLoaded: number | null = null
   private inFlight: Promise<Candle[]> | null = null
+  private hitFloor = false
 
   constructor({
     symbol,
@@ -54,6 +55,7 @@ export class HistoricalDataProvider {
 
   /** True once the source cannot deliver anything older. */
   get exhausted(): boolean {
+    if (this.hitFloor) return true
     const earliest = this.provider.earliestTime
     if (earliest == null || this.oldestLoaded == null) return false
     return this.oldestLoaded <= alignToInterval(earliest, this.interval)
@@ -104,9 +106,12 @@ export class HistoricalDataProvider {
         const last = page[page.length - 1].time
         this.oldestLoaded = this.oldestLoaded == null ? first : Math.min(this.oldestLoaded, first)
         this.newestLoaded = this.newestLoaded == null ? last : Math.max(this.newestLoaded, last)
-      } else if (this.oldestLoaded != null) {
+      } else {
         // Nothing came back — treat the requested edge as the history floor.
-        this.oldestLoaded = Math.min(this.oldestLoaded, alignToInterval(from, this.interval))
+        this.hitFloor = true
+        if (this.oldestLoaded != null) {
+          this.oldestLoaded = Math.min(this.oldestLoaded, alignToInterval(from, this.interval))
+        }
       }
 
       this.trim()

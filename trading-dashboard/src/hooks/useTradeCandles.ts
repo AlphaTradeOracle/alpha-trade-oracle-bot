@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   HistoricalDataProvider,
   INTERVAL_SECONDS,
-  createMockMarketData,
+  createDeskMarketData,
   type CandleInterval,
 } from '../services/marketData'
-import type { PriceAnchor } from '../services/marketData'
 import type { Candle, Trade } from '../types/trade'
 
 /** Bars shown when the chart opens, before the user zooms out. */
@@ -25,10 +24,7 @@ export interface TradeCandlesResult {
 }
 
 /**
- * Supplies the trade chart with candles for the selected timeframe.
- *
- * History is paged through `HistoricalDataProvider`, so switching the mock
- * source for a REST or WebSocket adapter needs no changes here or in the chart.
+ * Supplies the trade chart with real exchange candles via the desk API.
  */
 export function useTradeCandles(
   trade: Trade | null,
@@ -41,25 +37,7 @@ export function useTradeCandles(
   const [error, setError] = useState<string | null>(null)
 
   const providerRef = useRef<HistoricalDataProvider | null>(null)
-
-  const anchors = useMemo<PriceAnchor[]>(() => {
-    if (!trade) return []
-    const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
-    const points: PriceAnchor[] = [{ time: opened, price: trade.entry }]
-
-    if (trade.closedAt && trade.exit != null) {
-      points.push({
-        time: Math.floor(new Date(trade.closedAt).getTime() / 1000),
-        price: trade.exit,
-      })
-    } else if (trade.mark != null) {
-      points.push({ time: Math.floor(Date.now() / 1000), price: trade.mark })
-    }
-
-    return points
-  }, [trade])
-
-  const tradeKey = trade ? `${trade.id}:${interval}` : null
+  const tradeKey = trade ? `${trade.id}:${trade.symbol}:${interval}` : null
 
   useEffect(() => {
     if (!trade || !tradeKey) {
@@ -71,7 +49,7 @@ export function useTradeCandles(
     let cancelled = false
     const step = INTERVAL_SECONDS[interval]
 
-    const source = createMockMarketData({ anchors })
+    const source = createDeskMarketData()
     const provider = new HistoricalDataProvider({
       symbol: trade.symbol,
       interval,
@@ -80,7 +58,6 @@ export function useTradeCandles(
     })
     providerRef.current = provider
 
-    // Window must cover the whole trade plus context on both sides.
     const now = Math.floor(Date.now() / 1000)
     const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
     const closed = trade.closedAt
@@ -89,8 +66,6 @@ export function useTradeCandles(
     const span = Math.max(closed - opened, step)
     const padding = Math.max(span * 0.5, (INITIAL_BARS / 2) * step)
 
-    // Never request future candles; take the missing context from the past
-    // instead so the bar count stays the same.
     const to = Math.min(closed + padding, now)
     const from = opened - padding - Math.max(closed + padding - to, 0)
 
@@ -117,7 +92,7 @@ export function useTradeCandles(
     return () => {
       cancelled = true
     }
-  }, [trade, tradeKey, interval, anchors])
+  }, [trade, tradeKey, interval])
 
   const loadOlder = useCallback(() => {
     const provider = providerRef.current

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import { useEquitySeries } from '../../hooks/useEquitySeries'
 import type { EquitySample } from '../../services/equityData'
-import type { PortfolioSnapshot } from '../../types/trade'
+import type { EquityPoint, PortfolioSnapshot } from '../../types/trade'
 import { formatMoney, formatPct, formatTimestamp } from '../../utils/format'
 import { ChartControls, ChartToolbar } from '../charts/shared'
 import {
@@ -16,6 +16,8 @@ import { EquityViewport, type EquityHover, type EquityViewportHandle } from './E
 
 interface EquityAnalysisChartProps {
   portfolio: PortfolioSnapshot
+  /** Fill-level equity points from the live desk snapshot */
+  equityPoints: EquityPoint[]
   height?: number
   /** Reported upwards so the statistics panel shares the loaded window */
   onSamplesChange?: (samples: EquitySample[]) => void
@@ -30,6 +32,7 @@ interface EquityAnalysisChartProps {
  */
 export function EquityAnalysisChart({
   portfolio,
+  equityPoints,
   height = 420,
   onSamplesChange,
 }: EquityAnalysisChartProps) {
@@ -43,6 +46,7 @@ export function EquityAnalysisChart({
 
   const { samples, loading, loadingHistory, exhausted, error, loadOlder } = useEquitySeries(
     portfolio,
+    equityPoints,
     range,
   )
 

@@ -18,7 +18,7 @@ export interface EquityOverlayDefinition {
 }
 
 export const EQUITY_OVERLAYS: EquityOverlayDefinition[] = [
-  { id: 'equity', label: 'Equity', color: '#4aa3ff', available: true },
+  { id: 'equity', label: 'Equity', color: '#c9a24d', available: true },
   { id: 'balance', label: 'Balance', color: '#9aabbd', available: true },
   { id: 'drawdown', label: 'Drawdown', color: '#f07178', available: true },
   { id: 'dailyReturn', label: 'Daily Return', color: '#3dcf8e', available: false },
