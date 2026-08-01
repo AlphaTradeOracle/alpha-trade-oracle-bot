@@ -4,18 +4,28 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
+import { useLocation } from 'react-router-dom'
 import equityFallback from '../data/equity.json'
 import portfolioFallback from '../data/portfolio.json'
 import tradesFallback from '../data/trades.json'
 import { fetchDeskSnapshot } from '../services/deskApi'
 import type { EquityPoint, PortfolioSnapshot, Trade } from '../types/trade'
 
+/** While the desk tab stays open, refresh in the background. */
+const POLL_MS = 60_000
+
 function isBookTrade(trade: Trade): boolean {
   if (trade.status !== 'CLOSED') return true
   return trade.exit != null
+}
+
+interface RefreshOptions {
+  /** Skip the full-page loading flag (background poll). */
+  silent?: boolean
 }
 
 interface DeskDataValue {
@@ -25,12 +35,13 @@ interface DeskDataValue {
   generatedAt: string | null
   loading: boolean
   error: string | null
-  refresh: () => Promise<void>
+  refresh: (options?: RefreshOptions) => Promise<void>
 }
 
 const DeskDataContext = createContext<DeskDataValue | null>(null)
 
 export function DeskDataProvider({ children }: { children: ReactNode }) {
+  const location = useLocation()
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(
     () => portfolioFallback as PortfolioSnapshot,
   )
@@ -43,43 +54,63 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const inFlight = useRef<AbortController | null>(null)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const refresh = useCallback(async (options?: RefreshOptions) => {
+    inFlight.current?.abort()
+    const controller = new AbortController()
+    inFlight.current = controller
+
+    const silent = Boolean(options?.silent)
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
+
     try {
-      const snap = await fetchDeskSnapshot()
+      const snap = await fetchDeskSnapshot(controller.signal)
+      if (controller.signal.aborted) return
       setPortfolio(snap.portfolio)
       setTrades((snap.trades ?? []).filter(isBookTrade))
       setEquity(snap.equity ?? [])
       setGeneratedAt(snap.generatedAt)
+      setError(null)
     } catch (err) {
+      if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : 'Desk-Daten konnten nicht geladen werden.')
     } finally {
-      setLoading(false)
+      if (inFlight.current === controller) {
+        inFlight.current = null
+        setLoading(false)
+      }
     }
   }, [])
 
+  // First visit + every sidebar / route change.
   useEffect(() => {
-    const controller = new AbortController()
-    setLoading(true)
-    setError(null)
-    fetchDeskSnapshot(controller.signal)
-      .then((snap) => {
-        setPortfolio(snap.portfolio)
-        setTrades((snap.trades ?? []).filter(isBookTrade))
-        setEquity(snap.equity ?? [])
-        setGeneratedAt(snap.generatedAt)
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        setError(err instanceof Error ? err.message : 'Desk-Daten konnten nicht geladen werden.')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [])
+    void refresh()
+    return () => inFlight.current?.abort()
+  }, [location.pathname, refresh])
+
+  // Background poll only while the browser tab is visible.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh({ silent: true })
+      }
+    }
+    const id = window.setInterval(tick, POLL_MS)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh({ silent: true })
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refresh])
 
   const value = useMemo(
     () => ({ portfolio, trades, equity, generatedAt, loading, error, refresh }),

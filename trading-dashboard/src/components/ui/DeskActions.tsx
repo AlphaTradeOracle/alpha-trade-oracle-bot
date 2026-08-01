@@ -1,142 +1,26 @@
-import { useState } from 'react'
-import { Download, Plus, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useDeskData } from '../../context/DeskDataContext'
 import { Button } from './Button'
-import { Modal } from './Modal'
 
-interface DeskActionsProps {
-  /** Section the actions belong to, shown inside the dialogs */
-  context: string
-  showNewTrade?: boolean
-}
-
-type Dialog = 'export' | 'new' | null
-
-const exportFormats = ['CSV', 'JSON', 'Excel'] as const
-
-/** Standard header actions for the desk views. */
-export function DeskActions({ context, showNewTrade = true }: DeskActionsProps) {
-  const { refresh, loading } = useDeskData()
-  const [dialog, setDialog] = useState<Dialog>(null)
-  const [format, setFormat] = useState<(typeof exportFormats)[number]>('CSV')
-  const [refreshError, setRefreshError] = useState<string | null>(null)
-
-  const close = () => setDialog(null)
-
-  const onRefresh = async () => {
-    setRefreshError(null)
-    try {
-      await refresh()
-    } catch (err) {
-      setRefreshError(err instanceof Error ? err.message : 'Aktualisieren fehlgeschlagen.')
-    }
-  }
+/** Manual desk refresh — live data also reloads on tab change and on a quiet interval. */
+export function DeskActions() {
+  const { refresh, loading, error } = useDeskData()
 
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" onClick={() => void onRefresh()} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} />
-          {loading ? 'Lädt…' : 'Aktualisieren'}
-        </Button>
-        <Button variant="secondary" onClick={() => setDialog('export')}>
-          <Download size={14} />
-          Export
-        </Button>
-        {showNewTrade ? (
-          <Button variant="primary" onClick={() => setDialog('new')}>
-            <Plus size={14} />
-            Neue Position
-          </Button>
-        ) : null}
-      </div>
-
-      {refreshError ? (
-        <p className="mt-2 w-full text-xs text-[var(--color-short)]">{refreshError}</p>
+    <div className="flex flex-col items-end gap-1.5">
+      <Button
+        variant="primary"
+        onClick={() => void refresh()}
+        disabled={loading}
+        className="min-w-[9.5rem] shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-accent)_35%,transparent),0_8px_20px_-12px_var(--color-accent)]"
+        aria-label="Desk-Daten aktualisieren"
+      >
+        <RefreshCw size={15} className={loading ? 'animate-spin' : undefined} />
+        {loading ? 'Aktualisiert…' : 'Aktualisieren'}
+      </Button>
+      {error ? (
+        <p className="max-w-[16rem] text-right text-xs text-[var(--color-short)]">{error}</p>
       ) : null}
-
-      <Modal
-        open={dialog === 'export'}
-        title="Export"
-        subtitle={`Exportiert die aktuell gefilterten Daten aus „${context}".`}
-        onClose={close}
-        footer={
-          <>
-            <Button variant="ghost" onClick={close}>
-              Abbrechen
-            </Button>
-            <Button variant="primary" onClick={close}>
-              Export starten
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-[var(--color-text-muted)]">Format wählen</p>
-          <div className="flex flex-wrap gap-2">
-            {exportFormats.map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setFormat(f)}
-                className={[
-                  'cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition-colors',
-                  f === format
-                    ? 'border-[var(--color-accent)]/60 bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                    : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]',
-                ].join(' ')}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={dialog === 'new'}
-        title="Neue Position"
-        subtitle="Order-Ticket für den manuellen Einstieg."
-        onClose={close}
-        footer={
-          <>
-            <Button variant="ghost" onClick={close}>
-              Abbrechen
-            </Button>
-            <Button variant="primary" onClick={close}>
-              Order anlegen
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Symbol" placeholder="BTCUSDT" />
-          <div className="space-y-1.5">
-            <span className="block text-sm text-[var(--color-text-secondary)]">Richtung</span>
-            <select className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]">
-              <option>Long</option>
-              <option>Short</option>
-            </select>
-          </div>
-          <Field label="Einstieg" placeholder="0.00" />
-          <Field label="Stop Loss" placeholder="0.00" />
-          <Field label="Größe" placeholder="0.00" />
-          <Field label="Hebel" placeholder="5" />
-        </div>
-      </Modal>
-    </>
-  )
-}
-
-function Field({ label, placeholder }: { label: string; placeholder: string }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="block text-sm text-[var(--color-text-secondary)]">{label}</span>
-      <input
-        type="text"
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)] outline-none transition-colors placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)]"
-      />
-    </label>
+    </div>
   )
 }

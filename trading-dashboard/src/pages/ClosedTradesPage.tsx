@@ -18,7 +18,7 @@ export function ClosedTradesPage() {
       <PageHeader
         title="Closed Trades"
         subtitle={`${filtered.length} abgeschlossene Trades`}
-        actions={<DeskActions context="Closed Trades" showNewTrade={false} />}
+        actions={<DeskActions />}
       />
       <TradeFilters
         filters={filters}

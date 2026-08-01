@@ -18,7 +18,7 @@ export function PendingTradesPage() {
       <PageHeader
         title="Pending Trades"
         subtitle={`${filtered.length} Orders warten auf die Entry-Zone`}
-        actions={<DeskActions context="Pending Trades" />}
+        actions={<DeskActions />}
       />
       <TradeFilters filters={filters} onChange={setFilters} showPnlFilter={false} />
       <PendingTradesTable trades={filtered} onRowClick={setSelected} />

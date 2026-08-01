@@ -32,7 +32,7 @@ export function DashboardPage() {
       <PageHeader
         title="Trading Dashboard"
         subtitle="Überblick über Kapital, offene Positionen und Handelshistorie"
-        actions={<DeskActions context="Dashboard" />}
+        actions={<DeskActions />}
       />
 
       <KpiGrid portfolio={portfolio} />

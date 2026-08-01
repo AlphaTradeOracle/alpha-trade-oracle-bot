@@ -18,7 +18,7 @@ export function OpenTradesPage() {
       <PageHeader
         title="Open Trades"
         subtitle={`${filtered.length} offene Positionen`}
-        actions={<DeskActions context="Open Trades" />}
+        actions={<DeskActions />}
       />
       <TradeFilters
         filters={filters}
