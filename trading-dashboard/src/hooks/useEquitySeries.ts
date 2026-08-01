@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getRange, type EquityRangeId } from '../components/equity/EquityFilters'
 import {
   HistoricalEquityProvider,
   createMockEquityData,
   type EquitySample,
 } from '../services/equityData'
-import { INTERVAL_SECONDS, type CandleInterval } from '../services/marketData'
 import type { PortfolioSnapshot } from '../types/trade'
 
-/** Points shown when the chart opens, before the user zooms out. */
-const INITIAL_POINTS = 320
 const PAGE_POINTS = 600
+
+/** Fallback lookback for the "since account opening" range. */
+const MAX_HISTORY_SECONDS = 540 * 86_400
 
 export interface EquitySeriesResult {
   samples: EquitySample[]
@@ -21,15 +22,16 @@ export interface EquitySeriesResult {
 }
 
 /**
- * Supplies the equity chart with samples for the selected timeframe.
+ * Supplies the equity chart with samples for the selected period.
  *
- * History is paged through `HistoricalEquityProvider`, so replacing the mock
- * source with a REST or WebSocket adapter needs no changes here or in the chart.
+ * Each period picks its own sampling resolution so the point count stays
+ * readable. History is paged through `HistoricalEquityProvider`, so replacing
+ * the mock source with a REST or WebSocket adapter needs no changes here or in
+ * the chart.
  */
 export function useEquitySeries(
   portfolio: PortfolioSnapshot,
-  interval: CandleInterval,
-  enabled = true,
+  rangeId: EquityRangeId,
 ): EquitySeriesResult {
   const [samples, setSamples] = useState<EquitySample[]>([])
   const [loading, setLoading] = useState(false)
@@ -49,30 +51,27 @@ export function useEquitySeries(
     [portfolio.totalCapital, portfolio.equity, portfolio.openUpnl],
   )
 
-  useEffect(() => {
-    if (!enabled) {
-      setSamples([])
-      providerRef.current = null
-      return
-    }
+  const range = getRange(rangeId)
 
+  useEffect(() => {
     let cancelled = false
-    const step = INTERVAL_SECONDS[interval]
     const provider = new HistoricalEquityProvider({
-      interval,
+      interval: range.interval,
       provider: source,
       pageSize: PAGE_POINTS,
     })
     providerRef.current = provider
 
     const now = Math.floor(Date.now() / 1000)
+    const lookback = range.seconds ?? MAX_HISTORY_SECONDS
+    const from = Math.max(now - lookback, source.earliestTime ?? now - lookback)
 
     setLoading(true)
     setError(null)
     setExhausted(false)
 
     provider
-      .loadInitial(now - INITIAL_POINTS * step, now)
+      .loadInitial(from, now)
       .then((data) => {
         if (cancelled) return
         setSamples(data)
@@ -90,11 +89,12 @@ export function useEquitySeries(
     return () => {
       cancelled = true
     }
-  }, [source, interval, enabled])
+  }, [source, range.interval, range.seconds])
 
   const loadOlder = useCallback(() => {
     const provider = providerRef.current
-    if (!provider || provider.exhausted) return
+    // Fixed periods stay fixed; only the full history keeps growing.
+    if (!provider || provider.exhausted || range.seconds != null) return
     setLoadingHistory((busy) => {
       if (busy) return busy
       provider
@@ -109,7 +109,7 @@ export function useEquitySeries(
         .finally(() => setLoadingHistory(false))
       return true
     })
-  }, [])
+  }, [range.seconds])
 
   return { samples, loading, loadingHistory, exhausted, error, loadOlder }
 }

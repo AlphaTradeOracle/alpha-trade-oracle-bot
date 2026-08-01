@@ -7,14 +7,17 @@ interface ChartToolbarProps {
   /** Secondary line next to the title, e.g. point count or last value */
   meta?: ReactNode
   busy?: boolean
-  interval: CandleInterval
-  onIntervalChange: (interval: CandleInterval) => void
+  /** Omit both to replace the timeframe bar with `leading` */
+  interval?: CandleInterval
+  onIntervalChange?: (interval: CandleInterval) => void
   /** View controls rendered on the right */
   controls: ReactNode
-  /** Extra row below the timeframe bar (filters, overlays …) */
+  /** Extra row below the selector bar (filters, overlays …) */
   secondaryRow?: ReactNode
-  /** Rendered next to the timeframe bar */
+  /** Rendered next to the selector bar */
   trailing?: ReactNode
+  /** Replaces the timeframe bar, e.g. with a period selector */
+  leading?: ReactNode
 }
 
 /** Chart header shared by the trade and equity charts. */
@@ -27,6 +30,7 @@ export function ChartToolbar({
   controls,
   secondaryRow,
   trailing,
+  leading,
 }: ChartToolbarProps) {
   return (
     <div className="flex flex-col gap-2.5 border-b border-[var(--color-border-subtle)] px-4 py-3">
@@ -43,7 +47,11 @@ export function ChartToolbar({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <TimeframeSelector value={interval} onChange={onIntervalChange} disabled={busy} />
+        {interval && onIntervalChange ? (
+          <TimeframeSelector value={interval} onChange={onIntervalChange} disabled={busy} />
+        ) : (
+          leading
+        )}
         {trailing}
       </div>
 

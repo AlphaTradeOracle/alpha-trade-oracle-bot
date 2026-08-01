@@ -276,12 +276,12 @@ export function EquityViewport({
     setRange,
   ])
 
-  /* Frame the newest window once the first page has arrived. */
+  /* The loaded window already equals the selected period, so show all of it. */
   useEffect(() => {
     if (!ready || samples.length === 0 || didInitialFrameRef.current) return
     didInitialFrameRef.current = true
-    showLatest()
-  }, [ready, samples.length, showLatest])
+    resetView()
+  }, [ready, samples.length, resetView])
 
   return (
     <div

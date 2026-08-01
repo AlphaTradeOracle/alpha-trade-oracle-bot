@@ -1,12 +1,15 @@
 import { useRef, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import { useEquitySeries } from '../../hooks/useEquitySeries'
-import type { CandleInterval } from '../../services/marketData'
 import type { EquitySample } from '../../services/equityData'
 import type { PortfolioSnapshot } from '../../types/trade'
-import { formatMoney, formatPct } from '../../utils/format'
+import { formatMoney, formatPct, formatTimestamp } from '../../utils/format'
 import { ChartControls, ChartToolbar } from '../charts/shared'
-import { EquityFilters, type EquityRangeId } from './EquityFilters'
+import {
+  DEFAULT_EQUITY_RANGE,
+  EquityFilters,
+  type EquityRangeId,
+} from './EquityFilters'
 import { EquityOverlayMenu } from './EquityOverlayMenu'
 import { DEFAULT_OVERLAYS, type EquityOverlayId } from './EquityOverlays'
 import { EquityViewport, type EquityHover, type EquityViewportHandle } from './EquityViewport'
@@ -14,7 +17,6 @@ import { EquityViewport, type EquityHover, type EquityViewportHandle } from './E
 interface EquityAnalysisChartProps {
   portfolio: PortfolioSnapshot
   height?: number
-  defaultInterval?: CandleInterval
   /** Reported upwards so the statistics panel shares the loaded window */
   onSamplesChange?: (samples: EquitySample[]) => void
 }
@@ -22,20 +24,18 @@ interface EquityAnalysisChartProps {
 /**
  * Interactive equity chart.
  *
- * Composes the shared toolbar, the overlay and range selectors and the
+ * Composes the shared toolbar, the period and overlay selectors and the
  * charting viewport. Data access lives in `useEquitySeries`, so a live source
  * can be introduced without touching presentation code.
  */
 export function EquityAnalysisChart({
   portfolio,
   height = 420,
-  defaultInterval = '1d',
   onSamplesChange,
 }: EquityAnalysisChartProps) {
-  const [interval, setInterval] = useState<CandleInterval>(defaultInterval)
+  const [range, setRange] = useState<EquityRangeId>(DEFAULT_EQUITY_RANGE)
   const [overlays, setOverlays] = useState<EquityOverlayId[]>(DEFAULT_OVERLAYS)
   const [autoScale, setAutoScale] = useState(true)
-  const [range, setRange] = useState<EquityRangeId>('all')
   const [hover, setHover] = useState<EquityHover | null>(null)
 
   const viewportRef = useRef<EquityViewportHandle | null>(null)
@@ -43,7 +43,7 @@ export function EquityAnalysisChart({
 
   const { samples, loading, loadingHistory, exhausted, error, loadOlder } = useEquitySeries(
     portfolio,
-    interval,
+    range,
   )
 
   if (samples !== reportedRef.current) {
@@ -81,9 +81,10 @@ export function EquityAnalysisChart({
             </span>
           ) : null
         }
-        interval={interval}
-        onIntervalChange={setInterval}
         busy={loading || loadingHistory}
+        leading={
+          <EquityFilters value={range} onChange={setRange} disabled={loading} />
+        }
         controls={
           <ChartControls
             autoScale={{ active: autoScale, onToggle: () => setAutoScale((v) => !v) }}
@@ -92,25 +93,12 @@ export function EquityAnalysisChart({
             onReset={() => viewportRef.current?.resetView()}
           />
         }
-        trailing={
-          <EquityFilters
-            value={range}
-            onChange={(next) => {
-              setRange(next.id)
-              if (next.from == null || next.to == null) {
-                viewportRef.current?.resetView()
-              } else {
-                viewportRef.current?.setRange(next.from, next.to)
-              }
-            }}
-          />
-        }
         secondaryRow={<EquityOverlayMenu active={overlays} onToggle={toggleOverlay} />}
       />
 
       <div className="relative">
         <EquityViewport
-          key={interval}
+          key={range}
           ref={viewportRef}
           samples={samples}
           height={height}
@@ -141,13 +129,7 @@ export function EquityAnalysisChart({
         {hover ? (
           <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-[11px] tabular shadow-lg">
             <div className="mb-1 text-[var(--color-text-muted)]">
-              {new Date(hover.time * 1000).toLocaleString('de-DE', {
-                day: '2-digit',
-                month: 'short',
-                year: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatTimestamp(hover.time)}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
               <span className="text-[var(--color-text-muted)]">Equity</span>
