@@ -464,6 +464,36 @@ class TestUniverseService:
         assert len(assets) == 2
 
     @pytest.mark.asyncio
+    async def test_skips_bases_without_leverage(
+        self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
+    ) -> None:
+        provider = MultiSymbolStubProvider(uptrend_frames, [BTC, ETH, SOL])
+        gecko = AsyncMock()
+        gecko.fetch_top_markets = AsyncMock(
+            return_value=[
+                CoinGeckoMarket("bitcoin", "BTC", "Bitcoin", 90.0, 1),
+                CoinGeckoMarket("ethereum", "ETH", "Ethereum", 80.0, 2),
+                CoinGeckoMarket("solana", "SOL", "Solana", 70.0, 3),
+            ]
+        )
+        leverage = AsyncMock()
+        leverage.fetch_tradable_bases = AsyncMock(return_value={"BTC", "ETH"})
+        leverage.aclose = AsyncMock()
+        settings = service_settings(
+            universe_size=10,
+            universe_target_count=10,
+            universe_require_leverage=True,
+            enable_universe_scan=True,
+        )
+        service = UniverseService(provider, gecko, settings=settings, leverage=leverage)
+
+        result = await service.refresh(session)
+
+        assert result.mapped == 2
+        assert result.skipped_no_leverage == 1
+        assert set(result.symbols) == {"BTCUSDT", "ETHUSDT"}
+
+    @pytest.mark.asyncio
     async def test_deactivates_stale_universe_entries(
         self, session: AsyncSession, uptrend_frames: dict[str, pd.DataFrame]
     ) -> None:

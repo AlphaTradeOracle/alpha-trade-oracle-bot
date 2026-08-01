@@ -165,6 +165,8 @@ def service_settings(**overrides: object) -> Settings:
         "enable_llm_analysis": False,
         "enable_sentiment": False,
         "enable_universe_scan": False,
+        # Tests mock exchanges; skip live perp venue lookups by default.
+        "universe_require_leverage": False,
         "default_timeframes": "15m,1h,4h,1d",
         "min_candles_required": 210,
         "candle_limit": 400,

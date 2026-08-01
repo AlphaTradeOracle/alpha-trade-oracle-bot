@@ -18,6 +18,7 @@ from app.market_data.coingecko import (
     exchange_matches_provider,
 )
 from app.market_data.factory import parse_universe_exchange_names
+from app.market_data.leverage_coverage import LeverageCoverageClient, base_has_leverage
 from app.market_data.types import SymbolInfo
 from app.repositories.asset_repository import AssetRepository
 
@@ -60,6 +61,7 @@ class UniverseRefreshResult:
     skipped_duplicate: int = 0
     skipped_no_candles: int = 0
     skipped_illiquid: int = 0
+    skipped_no_leverage: int = 0
     deactivated: int = 0
     symbols: list[str] = field(default_factory=list)
 
@@ -75,6 +77,7 @@ class UniverseRefreshResult:
             "skipped_duplicate": self.skipped_duplicate,
             "skipped_no_candles": self.skipped_no_candles,
             "skipped_illiquid": self.skipped_illiquid,
+            "skipped_no_leverage": self.skipped_no_leverage,
             "deactivated": self.deactivated,
         }
 
@@ -88,6 +91,7 @@ class UniverseService:
         coingecko: CoinGeckoClient,
         *,
         settings: Settings | None = None,
+        leverage: LeverageCoverageClient | None = None,
     ) -> None:
         if isinstance(provider, dict):
             self._providers = provider
@@ -96,6 +100,7 @@ class UniverseService:
         self._coingecko = coingecko
         self._settings = settings or get_settings()
         self._exchange_order = self._resolve_exchange_order()
+        self._leverage = leverage
 
     def _resolve_exchange_order(self) -> list[str]:
         """Konfigurierte Reihenfolge plus alle vorhandenen Provider-Instanzen."""
@@ -109,10 +114,8 @@ class UniverseService:
         """Universe aus CoinGecko neu aufbauen und mit der Boerse abgleichen.
 
         Mappt CoinGecko-Maerkte in Rank-Reihenfolge auf handelbare Paare und
-        stoppt bei ``universe_target_count`` (Default 300). Das Universe bleibt
-        stabil: dieselben Top-Coins nach MCAP, solange sie ein Pair haben;
-        Ausfaelle tieferer Ranks werden durch den naechsten mappbaren Coin
-        ersetzt (Rank kann dabei >300 sein).
+        stoppt bei ``universe_target_count`` (Default 400). Optional nur Bases
+        mit Perp/Leverage irgendwo. Rank kann >N sein (Fill-down).
         """
         result = UniverseRefreshResult()
         quote = self._settings.default_quote_asset.upper()
@@ -122,6 +125,15 @@ class UniverseService:
 
         markets = await self._coingecko.fetch_top_markets(limit)
         result.ranked = len(markets)
+
+        leverage_bases: set[str] | None = None
+        if self._settings.universe_require_leverage:
+            client = self._leverage or LeverageCoverageClient(self._settings)
+            try:
+                leverage_bases = await client.fetch_tradable_bases()
+            finally:
+                if self._leverage is None:
+                    await client.aclose()
 
         exchange_indices = await self._load_exchange_indices(quote)
         assets = AssetRepository(session)
@@ -135,6 +147,10 @@ class UniverseService:
             base = market.symbol.upper().strip()
             if not base or base in SKIP_BASE_ASSETS or base == quote:
                 result.skipped_stable += 1
+                continue
+
+            if leverage_bases is not None and not base_has_leverage(base, leverage_bases):
+                result.skipped_no_leverage += 1
                 continue
 
             mapped = self._map_direct(market, quote, exchange_indices)
@@ -195,6 +211,8 @@ class UniverseService:
                 target=target,
                 pool_size=limit,
                 skipped_no_pair=result.skipped_no_pair,
+                skipped_no_leverage=result.skipped_no_leverage,
+                require_leverage=self._settings.universe_require_leverage,
                 ticker_fallback=self._settings.universe_ticker_fallback,
             )
 
@@ -203,6 +221,8 @@ class UniverseService:
             exchanges=self._exchange_order,
             quote=quote,
             target=target or None,
+            require_leverage=self._settings.universe_require_leverage,
+            leverage_bases=len(leverage_bases) if leverage_bases is not None else None,
             **result.as_summary(),
         )
         return result

@@ -132,9 +132,9 @@ class Settings(BaseSettings):
     scan_interval_minutes: int = 15
     candle_limit: int = 500
     min_candles_required: int = 210
-    universe_size: int = 1000
+    universe_size: int = 1500
     #: Pro Scan-Zyklus: Batch-Groesse (sollte >= universe_target_count sein).
-    universe_scan_batch_size: int = 300
+    universe_scan_batch_size: int = 400
     universe_refresh_hours: int = 24
     universe_exchanges: str = "kucoin,binance,coinbase"
     universe_ticker_fallback: bool = True
@@ -143,7 +143,11 @@ class Settings(BaseSettings):
     universe_ticker_fallback_max: int = 150
     #: Top-N handelbare USD*/USDT/USDC-Paare nach MCAP behalten/scannen
     #: (Rank kann dabei >N sein, wenn hoehere Ranks kein Pair haben).
-    universe_target_count: int = 300
+    universe_target_count: int = 400
+    #: Nur Bases aufnehmen, die auf mind. einer Perp/Futures-Boerse handelbar sind.
+    universe_require_leverage: bool = True
+    #: Venues fuer den Leverage-Check (Komma-getrennt).
+    universe_leverage_venues: str = "binance,kucoin,aster,hyperliquid"
     #: Optionaler harter Rank-Ceiling (0 = aus; Prefer universe_target_count).
     universe_max_rank: int = 0
     #: Vor der Aufnahme pruefen, ob der Provider fuer das Paar ueberhaupt Kerzen
