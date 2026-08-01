@@ -1,22 +1,10 @@
 import { useMemo } from 'react'
-import tradesJson from '../data/trades.json'
-import type { Trade, TradeStatus } from '../types/trade'
+import { useDeskData } from '../context/DeskDataContext'
+import type { TradeStatus } from '../types/trade'
 
-/** Closed book rows must have an exit fill — cancelled/retest skips never qualify. */
-function isBookTrade(trade: Trade): boolean {
-  if (trade.status !== 'CLOSED') return true
-  return trade.exit != null
-}
-
-/**
- * Trade book loader.
- * Swap `tradesJson` for an API client later (Binance/Bybit/Hyperliquid adapters).
- */
+/** Live trade book from `/api/v1/desk/snapshot` (fallback JSON until first load). */
 export function useTrades(status?: TradeStatus) {
-  const all = useMemo(
-    () => (tradesJson as Trade[]).filter(isBookTrade),
-    [],
-  )
+  const { trades: all, loading, error } = useDeskData()
 
   const trades = useMemo(() => {
     if (!status) return all
@@ -26,7 +14,7 @@ export function useTrades(status?: TradeStatus) {
   return {
     trades,
     all,
-    loading: false,
-    error: null as string | null,
+    loading,
+    error,
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, Plus, RefreshCw } from 'lucide-react'
+import { useDeskData } from '../../context/DeskDataContext'
 import { Button } from './Button'
 import { Modal } from './Modal'
 
@@ -9,23 +10,34 @@ interface DeskActionsProps {
   showNewTrade?: boolean
 }
 
-type Dialog = 'refresh' | 'export' | 'new' | null
+type Dialog = 'export' | 'new' | null
 
 const exportFormats = ['CSV', 'JSON', 'Excel'] as const
 
 /** Standard header actions for the desk views. */
 export function DeskActions({ context, showNewTrade = true }: DeskActionsProps) {
+  const { refresh, loading } = useDeskData()
   const [dialog, setDialog] = useState<Dialog>(null)
   const [format, setFormat] = useState<(typeof exportFormats)[number]>('CSV')
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   const close = () => setDialog(null)
+
+  const onRefresh = async () => {
+    setRefreshError(null)
+    try {
+      await refresh()
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Aktualisieren fehlgeschlagen.')
+    }
+  }
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" onClick={() => setDialog('refresh')}>
-          <RefreshCw size={14} />
-          Aktualisieren
+        <Button variant="ghost" onClick={() => void onRefresh()} disabled={loading}>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} />
+          {loading ? 'Lädt…' : 'Aktualisieren'}
         </Button>
         <Button variant="secondary" onClick={() => setDialog('export')}>
           <Download size={14} />
@@ -39,26 +51,9 @@ export function DeskActions({ context, showNewTrade = true }: DeskActionsProps) 
         ) : null}
       </div>
 
-      <Modal
-        open={dialog === 'refresh'}
-        title="Daten aktualisieren"
-        subtitle={`Aktualisiert Kurse und Kennzahlen für „${context}".`}
-        onClose={close}
-        footer={
-          <>
-            <Button variant="ghost" onClick={close}>
-              Abbrechen
-            </Button>
-            <Button variant="primary" onClick={close}>
-              Jetzt aktualisieren
-            </Button>
-          </>
-        }
-      >
-        <p>
-          Die Marktdaten werden neu abgefragt und alle Kennzahlen der Ansicht neu berechnet.
-        </p>
-      </Modal>
+      {refreshError ? (
+        <p className="mt-2 w-full text-xs text-[var(--color-short)]">{refreshError}</p>
+      ) : null}
 
       <Modal
         open={dialog === 'export'}

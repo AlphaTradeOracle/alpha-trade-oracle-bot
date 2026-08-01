@@ -1,20 +1,13 @@
-import { useMemo } from 'react'
-import portfolioJson from '../data/portfolio.json'
-import equityJson from '../data/equity.json'
-import type { EquityPoint, PortfolioSnapshot } from '../types/trade'
+import { useDeskData } from '../context/DeskDataContext'
 
-/**
- * Portfolio + equity curve loader.
- * Today: static JSON. Tomorrow: swap the import for fetch('/api/portfolio').
- */
+/** Live portfolio + equity from `/api/v1/desk/snapshot`. */
 export function usePortfolio() {
-  const portfolio = useMemo(() => portfolioJson as PortfolioSnapshot, [])
-  const equity = useMemo(() => equityJson as EquityPoint[], [])
+  const { portfolio, equity, loading, error } = useDeskData()
 
   return {
     portfolio,
     equity,
-    loading: false,
-    error: null as string | null,
+    loading,
+    error,
   }
 }
