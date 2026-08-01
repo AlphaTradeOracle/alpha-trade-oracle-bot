@@ -5,8 +5,6 @@
 export const socialLinks = {
   x: '#',
   telegram: '#',
-  youtube: '#',
-  instagram: '#',
 } as const
 
 export type SocialPlatform = keyof typeof socialLinks
