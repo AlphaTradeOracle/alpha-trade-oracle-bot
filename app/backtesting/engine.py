@@ -32,6 +32,7 @@ from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
 from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
+from app.signals.lesson_filters import lesson_skip_reason
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
@@ -85,6 +86,8 @@ class BacktestConfig:
     retest_zone_far: float = 1.0
     retest_pending_multiplier: int = 4
     weights: StrategyWeights = DEFAULT_WEIGHTS
+    #: Optional WUSDT-lesson skip rules (see ``app.signals.lesson_filters``).
+    lesson_skip_rules: tuple[str, ...] = ()
 
     @classmethod
     def from_settings(
@@ -204,6 +207,7 @@ class BacktestOutcome:
     signals_skipped_no_trade: int = 0
     signals_skipped_not_strong: int = 0
     signals_skipped_cooldown: int = 0
+    signals_skipped_lesson: int = 0
 
 
 class BacktestEngine:
@@ -427,6 +431,12 @@ class BacktestEngine:
                 outcome.signals_skipped_cooldown += 1
                 return False
 
+        if self._config.lesson_skip_rules:
+            reason = lesson_skip_reason(signal, self._config.lesson_skip_rules)
+            if reason:
+                outcome.signals_skipped_lesson += 1
+                return False
+
         return True
 
     def _log_completion(self, outcome: BacktestOutcome) -> None:
@@ -440,6 +450,7 @@ class BacktestEngine:
             skipped_no_trade=outcome.signals_skipped_no_trade,
             skipped_not_strong=outcome.signals_skipped_not_strong,
             skipped_cooldown=outcome.signals_skipped_cooldown,
+            skipped_lesson=outcome.signals_skipped_lesson,
         )
 
     # --- Teilschritte -----------------------------------------------------
