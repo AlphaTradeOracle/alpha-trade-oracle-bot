@@ -53,16 +53,18 @@ _run_symbol_job = _opt._run_symbol_job
 
 
 async def _aload_symbols_by_rank(limit: int) -> list[tuple[str, int]]:
+    """Erste ``limit`` Universe-Coins nach MCAP-Rank (Rank darf >limit sein)."""
     async with session_scope() as session:
         rows = (
             await session.execute(
                 select(Asset.symbol, Asset.market_cap_rank)
                 .where(
                     Asset.is_active.is_(True),
+                    Asset.in_universe.is_(True),
                     Asset.market_cap_rank.is_not(None),
-                    Asset.market_cap_rank <= limit,
                 )
-                .order_by(Asset.market_cap_rank.asc())
+                .order_by(Asset.market_cap_rank.asc(), Asset.symbol)
+                .limit(limit)
             )
         ).all()
     return [(str(symbol).upper(), int(rank)) for symbol, rank in rows]
