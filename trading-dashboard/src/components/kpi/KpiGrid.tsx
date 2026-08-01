@@ -11,9 +11,10 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
-import type { PortfolioSnapshot } from '../../types/trade'
+import type { EquityPoint, PortfolioSnapshot } from '../../types/trade'
 import { formatMoney, formatPct, formatR, formatSignedMoney } from '../../utils/format'
 import { KpiCard, type KpiTone } from './KpiCard'
+import { PerformanceKpiCard } from './PerformanceKpiCard'
 
 function toneFromNumber(n: number): KpiTone {
   if (n > 0) return 'positive'
@@ -23,10 +24,11 @@ function toneFromNumber(n: number): KpiTone {
 
 interface KpiGridProps {
   portfolio: PortfolioSnapshot
+  equity?: EquityPoint[]
   onKpiClick?: (title: string) => void
 }
 
-export function KpiGrid({ portfolio: p, onKpiClick }: KpiGridProps) {
+export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps) {
   const items = [
     {
       title: 'Startkapital',
@@ -107,6 +109,7 @@ export function KpiGrid({ portfolio: p, onKpiClick }: KpiGridProps) {
           onClick={onKpiClick ? () => onKpiClick(item.title) : undefined}
         />
       ))}
+      <PerformanceKpiCard equity={equity} />
     </div>
   )
 }

@@ -35,7 +35,7 @@ export function DashboardPage() {
         actions={<DeskActions />}
       />
 
-      <KpiGrid portfolio={portfolio} />
+      <KpiGrid portfolio={portfolio} equity={equity} />
 
       <EquityChart data={equity} onOpenDetails={() => setEquityOpen(true)} />
 
