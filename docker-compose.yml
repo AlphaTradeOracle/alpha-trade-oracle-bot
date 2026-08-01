@@ -65,7 +65,8 @@ services:
       POSTGRES_HOST: postgres
       REDIS_URL: redis://redis:6379/0
     ports:
-      - "${APP_EXPOSED_PORT:-8000}:8000"
+      # Localhost only — public traffic reaches the API via Nginx /api proxy.
+      - "127.0.0.1:${APP_EXPOSED_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
