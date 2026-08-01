@@ -29,7 +29,7 @@ interface KpiGridProps {
 export function KpiGrid({ portfolio: p, onKpiClick }: KpiGridProps) {
   const items = [
     {
-      title: 'Gesamtkapital',
+      title: 'Startkapital',
       value: formatMoney(p.totalCapital),
       icon: Briefcase,
       tone: 'neutral' as KpiTone,
