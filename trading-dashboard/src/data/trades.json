@@ -1,1076 +1,726 @@
 [
   {
-    "id": "1518",
-    "symbol": "IMXUSDT",
+    "id": "1534",
+    "symbol": "KAVAUSDT",
     "side": "SHORT",
-    "entry": 0.106318,
-    "mark": 0.10712,
+    "entry": 0.041,
+    "mark": 0.041,
     "exit": null,
-    "stop": 0.10888,
-    "upnl": -12.4,
+    "stop": 0.04162735,
+    "upnl": null,
     "realized": null,
-    "r": -0.34,
-    "margin": 150,
-    "score": 18.1,
-    "status": "OPEN",
-    "openedAt": "2026-07-31T17:00:00Z",
+    "r": null,
+    "margin": 22.95,
+    "score": 23.6,
+    "status": "PENDING",
+    "openedAt": "2026-08-01T13:04:36Z",
     "closedAt": null,
-    "strategy": "Trend Continuation",
+    "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.103756,
-        "size": 0.25,
+        "price": 0.0405908,
+        "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 0.101194,
-        "size": 0.25,
+        "price": 0.03964467,
+        "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 0.098632,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.09607,
-        "size": 0.25,
+        "price": 0.03879495,
+        "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 4232.5853,
-    "leverage": 3,
-    "fees": 0.27,
-    "notes": ""
+    "positionSize": 36585.36585366,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h",
+    "entryZoneLow": 0.04093913,
+    "entryZoneHigh": 0.04106087
   },
   {
-    "id": "1521",
-    "symbol": "ATOMUSDT",
+    "id": "1533",
+    "symbol": "ASSETUSDT",
     "side": "SHORT",
-    "entry": 1.240825,
-    "mark": 1.2481,
+    "entry": 0.2623,
+    "mark": 0.26214,
     "exit": null,
-    "stop": 1.257221,
-    "upnl": -18.9,
+    "stop": 0.26503119,
+    "upnl": null,
     "realized": null,
-    "r": -0.95,
-    "margin": 150,
+    "r": null,
+    "margin": 15.62,
     "score": 24.7,
-    "status": "OPEN",
-    "openedAt": "2026-07-31T17:00:00Z",
+    "status": "PENDING",
+    "openedAt": "2026-08-01T12:58:12Z",
     "closedAt": null,
-    "strategy": "Range Reversal",
+    "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 1.2244,
+        "price": 0.25965891,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 1.208,
+        "price": 0.25683761,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 1.1916,
+        "price": 0.25332608,
         "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 2417.7463,
-    "leverage": 20,
-    "fees": 1.8,
-    "notes": ""
+    "positionSize": 5718.64277545,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h",
+    "entryZoneLow": 0.26190983,
+    "entryZoneHigh": 0.26269017
   },
   {
-    "id": "1520",
-    "symbol": "WUSDT",
+    "id": "1532",
+    "symbol": "SKYUSDT",
     "side": "SHORT",
-    "entry": 0.008025,
-    "mark": 0.00791,
+    "entry": 0.05571,
+    "mark": 0.05593,
     "exit": null,
-    "stop": 0.008166,
-    "upnl": 24.55,
-    "realized": null,
-    "r": 0.93,
-    "margin": 150,
-    "score": 20.7,
-    "status": "OPEN",
-    "openedAt": "2026-07-31T18:00:00Z",
-    "closedAt": null,
-    "strategy": "Range Reversal",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.007884,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.007743,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.007602,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 186915.8879,
-    "leverage": 10,
-    "fees": 0.9,
-    "notes": ""
-  },
-  {
-    "id": "1519",
-    "symbol": "KTAUSD",
-    "side": "SHORT",
-    "entry": 0.1042,
-    "mark": 0.1051,
-    "exit": null,
-    "stop": 0.107611,
+    "stop": 0.05657474,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 0,
-    "score": 23.2,
+    "margin": 23.28,
+    "score": 19.9,
     "status": "PENDING",
-    "openedAt": "2026-07-31T16:32:00Z",
+    "openedAt": "2026-08-01T12:07:33Z",
     "closedAt": null,
-    "entryZoneLow": 0.1034,
-    "entryZoneHigh": 0.105,
-    "strategy": "Mean Reversion",
+    "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.100789,
-        "size": 0.25,
+        "price": 0.05550313,
+        "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 0.097378,
-        "size": 0.25,
+        "price": 0.05386478,
+        "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 0.093967,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.090556,
-        "size": 0.25,
+        "price": 0.05270337,
+        "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 0,
-    "leverage": 20,
-    "fees": 0,
-    "notes": ""
+    "positionSize": 26925.14808831,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h",
+    "entryZoneLow": 0.05561954,
+    "entryZoneHigh": 0.05580046
   },
   {
-    "id": "1522",
-    "symbol": "BATUSDT",
+    "id": "1530",
+    "symbol": "NESUSDT",
     "side": "SHORT",
-    "entry": 0.0643,
-    "mark": 0.0648,
+    "entry": 0.20734177,
+    "mark": null,
+    "exit": 0.2100377,
+    "stop": 0.2100377,
+    "upnl": null,
+    "realized": -20.26,
+    "r": -1.04,
+    "margin": 0.0,
+    "score": 24.7,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T10:00:00Z",
+    "closedAt": "2026-08-01T11:23:33Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.20329788,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.20060195,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.19655805,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 7234.43230293,
+    "leverage": 10.0,
+    "fees": 1.51,
+    "notes": "Stop Loss \u00b7 TF 1h"
+  },
+  {
+    "id": "1531",
+    "symbol": "HYPEUSDT",
+    "side": "SHORT",
+    "entry": 52.20262662,
+    "mark": 52.156,
     "exit": null,
-    "stop": 0.065035,
+    "stop": 53.14801152,
+    "upnl": 1.34,
+    "realized": null,
+    "r": 0.05,
+    "margin": 150.0,
+    "score": 23.1,
+    "status": "OPEN",
+    "openedAt": "2026-08-01T09:00:00Z",
+    "closedAt": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 50.78454927,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 49.83916437,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 48.42108702,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 28.73418633,
+    "leverage": 10.0,
+    "fees": 0.75,
+    "notes": "Retest filled \u00b7 TF 1h"
+  },
+  {
+    "id": "1529",
+    "symbol": "KAVAUSDT",
+    "side": "SHORT",
+    "entry": 0.04129,
+    "mark": null,
+    "exit": null,
+    "stop": 0.04159462,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 24.0,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T04:04:28Z",
+    "closedAt": "2026-08-01T12:03:33Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.04094186,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.04068075,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0402891,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 36328.40881569,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+  },
+  {
+    "id": "1525",
+    "symbol": "VANAUSDT",
+    "side": "SHORT",
+    "entry": 0.89907295,
+    "mark": 0.895,
+    "exit": null,
+    "stop": 0.91880545,
+    "upnl": 6.8,
+    "realized": null,
+    "r": 0.21,
+    "margin": 150.0,
+    "score": 25.0,
+    "status": "OPEN",
+    "openedAt": "2026-08-01T02:00:00Z",
+    "closedAt": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.8694742,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.8497417,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.82014295,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 1668.38518819,
+    "leverage": 10.0,
+    "fees": 0.75,
+    "notes": "Retest filled \u00b7 TF 1h"
+  },
+  {
+    "id": "1528",
+    "symbol": "HYPEUSDT",
+    "side": "SHORT",
+    "entry": 52.575,
+    "mark": null,
+    "exit": null,
+    "stop": 54.3664275,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 24.2,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T00:38:12Z",
+    "closedAt": "2026-08-01T08:03:33Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 51.985862,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 48.67976897,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 46.2426296,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 27.9107025,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+  },
+  {
+    "id": "1527",
+    "symbol": "XCNUSDT",
+    "side": "SHORT",
+    "entry": 0.00308,
+    "mark": null,
+    "exit": null,
+    "stop": 0.00313606,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 22.6,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T00:35:25Z",
+    "closedAt": "2026-08-01T08:03:32Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.00305858,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.00296788,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0028958,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 487012.98701299,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+  },
+  {
+    "id": "1526",
+    "symbol": "ALEOUSD",
+    "side": "SHORT",
+    "entry": 0.017,
+    "mark": 0.0169,
+    "exit": null,
+    "stop": 0.01731408,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 0,
-    "score": 21.2,
+    "margin": 27.71,
+    "score": 22.8,
     "status": "PENDING",
-    "openedAt": "2026-07-31T17:49:00Z",
+    "openedAt": "2026-08-01T00:28:37Z",
     "closedAt": null,
-    "entryZoneLow": 0.0639,
-    "entryZoneHigh": 0.0647,
-    "strategy": "Mean Reversion",
+    "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.063565,
+        "price": 0.01664105,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 0.06283,
+        "price": 0.01637183,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 0.062095,
+        "price": 0.01596801,
         "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 0,
-    "leverage": 10,
-    "fees": 0,
-    "notes": ""
+    "positionSize": 88235.29411765,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h",
+    "entryZoneLow": 0.01695513,
+    "entryZoneHigh": 0.01704487
+  },
+  {
+    "id": "1524",
+    "symbol": "XDCUSDT",
+    "side": "SHORT",
+    "entry": 0.02608,
+    "mark": null,
+    "exit": null,
+    "stop": 0.02644962,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 24.4,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T21:55:07Z",
+    "closedAt": "2026-08-01T05:03:33Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.02601897,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.02526305,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.02475452,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 57515.33742331,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
   },
   {
     "id": "1523",
     "symbol": "KAVAUSDT",
     "side": "SHORT",
     "entry": 0.04149,
-    "mark": 0.0417,
+    "mark": null,
     "exit": null,
-    "stop": 0.041948,
+    "stop": 0.04194826,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 23.2,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T19:06:08Z",
+    "closedAt": "2026-08-01T03:08:32Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.04141203,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.04057348,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.03998429,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 36153.28994939,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+  },
+  {
+    "id": "1520",
+    "symbol": "WUSDT",
+    "side": "SHORT",
+    "entry": 0.00802454,
+    "mark": null,
+    "exit": 0.0081664,
+    "stop": 0.0081664,
+    "upnl": null,
+    "realized": -27.28,
+    "r": -1.03,
+    "margin": 0.0,
+    "score": 20.7,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T18:00:00Z",
+    "closedAt": "2026-08-01T01:28:34Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.00781175,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.00766989,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0074571,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 186926.55710216,
+    "leverage": 10.0,
+    "fees": 1.51,
+    "notes": "Stop Loss \u00b7 TF 1h"
+  },
+  {
+    "id": "1522",
+    "symbol": "BATUSDT",
+    "side": "SHORT",
+    "entry": 0.0643,
+    "mark": null,
+    "exit": null,
+    "stop": 0.06503524,
+    "upnl": null,
+    "realized": 0.0,
+    "r": 0.0,
+    "margin": 0.0,
+    "score": 21.1,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T17:49:35Z",
+    "closedAt": "2026-08-01T00:08:19Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.06345972,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.06282951,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0618842,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 23328.14930016,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Retest skipped \u00b7 SL before retest \u00b7 TF 1h"
+  },
+  {
+    "id": "1521",
+    "symbol": "ATOMUSDT",
+    "side": "SHORT",
+    "entry": 1.24082465,
+    "mark": 1.233,
+    "exit": null,
+    "stop": 1.25722082,
+    "upnl": 9.46,
+    "realized": null,
+    "r": 0.48,
+    "margin": 150.0,
+    "score": 24.7,
+    "status": "OPEN",
+    "openedAt": "2026-07-31T17:00:00Z",
+    "closedAt": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 1.21623039,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 1.19983422,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 1.17523997,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 1208.87347318,
+    "leverage": 10.0,
+    "fees": 0.75,
+    "notes": "Retest filled \u00b7 TF 1h"
+  },
+  {
+    "id": "1518",
+    "symbol": "IMXUSDT",
+    "side": "SHORT",
+    "entry": 0.10631754,
+    "mark": null,
+    "exit": 0.10887984,
+    "stop": 0.10887984,
+    "upnl": null,
+    "realized": -36.92,
+    "r": -1.02,
+    "margin": 0.0,
+    "score": 18.1,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T17:00:00Z",
+    "closedAt": "2026-08-01T03:08:37Z",
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.10247409,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.09991179,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.09606834,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 14108.67898046,
+    "leverage": 10.0,
+    "fees": 1.52,
+    "notes": "Stop Loss \u00b7 TF 1h"
+  },
+  {
+    "id": "1519",
+    "symbol": "KTAUSD",
+    "side": "SHORT",
+    "entry": 0.1042,
+    "mark": 0.1071,
+    "exit": null,
+    "stop": 0.10761118,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 0,
+    "margin": 49.11,
     "score": 23.2,
     "status": "PENDING",
-    "openedAt": "2026-07-31T19:06:00Z",
+    "openedAt": "2026-07-31T16:32:35Z",
     "closedAt": null,
-    "entryZoneLow": 0.0412,
-    "entryZoneHigh": 0.0417,
-    "strategy": "Trend Continuation",
+    "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.041032,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.040574,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.040116,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.039658,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 0,
-    "leverage": 20,
-    "fees": 0,
-    "notes": ""
-  },
-  {
-    "id": "1441",
-    "symbol": "MMTUSDT",
-    "side": "LONG",
-    "entry": 0.2184,
-    "mark": null,
-    "exit": 0.2669,
-    "stop": 0.2148,
-    "upnl": null,
-    "realized": 166.28,
-    "r": 3.33,
-    "margin": 100,
-    "score": 85.3,
-    "status": "CLOSED",
-    "openedAt": "2026-07-30T06:00:00Z",
-    "closedAt": "2026-07-30T16:00:00Z",
-    "strategy": "MTF Momentum",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.222,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.2256,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP3",
-        "price": 0.2292,
-        "size": 0.33,
-        "hit": true
-      }
-    ],
-    "positionSize": 2289.3773,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1438",
-    "symbol": "MMTUSDT",
-    "side": "LONG",
-    "entry": 0.2161,
-    "mark": null,
-    "exit": 0.2642,
-    "stop": 0.2125,
-    "upnl": null,
-    "realized": 164.32,
-    "r": 3.29,
-    "margin": 100,
-    "score": 83,
-    "status": "CLOSED",
-    "openedAt": "2026-07-30T05:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z",
-    "strategy": "Mean Reversion",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.2197,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.2233,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP3",
-        "price": 0.2269,
-        "size": 0.33,
-        "hit": true
-      }
-    ],
-    "positionSize": 9254.9745,
-    "leverage": 20,
-    "fees": 1.2,
-    "notes": ""
-  },
-  {
-    "id": "1388",
-    "symbol": "UNIUSDT",
-    "side": "LONG",
-    "entry": 4.3889,
-    "mark": null,
-    "exit": 4.4323,
-    "stop": 4.2638,
-    "upnl": null,
-    "realized": 108.9,
-    "r": 2.18,
-    "margin": 100,
-    "score": 82.6,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T16:00:00Z",
-    "closedAt": "2026-07-30T16:00:00Z",
-    "strategy": "Breakout Retest",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 4.514,
+        "price": 0.104156,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 4.6391,
+        "price": 0.09736042,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 4.7642,
+        "price": 0.09296724,
         "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 113.9238,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1398",
-    "symbol": "UNIUSDT",
-    "side": "LONG",
-    "entry": 4.4012,
-    "mark": null,
-    "exit": 4.4411,
-    "stop": 4.278,
-    "upnl": null,
-    "realized": 100.3,
-    "r": 2.01,
-    "margin": 100,
-    "score": 81,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T18:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z",
-    "strategy": "Range Reversal",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 4.5244,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 4.6476,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 4.7708,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 227.2108,
-    "leverage": 10,
-    "fees": 0.6,
-    "notes": ""
-  },
-  {
-    "id": "1402",
-    "symbol": "UNIUSDT",
-    "side": "LONG",
-    "entry": 4.411,
-    "mark": null,
-    "exit": 4.4567,
-    "stop": 4.29,
-    "upnl": null,
-    "realized": 97,
-    "r": 1.94,
-    "margin": 100,
-    "score": 80.2,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T21:00:00Z",
-    "closedAt": "2026-07-30T20:00:00Z",
-    "strategy": "Mean Reversion",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 4.532,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 4.653,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 4.774,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 68.0118,
-    "leverage": 3,
-    "fees": 0.18,
-    "notes": ""
-  },
-  {
-    "id": "1367",
-    "symbol": "GENIUSUSDT",
-    "side": "SHORT",
-    "entry": 0.92,
-    "mark": null,
-    "exit": 0.861,
-    "stop": 0.948,
-    "upnl": null,
-    "realized": 54.17,
-    "r": 1.08,
-    "margin": 100,
-    "score": 22.4,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T06:00:00Z",
-    "closedAt": "2026-07-30T05:00:00Z",
-    "strategy": "Range Reversal",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.892,
-        "size": 0.25,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.864,
-        "size": 0.25,
-        "hit": true
-      },
-      {
-        "label": "TP3",
-        "price": 0.836,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.808,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 2173.913,
-    "leverage": 20,
-    "fees": 1.2,
-    "notes": ""
-  },
-  {
-    "id": "1373",
-    "symbol": "GRASSUSDT",
-    "side": "SHORT",
-    "entry": 0.412,
-    "mark": null,
-    "exit": 0.388,
-    "stop": 0.426,
-    "upnl": null,
-    "realized": 50.27,
-    "r": 1.01,
-    "margin": 100,
-    "score": 21.8,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T07:00:00Z",
-    "closedAt": "2026-07-30T07:00:00Z",
-    "strategy": "Range Reversal",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.398,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.384,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.37,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 1213.5922,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1370",
-    "symbol": "MEGAUSDT",
-    "side": "SHORT",
-    "entry": 0.185,
-    "mark": null,
-    "exit": 0.172,
-    "stop": 0.191,
-    "upnl": null,
-    "realized": 49.25,
-    "r": 0.99,
-    "margin": 100,
-    "score": 19.5,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T08:00:00Z",
-    "closedAt": "2026-07-30T05:00:00Z",
-    "strategy": "Mean Reversion",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.179,
-        "size": 0.25,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.173,
-        "size": 0.25,
-        "hit": true
-      },
-      {
-        "label": "TP3",
-        "price": 0.167,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.161,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 1621.6216,
-    "leverage": 3,
-    "fees": 0.18,
-    "notes": ""
-  },
-  {
-    "id": "1345",
-    "symbol": "BATUSDT",
-    "side": "SHORT",
-    "entry": 0.0682,
-    "mark": null,
-    "exit": 0.0651,
-    "stop": 0.0701,
-    "upnl": null,
-    "realized": 28.73,
-    "r": 0.57,
-    "margin": 100,
-    "score": 24.1,
-    "status": "CLOSED",
-    "openedAt": "2026-07-28T10:00:00Z",
-    "closedAt": "2026-07-29T10:00:00Z",
-    "strategy": "MTF Momentum",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.0663,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.0644,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.0625,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 7331.3783,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1344",
-    "symbol": "THETAUSDT",
-    "side": "SHORT",
-    "entry": 0.62,
-    "mark": null,
-    "exit": 0.591,
-    "stop": 0.638,
-    "upnl": null,
-    "realized": 35.29,
-    "r": 0.71,
-    "margin": 100,
-    "score": 23,
-    "status": "CLOSED",
-    "openedAt": "2026-07-28T11:00:00Z",
-    "closedAt": "2026-07-29T10:00:00Z",
-    "strategy": "Breakout Retest",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.602,
-        "size": 0.33,
-        "hit": true
-      },
-      {
-        "label": "TP2",
-        "price": 0.584,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.566,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 806.4516,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1440",
-    "symbol": "UAIUSDT",
-    "side": "LONG",
-    "entry": 0.142,
-    "mark": null,
-    "exit": 0.131,
-    "stop": 0.131,
-    "upnl": null,
-    "realized": -89.68,
-    "r": -1.79,
-    "margin": 100,
-    "score": 76.2,
-    "status": "CLOSED",
-    "openedAt": "2026-07-30T05:00:00Z",
-    "closedAt": "2026-07-30T06:00:00Z",
-    "strategy": "MTF Momentum",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.153,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.164,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.175,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.186,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 3521.1268,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1369",
-    "symbol": "REUSDT",
-    "side": "SHORT",
-    "entry": 0.0184,
-    "mark": null,
-    "exit": 0.0196,
-    "stop": 0.0196,
-    "upnl": null,
-    "realized": -53.71,
-    "r": -1.07,
-    "margin": 100,
-    "score": 20.1,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T05:00:00Z",
-    "closedAt": "2026-07-29T14:00:00Z",
-    "strategy": "Mean Reversion",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.0172,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.016,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.0148,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.0136,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 27173.913,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1377",
-    "symbol": "WEMIXUSDT",
-    "side": "SHORT",
-    "entry": 0.52,
-    "mark": null,
-    "exit": 0.548,
-    "stop": 0.548,
-    "upnl": null,
-    "realized": -42.77,
-    "r": -0.86,
-    "margin": 100,
-    "score": 22,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T12:00:00Z",
-    "closedAt": "2026-07-30T07:00:00Z",
-    "strategy": "MTF Momentum",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.492,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.464,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.436,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.408,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 3846.1538,
-    "leverage": 20,
-    "fees": 1.2,
-    "notes": ""
-  },
-  {
-    "id": "1374",
-    "symbol": "FETUSDT",
-    "side": "SHORT",
-    "entry": 0.1425,
-    "mark": null,
-    "exit": 0.1498,
-    "stop": 0.1498,
-    "upnl": null,
-    "realized": -40.55,
-    "r": -0.81,
-    "margin": 100,
-    "score": 21.5,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T11:00:00Z",
-    "closedAt": "2026-07-30T08:00:00Z",
-    "strategy": "Trend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.1352,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.1279,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.1206,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 3508.7719,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
-  },
-  {
-    "id": "1416",
-    "symbol": "FARTCOINUSDT",
-    "side": "SHORT",
-    "entry": 0.88,
-    "mark": null,
-    "exit": 0.925,
-    "stop": 0.925,
-    "upnl": null,
-    "realized": -34.26,
-    "r": -0.69,
-    "margin": 100,
-    "score": 19.8,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T22:00:00Z",
-    "closedAt": "2026-07-30T13:00:00Z",
-    "strategy": "MTF Momentum",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.835,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.79,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.745,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 2272.7273,
-    "leverage": 20,
-    "fees": 1.2,
-    "notes": ""
-  },
-  {
-    "id": "1343",
-    "symbol": "KAIAUSDT",
-    "side": "SHORT",
-    "entry": 0.025992,
-    "mark": null,
-    "exit": 0.026643,
-    "stop": 0.026643,
-    "upnl": null,
-    "realized": -26.07,
-    "r": -0.52,
-    "margin": 100,
-    "score": 24.5,
-    "status": "CLOSED",
-    "openedAt": "2026-07-28T10:00:00Z",
-    "closedAt": "2026-07-28T13:00:00Z",
-    "strategy": "Breakout Retest",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.025341,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.02469,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.024039,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.023388,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 38473.3764,
-    "leverage": 10,
-    "fees": 0.6,
-    "notes": ""
-  },
-  {
-    "id": "1383",
-    "symbol": "UNIUSDT",
-    "side": "LONG",
-    "entry": 4.52,
-    "mark": null,
-    "exit": 4.41,
-    "stop": 4.41,
-    "upnl": null,
-    "realized": -26.12,
-    "r": -0.52,
-    "margin": 100,
-    "score": 78.4,
-    "status": "CLOSED",
-    "openedAt": "2026-07-29T13:00:00Z",
-    "closedAt": "2026-07-29T19:00:00Z",
-    "strategy": "Trend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 4.63,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 4.74,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 4.85,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 221.2389,
-    "leverage": 10,
-    "fees": 0.6,
-    "notes": ""
-  },
-  {
-    "id": "1444",
-    "symbol": "FLIPUSDT",
-    "side": "LONG",
-    "entry": 0.31,
-    "mark": null,
-    "exit": 0.304,
-    "stop": 0.304,
-    "upnl": null,
-    "realized": -6.83,
-    "r": -0.14,
-    "margin": 100,
-    "score": 75.6,
-    "status": "CLOSED",
-    "openedAt": "2026-07-30T10:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z",
-    "strategy": "Trend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.316,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.322,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.328,
-        "size": 0.25,
-        "hit": false
-      },
-      {
-        "label": "TP4",
-        "price": 0.334,
-        "size": 0.25,
-        "hit": false
-      }
-    ],
-    "positionSize": 1612.9032,
-    "leverage": 5,
-    "fees": 0.3,
-    "notes": ""
+    "positionSize": 14395.39347409,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h",
+    "entryZoneLow": 0.10371761,
+    "entryZoneHigh": 0.10468239
   }
 ]
