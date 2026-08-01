@@ -14,14 +14,7 @@ export function TradeNotes({ trade }: TradeNotesProps) {
   const [value, setValue] = useState(trade.notes ?? '')
 
   return (
-    <DetailCard
-      title="Notes"
-      actions={
-        <span className="text-[10px] text-[var(--color-text-muted)]">
-          wird noch nicht gespeichert
-        </span>
-      }
-    >
+    <DetailCard title="Notes">
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}

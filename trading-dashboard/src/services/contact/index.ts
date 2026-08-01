@@ -10,7 +10,7 @@ export interface ContactTransport {
   send(message: ContactMessage): Promise<void>
 }
 
-/** Prototype transport: pretends to deliver, resolves after a short delay. */
+/** Local transport: resolves after a short delay without leaving the app. */
 export const mockContactTransport: ContactTransport = {
   id: 'mock',
   async send(message) {

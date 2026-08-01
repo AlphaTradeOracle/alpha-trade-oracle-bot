@@ -35,7 +35,6 @@ export function TradePerformance({ trade }: TradePerformanceProps) {
     { label: 'Return', value: formatPct(returnPct), tone: toneOf(returnPct) },
     { label: 'R-Multiple', value: formatR(trade.r), tone: toneOf(trade.r) },
     { label: 'Score', value: trade.score.toFixed(1), tone: 'neutral' as Tone },
-    { label: 'Profit Factor', value: 'folgt', tone: 'neutral' as Tone },
   ]
 
   // Score bar doubles as a quick visual quality read.

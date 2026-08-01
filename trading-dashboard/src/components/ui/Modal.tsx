@@ -22,7 +22,7 @@ const sizeClass: Record<NonNullable<ModalProps['size']>, string> = {
 
 /**
  * Lightweight modal for prototype interactions.
- * No portal library — keep the MVP dependency surface small.
+ * Rendered inline instead of through a portal to keep dependencies small.
  */
 export function Modal({
   open,

@@ -3,7 +3,7 @@ import { PendingTradesTable } from '../components/trades/PendingTradesTable'
 import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeActions } from '../components/ui/PrototypeActions'
+import { DeskActions } from '../components/ui/DeskActions'
 import { useTradeFilters } from '../hooks/useTradeFilters'
 import { useTrades } from '../hooks/useTrades'
 import type { Trade } from '../types/trade'
@@ -17,8 +17,8 @@ export function PendingTradesPage() {
     <div>
       <PageHeader
         title="Pending Trades"
-        subtitle={`${filtered.length} waiting for retest / entry zone · click a row`}
-        actions={<PrototypeActions context="Pending Trades" />}
+        subtitle={`${filtered.length} Orders warten auf die Entry-Zone`}
+        actions={<DeskActions context="Pending Trades" />}
       />
       <TradeFilters filters={filters} onChange={setFilters} showPnlFilter={false} />
       <PendingTradesTable trades={filtered} onRowClick={setSelected} />

@@ -3,7 +3,7 @@ import { OpenTradesTable } from '../components/trades/OpenTradesTable'
 import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeActions } from '../components/ui/PrototypeActions'
+import { DeskActions } from '../components/ui/DeskActions'
 import { useTradeFilters } from '../hooks/useTradeFilters'
 import { useTrades } from '../hooks/useTrades'
 import type { Trade } from '../types/trade'
@@ -17,8 +17,8 @@ export function OpenTradesPage() {
     <div>
       <PageHeader
         title="Open Trades"
-        subtitle={`${filtered.length} active positions · click a row for details`}
-        actions={<PrototypeActions context="Open Trades" />}
+        subtitle={`${filtered.length} offene Positionen`}
+        actions={<DeskActions context="Open Trades" />}
       />
       <TradeFilters
         filters={filters}

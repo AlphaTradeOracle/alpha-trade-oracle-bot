@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import { EquityChart } from '../components/charts/EquityChart'
+import { EquityDetailsModal } from '../components/equity'
 import { KpiGrid } from '../components/kpi/KpiGrid'
 import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
 import { OpenTradesTable } from '../components/trades/OpenTradesTable'
 import { PendingTradesTable } from '../components/trades/PendingTradesTable'
 import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
-import { Button } from '../components/ui/Button'
-import { Modal } from '../components/ui/Modal'
+import { DeskActions } from '../components/ui/DeskActions'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeActions } from '../components/ui/PrototypeActions'
-import { PrototypeBanner } from '../components/ui/PrototypeBanner'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTradeFilters } from '../hooks/useTradeFilters'
 import { useTrades } from '../hooks/useTrades'
@@ -27,25 +25,25 @@ export function DashboardPage() {
   const closedFilters = useTradeFilters(closed, 'closedAt')
 
   const [selected, setSelected] = useState<Trade | null>(null)
-  const [kpiTitle, setKpiTitle] = useState<string | null>(null)
+  const [equityOpen, setEquityOpen] = useState(false)
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Trading Dashboard"
-        subtitle="Interactive MVP · mock book from JSON · click KPIs, rows, and actions"
-        actions={<PrototypeActions context="Dashboard" />}
+        subtitle="Überblick über Kapital, offene Positionen und Handelshistorie"
+        actions={<DeskActions context="Dashboard" />}
       />
 
-      <KpiGrid portfolio={portfolio} onKpiClick={setKpiTitle} />
+      <KpiGrid portfolio={portfolio} />
 
-      <EquityChart data={equity} />
+      <EquityChart data={equity} onOpenDetails={() => setEquityOpen(true)} />
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-base font-semibold">Open Trades</h2>
           <span className="text-xs text-[var(--color-text-muted)]">
-            {openFilters.filtered.length} shown · click row for details
+            {openFilters.filtered.length} Positionen
           </span>
         </div>
         <TradeFilters
@@ -66,7 +64,7 @@ export function DashboardPage() {
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-base font-semibold">Pending Trades</h2>
           <span className="text-xs text-[var(--color-text-muted)]">
-            {pendingFilters.filtered.length} shown · click row for details
+            {pendingFilters.filtered.length} Orders
           </span>
         </div>
         <TradeFilters
@@ -81,7 +79,7 @@ export function DashboardPage() {
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-base font-semibold">Closed Trades</h2>
           <span className="text-xs text-[var(--color-text-muted)]">
-            {closedFilters.filtered.length} shown · click row for details
+            {closedFilters.filtered.length} Trades
           </span>
         </div>
         <TradeFilters
@@ -100,25 +98,12 @@ export function DashboardPage() {
 
       <TradeDetailsModal trade={selected} onClose={() => setSelected(null)} />
 
-      <Modal
-        open={kpiTitle !== null}
-        title={kpiTitle ?? 'KPI'}
-        onClose={() => setKpiTitle(null)}
-        footer={
-          <Button variant="primary" onClick={() => setKpiTitle(null)}>
-            Got it
-          </Button>
-        }
-      >
-        <div className="space-y-3">
-          <PrototypeBanner>
-            KPI drill-down is a UI placeholder. Later this can deep-link into Analytics.
-          </PrototypeBanner>
-          <p>
-            Selected metric: <span className="text-[var(--color-text)]">{kpiTitle}</span>
-          </p>
-        </div>
-      </Modal>
+      <EquityDetailsModal
+        open={equityOpen}
+        onClose={() => setEquityOpen(false)}
+        portfolio={portfolio}
+        closedTrades={closed}
+      />
     </div>
   )
 }

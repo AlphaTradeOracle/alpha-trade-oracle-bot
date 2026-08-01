@@ -18,7 +18,7 @@ export function TradeScreenshots() {
             </span>
             <p className="text-xs font-medium text-[var(--color-text-secondary)]">{slot}</p>
             <p className="text-[11px] text-[var(--color-text-muted)]">
-              Screenshot-Funktion folgt.
+              Bild ablegen oder auswählen
             </p>
           </div>
         ))}

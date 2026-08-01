@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeBanner } from '../components/ui/PrototypeBanner'
 import { useSettings } from '../hooks/useSettings'
 
-/** Interactive settings prototype — values stay in memory (mock). */
 export function SettingsPage() {
   const { settings, update, save, savedAt } = useSettings()
   const [showSaved, setShowSaved] = useState(false)
@@ -14,7 +12,7 @@ export function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        subtitle="Local prototype controls · no auth · no remote secrets"
+        subtitle="Konfiguration des Desks"
         actions={
           <Button
             variant="primary"
@@ -23,19 +21,15 @@ export function SettingsPage() {
               setShowSaved(true)
             }}
           >
-            Save settings
+            Speichern
           </Button>
         }
       />
 
       <div className="panel space-y-6 p-6 sm:p-8">
-        <PrototypeBanner>
-          Changes are mock-only and reset on reload until persistence is added.
-        </PrototypeBanner>
-
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="block space-y-1.5 text-sm">
-            <span className="text-[var(--color-text-secondary)]">Exchange adapter</span>
+            <span className="text-[var(--color-text-secondary)]">Börsenanbindung</span>
             <select
               value={settings.exchange}
               onChange={(e) =>
@@ -43,15 +37,15 @@ export function SettingsPage() {
               }
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]"
             >
-              <option value="mock">Mock JSON</option>
-              <option value="binance">Binance (later)</option>
-              <option value="bybit">Bybit (later)</option>
-              <option value="hyperliquid">Hyperliquid (later)</option>
+              <option value="mock">Interne Daten</option>
+              <option value="binance">Binance</option>
+              <option value="bybit">Bybit</option>
+              <option value="hyperliquid">Hyperliquid</option>
             </select>
           </label>
 
           <label className="block space-y-1.5 text-sm">
-            <span className="text-[var(--color-text-secondary)]">Refresh interval (sec)</span>
+            <span className="text-[var(--color-text-secondary)]">Aktualisierung (Sekunden)</span>
             <input
               type="number"
               min={5}
@@ -69,11 +63,11 @@ export function SettingsPage() {
               onChange={(e) => update({ autoRefresh: e.target.checked })}
               className="accent-[var(--color-accent)]"
             />
-            Auto refresh (UI toggle only)
+            Auto Refresh
           </label>
 
           <label className="block space-y-1.5 text-sm sm:col-span-2">
-            <span className="text-[var(--color-text-secondary)]">Discord webhook URL</span>
+            <span className="text-[var(--color-text-secondary)]">Discord Webhook URL</span>
             <input
               type="url"
               placeholder="https://discord.com/api/webhooks/…"
@@ -90,11 +84,11 @@ export function SettingsPage() {
               onChange={(e) => update({ telegramEnabled: e.target.checked })}
               className="accent-[var(--color-accent)]"
             />
-            Telegram notifications (later)
+            Telegram-Benachrichtigungen
           </label>
 
           <label className="block space-y-1.5 text-sm">
-            <span className="text-[var(--color-text-secondary)]">Default risk (R)</span>
+            <span className="text-[var(--color-text-secondary)]">Standardrisiko (R)</span>
             <input
               type="number"
               min={0.1}
@@ -109,23 +103,21 @@ export function SettingsPage() {
 
       <Modal
         open={showSaved}
-        title="Settings saved"
+        title="Einstellungen gespeichert"
         onClose={() => setShowSaved(false)}
         footer={
           <Button variant="primary" onClick={() => setShowSaved(false)}>
-            Continue
+            Weiter
           </Button>
         }
       >
-        <div className="space-y-3">
-          <PrototypeBanner>
-            Mock save complete — nothing was written to disk or a remote API.
-          </PrototypeBanner>
-          <p className="text-xs text-[var(--color-text-muted)]">
-            Timestamp: {savedAt ?? '—'}
-          </p>
+        <div className="space-y-2">
           <p>
-            Active adapter: <span className="text-[var(--color-text)]">{settings.exchange}</span>
+            Aktive Anbindung:{' '}
+            <span className="text-[var(--color-text)]">{settings.exchange}</span>
+          </p>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Zuletzt gespeichert: {savedAt ? new Date(savedAt).toLocaleString('de-DE') : '—'}
           </p>
         </div>
       </Modal>

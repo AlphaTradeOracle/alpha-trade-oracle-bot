@@ -11,54 +11,52 @@ import {
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeBanner } from '../components/ui/PrototypeBanner'
 
 const modules = [
   {
     id: 'winrate',
     title: 'Winrate',
-    blurb: 'Wins vs losses across closed trades.',
+    blurb: 'Gewinner gegen Verlierer über alle geschlossenen Trades.',
     icon: Target,
   },
   {
     id: 'pf',
     title: 'Profit Factor',
-    blurb: 'Gross profit divided by gross loss.',
+    blurb: 'Bruttogewinn geteilt durch Bruttoverlust.',
     icon: Gauge,
   },
   {
     id: 'avg-r',
     title: 'Average R',
-    blurb: 'Mean R-multiple of the closed book.',
+    blurb: 'Mittleres R-Vielfaches des geschlossenen Buchs.',
     icon: TrendingUp,
   },
   {
     id: 'monthly',
     title: 'Monthly Performance',
-    blurb: 'Equity change grouped by month.',
+    blurb: 'Kapitalentwicklung nach Monaten gruppiert.',
     icon: CalendarRange,
   },
   {
     id: 'strategy',
     title: 'Strategy Performance',
-    blurb: 'Breakdown by setup / score band.',
+    blurb: 'Auswertung nach Setup und Score-Band.',
     icon: BarChart3,
   },
   {
     id: 'risk',
     title: 'Risk Management',
-    blurb: 'Exposure, margin, and open R limits.',
+    blurb: 'Exposure, Margin und offenes R im Blick.',
     icon: ShieldAlert,
   },
   {
     id: 'journal',
     title: 'Journal',
-    blurb: 'Trade notes and review checklist.',
+    blurb: 'Notizen und Review-Checkliste zu jedem Trade.',
     icon: BookOpen,
   },
 ] as const
 
-/** Clickable analytics shell — charts/logic come later. */
 export function AnalyticsPage() {
   const [active, setActive] = useState<(typeof modules)[number] | null>(null)
 
@@ -66,7 +64,7 @@ export function AnalyticsPage() {
     <div>
       <PageHeader
         title="Analytics"
-        subtitle="Prototype modules — open any card for a placeholder panel"
+        subtitle="Auswertungen zu Performance, Risiko und Strategie"
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -75,7 +73,7 @@ export function AnalyticsPage() {
             key={mod.id}
             type="button"
             onClick={() => setActive(mod)}
-            className="panel flex gap-3 p-5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
+            className="panel flex cursor-pointer gap-3 p-5 text-left transition-colors hover:bg-[var(--color-surface-hover)]"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
               <mod.icon size={18} strokeWidth={1.8} />
@@ -95,22 +93,18 @@ export function AnalyticsPage() {
       <Modal
         open={active !== null}
         title={active?.title ?? 'Analytics'}
+        subtitle={active?.blurb}
         onClose={() => setActive(null)}
         footer={
           <Button variant="primary" onClick={() => setActive(null)}>
-            Back
+            Zurück
           </Button>
         }
       >
-        <div className="space-y-3">
-          <PrototypeBanner>
-            UI shell only — calculations and charts will be added when you request them.
-          </PrototypeBanner>
-          <p>{active?.blurb}</p>
-          <p className="text-xs text-[var(--color-text-muted)]">
-            Module id: <span className="tabular">{active?.id}</span>
-          </p>
-        </div>
+        <p>
+          Die Auswertung wird aus dem geschlossenen Handelsbuch berechnet und hier
+          detailliert dargestellt.
+        </p>
       </Modal>
     </div>
   )

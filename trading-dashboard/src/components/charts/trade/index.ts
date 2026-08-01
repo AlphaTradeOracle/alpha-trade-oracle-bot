@@ -1,6 +1,3 @@
 export { TradeChart } from './TradeChart'
-export { ChartToolbar } from './ChartToolbar'
-export { ChartControls } from './ChartControls'
-export { TimeframeSelector } from './TimeframeSelector'
 export { ChartViewport, CHART_COLORS } from './ChartViewport'
 export type { ChartViewportHandle, OhlcHover } from './ChartViewport'

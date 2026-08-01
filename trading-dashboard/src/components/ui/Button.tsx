@@ -18,7 +18,7 @@ const styles: Record<Variant, string> = {
     'border border-[var(--color-short)]/40 bg-[var(--color-short-soft)] text-[var(--color-short)] hover:brightness-110',
 }
 
-/** Shared clickable control for the interactive MVP prototype. */
+/** Shared button styling used across the desk. */
 export function Button({
   variant = 'secondary',
   className = '',

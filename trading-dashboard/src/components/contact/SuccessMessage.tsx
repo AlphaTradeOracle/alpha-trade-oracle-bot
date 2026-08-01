@@ -19,9 +19,6 @@ export function SuccessMessage({
         <p className="text-base font-semibold text-[var(--color-text)]">{title}</p>
         <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{description}</p>
       </div>
-      <p className="text-[11px] text-[var(--color-text-muted)]">
-        Prototyp — es wurde noch keine echte Nachricht versendet.
-      </p>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { useTradeCandles } from '../../../hooks/useTradeCandles'
 import type { CandleInterval } from '../../../services/marketData'
 import type { Trade } from '../../../types/trade'
 import { formatPrice } from '../../../utils/format'
-import { ChartToolbar } from './ChartToolbar'
+import { ChartControls, ChartToolbar } from '../shared'
 import {
   CHART_COLORS,
   ChartViewport,
@@ -43,17 +43,23 @@ export function TradeChart({ trade, height = 420, defaultInterval = '1h' }: Trad
   return (
     <div className="panel overflow-hidden">
       <ChartToolbar
-        symbol={trade.symbol}
+        title={trade.symbol}
+        meta={`${candles.length.toLocaleString('de-DE')} Kerzen`}
         interval={interval}
         onIntervalChange={setInterval}
-        barCount={candles.length}
         busy={loading || loadingHistory}
-        showMarkers={showMarkers}
-        onToggleMarkers={() => setShowMarkers((v) => !v)}
-        autoScale={autoScale}
-        onToggleAutoScale={() => setAutoScale((v) => !v)}
-        onCenter={() => viewportRef.current?.centerOnTrade()}
-        onReset={() => viewportRef.current?.resetView()}
+        controls={
+          <ChartControls
+            markers={{
+              active: showMarkers,
+              onToggle: () => setShowMarkers((v) => !v),
+              label: 'Markierungen',
+            }}
+            autoScale={{ active: autoScale, onToggle: () => setAutoScale((v) => !v) }}
+            onCenter={() => viewportRef.current?.centerOnTrade()}
+            onReset={() => viewportRef.current?.resetView()}
+          />
+        }
       />
 
       <div className="relative">

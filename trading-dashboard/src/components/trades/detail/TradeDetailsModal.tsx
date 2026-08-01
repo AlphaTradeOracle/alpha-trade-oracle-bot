@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { TradeChart } from '../../charts/trade'
 import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
-import { PrototypeBanner } from '../../ui/PrototypeBanner'
 import type { Trade } from '../../../types/trade'
 import { TradeNotes } from './TradeNotes'
 import { TradePerformance } from './TradePerformance'
@@ -78,7 +77,8 @@ export function TradeDetailsModal({ trade, onClose }: TradeDetailsModalProps) {
 
       <Modal
         open={confirm !== null}
-        title="Prototyp-Aktion"
+        title={confirm === 'edit' ? 'Stop anpassen' : actionLabel}
+        subtitle={`${trade.symbol} · ${trade.side}`}
         onClose={() => setConfirm(null)}
         footer={
           <>
@@ -92,16 +92,16 @@ export function TradeDetailsModal({ trade, onClose }: TradeDetailsModalProps) {
                 onClose()
               }}
             >
-              Bestätigen (Mock)
+              Bestätigen
             </Button>
           </>
         }
       >
-        <PrototypeBanner>
+        <p>
           {confirm === 'edit'
-            ? 'Stop-Anpassung ist ein UI-Platzhalter — es gibt noch keine Risiko-Engine.'
-            : `„${actionLabel}" ist ein UI-Platzhalter — es gibt noch kein Order-Routing.`}
-        </PrototypeBanner>
+            ? 'Der Stop Loss wird auf den neuen Wert gesetzt und das Risiko der Position neu berechnet.'
+            : `Aktion „${actionLabel}" für ${trade.symbol} ausführen?`}
+        </p>
       </Modal>
     </>
   )

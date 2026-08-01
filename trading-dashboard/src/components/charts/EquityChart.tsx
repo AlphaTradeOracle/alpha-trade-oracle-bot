@@ -12,6 +12,8 @@ import { formatMoney } from '../../utils/format'
 
 interface EquityChartProps {
   data: EquityPoint[]
+  /** Opens the full analysis view */
+  onOpenDetails?: () => void
 }
 
 function labelFor(t: string): string {
@@ -25,7 +27,7 @@ function labelFor(t: string): string {
   })
 }
 
-export function EquityChart({ data }: EquityChartProps) {
+export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
   const chartData = data.map((p) => ({
     ...p,
     label: labelFor(p.t),
@@ -38,12 +40,18 @@ export function EquityChart({ data }: EquityChartProps) {
   const fillId = up ? 'equityFillUp' : 'equityFillDown'
 
   return (
-    <section className="panel p-4 sm:p-5">
+    <section
+      onClick={onOpenDetails}
+      className={[
+        'panel p-4 transition-colors sm:p-5',
+        onOpenDetails ? 'cursor-pointer hover:bg-[var(--color-surface-hover)]/40' : '',
+      ].join(' ')}
+    >
       <div className="mb-4 flex items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-[var(--color-text)]">Equity Curve</h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            Mock mark-to-market equity · local JSON
+            {onOpenDetails ? 'Klicken für die vollständige Analyse' : 'Mark-to-Market Verlauf'}
           </p>
         </div>
         <p className={`tabular text-sm font-medium ${up ? 'text-[var(--color-long)]' : 'text-[var(--color-short)]'}`}>

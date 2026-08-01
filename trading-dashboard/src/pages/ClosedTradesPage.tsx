@@ -3,7 +3,7 @@ import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
 import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { PageHeader } from '../components/ui/PageHeader'
-import { PrototypeActions } from '../components/ui/PrototypeActions'
+import { DeskActions } from '../components/ui/DeskActions'
 import { useTradeFilters } from '../hooks/useTradeFilters'
 import { useTrades } from '../hooks/useTrades'
 import type { Trade } from '../types/trade'
@@ -17,8 +17,8 @@ export function ClosedTradesPage() {
     <div>
       <PageHeader
         title="Closed Trades"
-        subtitle={`${filtered.length} historical fills · click a row for details`}
-        actions={<PrototypeActions context="Closed Trades" showNewTrade={false} />}
+        subtitle={`${filtered.length} abgeschlossene Trades`}
+        actions={<DeskActions context="Closed Trades" showNewTrade={false} />}
       />
       <TradeFilters
         filters={filters}
