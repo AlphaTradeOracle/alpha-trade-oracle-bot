@@ -34,7 +34,7 @@ export function Footer() {
   const [contactOpen, setContactOpen] = useState(false)
 
   return (
-    <footer className="mt-10 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/60">
+    <footer className="mt-10">
       <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <RiskDisclaimer />
 
