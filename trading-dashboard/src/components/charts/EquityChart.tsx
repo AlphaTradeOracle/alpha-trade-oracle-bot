@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   Area,
   AreaChart,
@@ -9,6 +10,8 @@ import {
 } from 'recharts'
 import type { EquityPoint } from '../../types/trade'
 import { formatMoney, formatTimestamp } from '../../utils/format'
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 interface EquityChartProps {
   data: EquityPoint[]
@@ -22,14 +25,55 @@ function labelFor(t: string): string {
   return formatTimestamp(Math.floor(d.getTime() / 1000), withTime)
 }
 
+/** Always frame the dashboard overview as a fixed 7-day window. */
+function toSevenDayWindow(data: EquityPoint[], nowMs = Date.now()): EquityPoint[] {
+  if (data.length === 0) return data
+
+  const windowStart = nowMs - SEVEN_DAYS_MS
+  let baseline: EquityPoint | null = null
+  const inWindow: EquityPoint[] = []
+
+  for (const point of data) {
+    const t = new Date(point.t).getTime()
+    if (!Number.isFinite(t)) continue
+    if (t <= windowStart) baseline = point
+    if (t >= windowStart) inWindow.push(point)
+  }
+
+  const startEquity = baseline?.equity ?? inWindow[0]?.equity ?? data[0].equity
+  const out: EquityPoint[] = [
+    { t: new Date(windowStart).toISOString(), equity: startEquity },
+  ]
+
+  for (const point of inWindow) {
+    const last = out[out.length - 1]
+    if (last && new Date(last.t).getTime() === new Date(point.t).getTime()) {
+      out[out.length - 1] = point
+      continue
+    }
+    out.push(point)
+  }
+
+  const last = out[out.length - 1]
+  if (!last || new Date(last.t).getTime() < nowMs) {
+    out.push({
+      t: new Date(nowMs).toISOString(),
+      equity: last?.equity ?? startEquity,
+    })
+  }
+
+  return out
+}
+
 export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
-  const chartData = data.map((p) => ({
+  const windowed = useMemo(() => toSevenDayWindow(data), [data])
+  const chartData = windowed.map((p) => ({
     ...p,
     label: labelFor(p.t),
   }))
 
-  const start = data[0]?.equity ?? 0
-  const end = data[data.length - 1]?.equity ?? 0
+  const start = windowed[0]?.equity ?? 0
+  const end = windowed[windowed.length - 1]?.equity ?? 0
   const up = end >= start
   // Brand gold line; PnL direction stays in the end-value color.
   const stroke = '#c9a24d'
@@ -47,7 +91,8 @@ export function EquityChart({ data, onOpenDetails }: EquityChartProps) {
         <div>
           <h2 className="text-base font-semibold text-[var(--color-text)]">Equity Curve</h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            {onOpenDetails ? 'Klicken für die vollständige Analyse' : 'Mark-to-Market Verlauf'}
+            7 Tage Überblick
+            {onOpenDetails ? ' · Klicken für die vollständige Analyse' : ''}
           </p>
         </div>
         <p className={`tabular text-sm font-medium ${up ? 'text-[var(--color-long)]' : 'text-[var(--color-short)]'}`}>
