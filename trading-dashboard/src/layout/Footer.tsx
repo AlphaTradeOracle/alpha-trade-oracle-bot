@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Mail } from 'lucide-react'
 import { branding } from '../config/branding'
 import { socialLinks, type SocialPlatform } from '../config/socialLinks'
 import {
@@ -7,6 +9,7 @@ import {
   YoutubeIcon,
   type SocialIconProps,
 } from '../components/icons/SocialIcons'
+import { ContactModal } from '../components/contact/ContactModal'
 import { RiskDisclaimer } from '../components/ui/RiskDisclaimer'
 
 interface SocialEntry {
@@ -22,8 +25,14 @@ const socials: SocialEntry[] = [
   { key: 'instagram', label: 'Instagram', Icon: InstagramIcon },
 ]
 
+/** Shared styling so the contact button matches the social icons exactly. */
+const iconButtonClass =
+  'group flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]'
+
 /** Risk notice + social bar. Rendered at the bottom of the app shell. */
 export function Footer() {
+  const [contactOpen, setContactOpen] = useState(false)
+
   return (
     <footer className="mt-10 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/60">
       <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -43,14 +52,26 @@ export function Footer() {
                 title={label}
                 target={socialLinks[key] === '#' ? undefined : '_blank'}
                 rel="noreferrer"
-                className="group flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]"
+                className={iconButtonClass}
               >
                 <Icon size={16} className="transition-transform duration-200 group-hover:scale-110" />
               </a>
             ))}
+
+            <button
+              type="button"
+              onClick={() => setContactOpen(true)}
+              aria-label="Kontakt"
+              title="Kontakt"
+              className={iconButtonClass}
+            >
+              <Mail size={16} className="transition-transform duration-200 group-hover:scale-110" />
+            </button>
           </nav>
         </div>
       </div>
+
+      <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
     </footer>
   )
 }

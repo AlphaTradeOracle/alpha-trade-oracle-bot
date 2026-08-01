@@ -9,6 +9,28 @@ export type TradeSide = 'LONG' | 'SHORT'
 /** Lifecycle of a trade / order in the desk. */
 export type TradeStatus = 'OPEN' | 'PENDING' | 'CLOSED'
 
+/** A single take-profit ladder step. */
+export interface TakeProfit {
+  /** Display label, e.g. "TP1" */
+  label: string
+  price: number
+  /** Share of the position closed at this level (0–1), when known */
+  size?: number | null
+  /** Whether the level was reached */
+  hit?: boolean
+}
+
+/** OHLCV bar as delivered by exchange kline endpoints. */
+export interface Candle {
+  /** Unix seconds — matches Binance/Bybit/Hyperliquid kline open time */
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
 export interface Trade {
   id: string
   symbol: string
@@ -36,6 +58,21 @@ export interface Trade {
   /** Optional pending entry zone bounds */
   entryZoneLow?: number | null
   entryZoneHigh?: number | null
+
+  /* ---- Detail view fields (optional so existing mock rows stay valid) ---- */
+
+  /** Strategy / setup name */
+  strategy?: string
+  /** Take-profit ladder, ordered TP1..TP4 */
+  takeProfits?: TakeProfit[]
+  /** Position size in base asset */
+  positionSize?: number
+  /** Applied leverage multiplier */
+  leverage?: number
+  /** Trading fees paid in quote currency */
+  fees?: number
+  /** Free-form journal text */
+  notes?: string
 }
 
 export interface EquityPoint {

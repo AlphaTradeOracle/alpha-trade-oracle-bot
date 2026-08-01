@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
-import { TradeDetailModal } from '../components/trades/TradeDetailModal'
+import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { PageHeader } from '../components/ui/PageHeader'
 import { PrototypeActions } from '../components/ui/PrototypeActions'
@@ -32,7 +32,7 @@ export function ClosedTradesPage() {
         ]}
       />
       <ClosedTradesTable trades={filtered} onRowClick={setSelected} />
-      <TradeDetailModal trade={selected} onClose={() => setSelected(null)} />
+      <TradeDetailsModal trade={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }

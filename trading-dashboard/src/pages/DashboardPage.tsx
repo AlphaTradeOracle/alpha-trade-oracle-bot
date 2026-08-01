@@ -4,7 +4,7 @@ import { KpiGrid } from '../components/kpi/KpiGrid'
 import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
 import { OpenTradesTable } from '../components/trades/OpenTradesTable'
 import { PendingTradesTable } from '../components/trades/PendingTradesTable'
-import { TradeDetailModal } from '../components/trades/TradeDetailModal'
+import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -98,7 +98,7 @@ export function DashboardPage() {
         <ClosedTradesTable trades={closedFilters.filtered} onRowClick={setSelected} />
       </section>
 
-      <TradeDetailModal trade={selected} onClose={() => setSelected(null)} />
+      <TradeDetailsModal trade={selected} onClose={() => setSelected(null)} />
 
       <Modal
         open={kpiTitle !== null}

@@ -14,7 +14,38 @@
     "score": 18.1,
     "status": "OPEN",
     "openedAt": "2026-07-31T17:00:00Z",
-    "closedAt": null
+    "closedAt": null,
+    "strategy": "Trend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.103756,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.101194,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.098632,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.09607,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 4232.5853,
+    "leverage": 3,
+    "fees": 0.27,
+    "notes": ""
   },
   {
     "id": "1521",
@@ -31,7 +62,32 @@
     "score": 24.7,
     "status": "OPEN",
     "openedAt": "2026-07-31T17:00:00Z",
-    "closedAt": null
+    "closedAt": null,
+    "strategy": "Range Reversal",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 1.2244,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 1.208,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 1.1916,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 2417.7463,
+    "leverage": 20,
+    "fees": 1.8,
+    "notes": ""
   },
   {
     "id": "1520",
@@ -48,7 +104,32 @@
     "score": 20.7,
     "status": "OPEN",
     "openedAt": "2026-07-31T18:00:00Z",
-    "closedAt": null
+    "closedAt": null,
+    "strategy": "Range Reversal",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.007884,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.007743,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.007602,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 186915.8879,
+    "leverage": 10,
+    "fees": 0.9,
+    "notes": ""
   },
   {
     "id": "1519",
@@ -67,7 +148,38 @@
     "openedAt": "2026-07-31T16:32:00Z",
     "closedAt": null,
     "entryZoneLow": 0.1034,
-    "entryZoneHigh": 0.1050
+    "entryZoneHigh": 0.105,
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.100789,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.097378,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.093967,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.090556,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 0,
+    "leverage": 20,
+    "fees": 0,
+    "notes": ""
   },
   {
     "id": "1522",
@@ -86,7 +198,32 @@
     "openedAt": "2026-07-31T17:49:00Z",
     "closedAt": null,
     "entryZoneLow": 0.0639,
-    "entryZoneHigh": 0.0647
+    "entryZoneHigh": 0.0647,
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.063565,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.06283,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.062095,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 0,
+    "leverage": 10,
+    "fees": 0,
+    "notes": ""
   },
   {
     "id": "1523",
@@ -105,7 +242,38 @@
     "openedAt": "2026-07-31T19:06:00Z",
     "closedAt": null,
     "entryZoneLow": 0.0412,
-    "entryZoneHigh": 0.0417
+    "entryZoneHigh": 0.0417,
+    "strategy": "Trend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.041032,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.040574,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.040116,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.039658,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 0,
+    "leverage": 20,
+    "fees": 0,
+    "notes": ""
   },
   {
     "id": "1441",
@@ -122,7 +290,32 @@
     "score": 85.3,
     "status": "CLOSED",
     "openedAt": "2026-07-30T06:00:00Z",
-    "closedAt": "2026-07-30T16:00:00Z"
+    "closedAt": "2026-07-30T16:00:00Z",
+    "strategy": "MTF Momentum",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.222,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.2256,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP3",
+        "price": 0.2292,
+        "size": 0.33,
+        "hit": true
+      }
+    ],
+    "positionSize": 2289.3773,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1438",
@@ -136,10 +329,35 @@
     "realized": 164.32,
     "r": 3.29,
     "margin": 100,
-    "score": 83.0,
+    "score": 83,
     "status": "CLOSED",
     "openedAt": "2026-07-30T05:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z"
+    "closedAt": "2026-07-30T17:00:00Z",
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.2197,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.2233,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP3",
+        "price": 0.2269,
+        "size": 0.33,
+        "hit": true
+      }
+    ],
+    "positionSize": 9254.9745,
+    "leverage": 20,
+    "fees": 1.2,
+    "notes": ""
   },
   {
     "id": "1388",
@@ -156,7 +374,32 @@
     "score": 82.6,
     "status": "CLOSED",
     "openedAt": "2026-07-29T16:00:00Z",
-    "closedAt": "2026-07-30T16:00:00Z"
+    "closedAt": "2026-07-30T16:00:00Z",
+    "strategy": "Breakout Retest",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 4.514,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 4.6391,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 4.7642,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 113.9238,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1398",
@@ -170,10 +413,35 @@
     "realized": 100.3,
     "r": 2.01,
     "margin": 100,
-    "score": 81.0,
+    "score": 81,
     "status": "CLOSED",
     "openedAt": "2026-07-29T18:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z"
+    "closedAt": "2026-07-30T17:00:00Z",
+    "strategy": "Range Reversal",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 4.5244,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 4.6476,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 4.7708,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 227.2108,
+    "leverage": 10,
+    "fees": 0.6,
+    "notes": ""
   },
   {
     "id": "1402",
@@ -184,13 +452,38 @@
     "exit": 4.4567,
     "stop": 4.29,
     "upnl": null,
-    "realized": 97.0,
+    "realized": 97,
     "r": 1.94,
     "margin": 100,
     "score": 80.2,
     "status": "CLOSED",
     "openedAt": "2026-07-29T21:00:00Z",
-    "closedAt": "2026-07-30T20:00:00Z"
+    "closedAt": "2026-07-30T20:00:00Z",
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 4.532,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 4.653,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 4.774,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 68.0118,
+    "leverage": 3,
+    "fees": 0.18,
+    "notes": ""
   },
   {
     "id": "1367",
@@ -207,7 +500,38 @@
     "score": 22.4,
     "status": "CLOSED",
     "openedAt": "2026-07-29T06:00:00Z",
-    "closedAt": "2026-07-30T05:00:00Z"
+    "closedAt": "2026-07-30T05:00:00Z",
+    "strategy": "Range Reversal",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.892,
+        "size": 0.25,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.864,
+        "size": 0.25,
+        "hit": true
+      },
+      {
+        "label": "TP3",
+        "price": 0.836,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.808,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 2173.913,
+    "leverage": 20,
+    "fees": 1.2,
+    "notes": ""
   },
   {
     "id": "1373",
@@ -224,7 +548,32 @@
     "score": 21.8,
     "status": "CLOSED",
     "openedAt": "2026-07-29T07:00:00Z",
-    "closedAt": "2026-07-30T07:00:00Z"
+    "closedAt": "2026-07-30T07:00:00Z",
+    "strategy": "Range Reversal",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.398,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.384,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.37,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 1213.5922,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1370",
@@ -241,7 +590,38 @@
     "score": 19.5,
     "status": "CLOSED",
     "openedAt": "2026-07-29T08:00:00Z",
-    "closedAt": "2026-07-30T05:00:00Z"
+    "closedAt": "2026-07-30T05:00:00Z",
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.179,
+        "size": 0.25,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.173,
+        "size": 0.25,
+        "hit": true
+      },
+      {
+        "label": "TP3",
+        "price": 0.167,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.161,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 1621.6216,
+    "leverage": 3,
+    "fees": 0.18,
+    "notes": ""
   },
   {
     "id": "1345",
@@ -258,7 +638,32 @@
     "score": 24.1,
     "status": "CLOSED",
     "openedAt": "2026-07-28T10:00:00Z",
-    "closedAt": "2026-07-29T10:00:00Z"
+    "closedAt": "2026-07-29T10:00:00Z",
+    "strategy": "MTF Momentum",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.0663,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.0644,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0625,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 7331.3783,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1344",
@@ -272,10 +677,35 @@
     "realized": 35.29,
     "r": 0.71,
     "margin": 100,
-    "score": 23.0,
+    "score": 23,
     "status": "CLOSED",
     "openedAt": "2026-07-28T11:00:00Z",
-    "closedAt": "2026-07-29T10:00:00Z"
+    "closedAt": "2026-07-29T10:00:00Z",
+    "strategy": "Breakout Retest",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.602,
+        "size": 0.33,
+        "hit": true
+      },
+      {
+        "label": "TP2",
+        "price": 0.584,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.566,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 806.4516,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1440",
@@ -292,7 +722,38 @@
     "score": 76.2,
     "status": "CLOSED",
     "openedAt": "2026-07-30T05:00:00Z",
-    "closedAt": "2026-07-30T06:00:00Z"
+    "closedAt": "2026-07-30T06:00:00Z",
+    "strategy": "MTF Momentum",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.153,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.164,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.175,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.186,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 3521.1268,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1369",
@@ -309,7 +770,38 @@
     "score": 20.1,
     "status": "CLOSED",
     "openedAt": "2026-07-29T05:00:00Z",
-    "closedAt": "2026-07-29T14:00:00Z"
+    "closedAt": "2026-07-29T14:00:00Z",
+    "strategy": "Mean Reversion",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.0172,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.016,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0148,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.0136,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 27173.913,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1377",
@@ -323,10 +815,41 @@
     "realized": -42.77,
     "r": -0.86,
     "margin": 100,
-    "score": 22.0,
+    "score": 22,
     "status": "CLOSED",
     "openedAt": "2026-07-29T12:00:00Z",
-    "closedAt": "2026-07-30T07:00:00Z"
+    "closedAt": "2026-07-30T07:00:00Z",
+    "strategy": "MTF Momentum",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.492,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.464,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.436,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.408,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 3846.1538,
+    "leverage": 20,
+    "fees": 1.2,
+    "notes": ""
   },
   {
     "id": "1374",
@@ -343,7 +866,32 @@
     "score": 21.5,
     "status": "CLOSED",
     "openedAt": "2026-07-29T11:00:00Z",
-    "closedAt": "2026-07-30T08:00:00Z"
+    "closedAt": "2026-07-30T08:00:00Z",
+    "strategy": "Trend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.1352,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.1279,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.1206,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 3508.7719,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   },
   {
     "id": "1416",
@@ -360,7 +908,32 @@
     "score": 19.8,
     "status": "CLOSED",
     "openedAt": "2026-07-29T22:00:00Z",
-    "closedAt": "2026-07-30T13:00:00Z"
+    "closedAt": "2026-07-30T13:00:00Z",
+    "strategy": "MTF Momentum",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.835,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.79,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.745,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 2272.7273,
+    "leverage": 20,
+    "fees": 1.2,
+    "notes": ""
   },
   {
     "id": "1343",
@@ -377,7 +950,38 @@
     "score": 24.5,
     "status": "CLOSED",
     "openedAt": "2026-07-28T10:00:00Z",
-    "closedAt": "2026-07-28T13:00:00Z"
+    "closedAt": "2026-07-28T13:00:00Z",
+    "strategy": "Breakout Retest",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.025341,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.02469,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.024039,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.023388,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 38473.3764,
+    "leverage": 10,
+    "fees": 0.6,
+    "notes": ""
   },
   {
     "id": "1383",
@@ -394,7 +998,32 @@
     "score": 78.4,
     "status": "CLOSED",
     "openedAt": "2026-07-29T13:00:00Z",
-    "closedAt": "2026-07-29T19:00:00Z"
+    "closedAt": "2026-07-29T19:00:00Z",
+    "strategy": "Trend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 4.63,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 4.74,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 4.85,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 221.2389,
+    "leverage": 10,
+    "fees": 0.6,
+    "notes": ""
   },
   {
     "id": "1444",
@@ -411,6 +1040,37 @@
     "score": 75.6,
     "status": "CLOSED",
     "openedAt": "2026-07-30T10:00:00Z",
-    "closedAt": "2026-07-30T17:00:00Z"
+    "closedAt": "2026-07-30T17:00:00Z",
+    "strategy": "Trend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.316,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.322,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.328,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP4",
+        "price": 0.334,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 1612.9032,
+    "leverage": 5,
+    "fees": 0.3,
+    "notes": ""
   }
 ]
