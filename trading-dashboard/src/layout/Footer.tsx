@@ -40,7 +40,8 @@ export function Footer() {
 
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <p className="order-2 text-center text-xs text-[var(--color-text-muted)] sm:order-1 sm:text-left">
-            © {branding.copyrightYear}
+            © {branding.copyrightYear} {branding.projectName} · v{branding.version} · All
+            rights reserved.
           </p>
 
           <nav aria-label="Social media" className="order-1 flex items-center gap-2 sm:order-2">
