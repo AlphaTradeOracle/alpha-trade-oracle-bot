@@ -243,11 +243,17 @@ def split_caption_and_body(
     """Text fuer Photo-Caption aufteilen.
 
     Passt alles in die Caption, gibt ``(caption, None)`` zurueck.
-    Sonst ``(None, text)`` — Chart ohne Caption, voller Text darunter.
+    Sonst Kopf (inkl. Brand-Zeile) als Caption, Rest als Folgemessage —
+    damit unter dem Chart immer ``Alpha Trade Oracle`` sichtbar bleibt.
     """
     if len(text) <= caption_limit:
         return text, None
-    return None, text
+    cut = text.rfind("\n", 0, caption_limit)
+    if cut < 40:
+        cut = caption_limit
+    caption = text[:cut].rstrip()
+    body = text[cut:].lstrip("\n")
+    return caption or None, body or None
 
 
 def _pretty_symbol(symbol: str) -> str:

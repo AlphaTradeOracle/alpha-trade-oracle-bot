@@ -327,15 +327,25 @@ def _render_png(
     direction_label = direction.replace("_", " ").upper()
     side_color = tv.UP if is_long else tv.DOWN
 
-    # Header-Leiste (Text rechts vom Logo oben links)
+    # Header-Leiste: Brand fett oben, darunter Symbol · Timeframe
     ax.set_title("")
-    fig.subplots_adjust(left=0.04, right=0.86, top=0.90, bottom=0.07, hspace=0.04)
+    fig.subplots_adjust(left=0.04, right=0.86, top=0.88, bottom=0.07, hspace=0.04)
     fig.text(
         0.225,
-        0.955,
+        0.972,
+        "Alpha Trade Oracle",
+        color=tv.TEXT,
+        fontsize=12.5,
+        fontweight="bold",
+        ha="left",
+        va="center",
+    )
+    fig.text(
+        0.225,
+        0.938,
         f"{pretty}  ·  {timeframe}",
         color=tv.TEXT,
-        fontsize=14.5,
+        fontsize=13.5,
         fontweight="bold",
         ha="left",
         va="center",

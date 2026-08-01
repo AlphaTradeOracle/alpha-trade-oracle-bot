@@ -21,6 +21,7 @@ from app.bot.formatting import (
     format_price,
     format_score_breakdown,
     format_signal_message,
+    split_caption_and_body,
     split_message,
 )
 from app.core.enums import SignalDirection
@@ -197,6 +198,22 @@ class TestScoreBreakdown:
 
     def test_contains_total_score(self) -> None:
         assert "Total confidence" in format_score_breakdown(make_result(score=72.0))
+
+
+class TestCaptionSplit:
+    def test_short_text_fits_in_caption(self) -> None:
+        caption, body = split_caption_and_body("hello")
+        assert caption == "hello"
+        assert body is None
+
+    def test_long_text_keeps_brand_in_caption(self) -> None:
+        head = "*Alpha Trade Oracle*\n*UNI/USDT* · *STRONG SHORT*\nConfidence: 78/100\n"
+        text = head + ("x" * 1200)
+        caption, body = split_caption_and_body(text, caption_limit=200)
+        assert caption is not None
+        assert "Alpha Trade Oracle" in caption
+        assert body is not None
+        assert len(caption) <= 200
 
 
 class TestSplitting:
