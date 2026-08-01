@@ -88,6 +88,13 @@ class BacktestConfig:
     weights: StrategyWeights = DEFAULT_WEIGHTS
     #: Optional WUSDT-lesson skip rules (see ``app.signals.lesson_filters``).
     lesson_skip_rules: tuple[str, ...] = ()
+    #: Notional-Cap relativ zum Equity (Paper: 10×). Beeinflusst max. Positionsgroesse.
+    leverage: float = 1.0
+    #: Wenn gesetzt: fixes Risiko je Trade in Quote-Currency (Paper-Parity).
+    #: Sonst ``equity * risk.risk_percent / 100``.
+    risk_per_trade_usd: float | None = None
+    #: Harte Nominal-Obergrenze (0 = aus). Entspricht ``paper_max_notional_usd``.
+    max_notional_usd: float = 0.0
 
     @classmethod
     def from_settings(
@@ -552,11 +559,7 @@ class BacktestEngine:
         if stop_distance <= 0:
             return None
 
-        # Positionsgroesse aus dem Risiko je Trade, begrenzt durch das Kapital.
-        risk_amount = equity * (risk.risk_percent / 100.0)
-        quantity = risk_amount / stop_distance
-        max_quantity = equity / entry_price if entry_price > 0 else 0.0
-        quantity = min(quantity, max_quantity)
+        quantity = self._size_quantity(equity, entry_price, stop_distance, risk.risk_percent)
         if quantity <= 0:
             return None
 
@@ -621,10 +624,9 @@ class BacktestEngine:
         stop_distance = abs(entry_price - stop)
         if stop_distance <= 0:
             return None
-        risk_amount = equity * (signal.risk.risk_percent / 100.0)
-        quantity = risk_amount / stop_distance
-        max_quantity = equity / entry_price if entry_price > 0 else 0.0
-        quantity = min(quantity, max_quantity)
+        quantity = self._size_quantity(
+            equity, entry_price, stop_distance, signal.risk.risk_percent
+        )
         if quantity <= 0:
             return None
 
@@ -645,6 +647,28 @@ class BacktestEngine:
             signal_score=signal.score,
             expires_at=signal.expires_at,
         )
+
+    def _size_quantity(
+        self,
+        equity: float,
+        entry_price: float,
+        stop_distance: float,
+        risk_percent: float,
+    ) -> float:
+        """Paper-aehnliche Stueckzahl: Risiko-Budget, Hebel-Cap, optional Nominal-Cap."""
+        if entry_price <= 0 or stop_distance <= 0:
+            return 0.0
+        if self._config.risk_per_trade_usd is not None and self._config.risk_per_trade_usd > 0:
+            risk_amount = float(self._config.risk_per_trade_usd)
+        else:
+            risk_amount = equity * (risk_percent / 100.0)
+        quantity = risk_amount / stop_distance
+        leverage = max(float(self._config.leverage), 1e-9)
+        max_quantity = (equity * leverage) / entry_price
+        quantity = min(quantity, max_quantity)
+        if self._config.max_notional_usd > 0:
+            quantity = min(quantity, self._config.max_notional_usd / entry_price)
+        return quantity if quantity > 0 else 0.0
 
     def _process_open_trade(
         self, trade: SimulatedTrade, df: pd.DataFrame, index: int, interval_minutes: int
