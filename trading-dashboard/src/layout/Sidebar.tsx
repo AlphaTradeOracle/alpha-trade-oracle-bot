@@ -26,11 +26,13 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     <aside className="flex h-full w-[240px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/90 backdrop-blur">
       <div className="border-b border-[var(--color-border-subtle)] px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-            <span className="text-sm font-bold text-[var(--color-long)]">A</span>
-          </div>
+          <img
+            src="/alpha-trade-oracle-mark.svg"
+            alt="Alpha Trade Oracle"
+            className="h-10 w-10 shrink-0 rounded-lg"
+          />
           <div>
-            <p className="text-sm font-semibold tracking-tight">Alpha Desk</p>
+            <p className="text-sm font-semibold tracking-tight">Alpha Trade Oracle</p>
             <p className="text-[11px] text-[var(--color-text-muted)]">Local trading console</p>
           </div>
         </div>
