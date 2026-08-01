@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.enums import ExitReason, SignalDirection
 from app.core.time import utc_now
 from app.models.paper import PaperFill, PaperPosition
@@ -146,7 +147,13 @@ def _notes_for(position: PaperPosition | dict[str, Any], desk_status: str) -> st
     return f"{label} · TF {timeframe}"
 
 
-def _take_profits(position: PaperPosition | dict[str, Any], *, exit_price: float | None, side: str) -> list[DeskTakeProfit]:
+def _take_profits(
+    position: PaperPosition | dict[str, Any],
+    *,
+    exit_price: float | None,
+    side: str,
+    scale_out: tuple[float, float, float] | None = None,
+) -> list[DeskTakeProfit]:
     if isinstance(position, dict):
         tps = [
             ("TP1", position.get("take_profit_1"), bool(position.get("tp1_filled"))),
@@ -159,8 +166,9 @@ def _take_profits(position: PaperPosition | dict[str, Any], *, exit_price: float
             ("TP2", position.take_profit_2, position.tp2_filled),
             ("TP3", position.take_profit_3, position.tp3_filled),
         ]
+    fractions = scale_out or get_settings().parsed_scale_out_fractions
     out: list[DeskTakeProfit] = []
-    for label, price, filled in tps:
+    for index, (label, price, filled) in enumerate(tps):
         if price is None:
             continue
         px = _f(price)
@@ -170,7 +178,8 @@ def _take_profits(position: PaperPosition | dict[str, Any], *, exit_price: float
                 hit = exit_price >= px
             else:
                 hit = exit_price <= px
-        out.append(DeskTakeProfit(label=label, price=px, size=0.33, hit=hit))
+        size = fractions[index] if index < len(fractions) else fractions[-1]
+        out.append(DeskTakeProfit(label=label, price=px, size=size, hit=hit))
     return out
 
 
@@ -179,6 +188,7 @@ def map_position_to_desk_trade(
     *,
     fills: list[Any] | None = None,
     mark: float | None = None,
+    scale_out: tuple[float, float, float] | None = None,
 ) -> DeskTrade | None:
     """Map one paper position. Returns ``None`` for cancelled / non-book rows."""
     if isinstance(position, dict):
@@ -269,7 +279,9 @@ def map_position_to_desk_trade(
         entryZoneLow=zone_lo if desk_status == "PENDING" else None,
         entryZoneHigh=zone_hi if desk_status == "PENDING" else None,
         strategy=_strategy_label(direction, status.lower()),
-        takeProfits=_take_profits(position, exit_price=exit_px, side=side),
+        takeProfits=_take_profits(
+            position, exit_price=exit_px, side=side, scale_out=scale_out
+        ),
         positionSize=qty if qty else None,
         leverage=leverage,
         fees=_round_money(fees),

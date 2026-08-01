@@ -134,6 +134,7 @@ def test_closed_with_exit_fill_mapped() -> None:
     assert trade.exit == 110.0
     assert trade.realized == -10.5
     assert trade.r == -1.05
+    assert [tp.size for tp in trade.takeProfits] == [0.5, 0.25, 0.25]
 
 
 def test_exit_fill_price_picks_last_non_entry() -> None:
