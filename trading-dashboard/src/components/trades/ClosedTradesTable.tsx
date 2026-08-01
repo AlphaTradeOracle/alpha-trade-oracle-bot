@@ -7,9 +7,10 @@ import { SideBadge } from './SideBadge'
 
 interface ClosedTradesTableProps {
   trades: Trade[]
+  onRowClick?: (trade: Trade) => void
 }
 
-export function ClosedTradesTable({ trades }: ClosedTradesTableProps) {
+export function ClosedTradesTable({ trades, onRowClick }: ClosedTradesTableProps) {
   if (trades.length === 0) {
     return (
       <div className="panel">
@@ -37,7 +38,11 @@ export function ClosedTradesTable({ trades }: ClosedTradesTableProps) {
             {trades.map((t) => (
               <tr
                 key={t.id}
-                className="border-b border-[var(--color-border-subtle)]/80 transition-colors last:border-0 hover:bg-[var(--color-surface-hover)]/70"
+                onClick={() => onRowClick?.(t)}
+                className={[
+                  'border-b border-[var(--color-border-subtle)]/80 transition-colors last:border-0 hover:bg-[var(--color-surface-hover)]/70',
+                  onRowClick ? 'cursor-pointer' : '',
+                ].join(' ')}
               >
                 <td className="px-4 py-3 font-medium whitespace-nowrap">{t.symbol}</td>
                 <td className="px-4 py-3">

@@ -23,9 +23,10 @@ function toneFromNumber(n: number): KpiTone {
 
 interface KpiGridProps {
   portfolio: PortfolioSnapshot
+  onKpiClick?: (title: string) => void
 }
 
-export function KpiGrid({ portfolio: p }: KpiGridProps) {
+export function KpiGrid({ portfolio: p, onKpiClick }: KpiGridProps) {
   const items = [
     {
       title: 'Gesamtkapital',
@@ -100,7 +101,11 @@ export function KpiGrid({ portfolio: p }: KpiGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
       {items.map((item) => (
-        <KpiCard key={item.title} {...item} />
+        <KpiCard
+          key={item.title}
+          {...item}
+          onClick={onKpiClick ? () => onKpiClick(item.title) : undefined}
+        />
       ))}
     </div>
   )

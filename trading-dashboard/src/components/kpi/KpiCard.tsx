@@ -9,6 +9,7 @@ interface KpiCardProps {
   icon: LucideIcon
   deltaPct?: number | null
   tone?: KpiTone
+  onClick?: () => void
 }
 
 const toneValue: Record<KpiTone, string> = {
@@ -25,9 +26,21 @@ const toneIcon: Record<KpiTone, string> = {
   accent: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]',
 }
 
-export function KpiCard({ title, value, icon: Icon, deltaPct, tone = 'neutral' }: KpiCardProps) {
-  return (
-    <article className="panel flex min-h-[108px] flex-col justify-between gap-3 p-4 transition-colors hover:bg-[var(--color-surface-hover)]">
+export function KpiCard({
+  title,
+  value,
+  icon: Icon,
+  deltaPct,
+  tone = 'neutral',
+  onClick,
+}: KpiCardProps) {
+  const className = [
+    'panel flex min-h-[108px] w-full flex-col justify-between gap-3 p-4 text-left transition-colors hover:bg-[var(--color-surface-hover)]',
+    onClick ? 'cursor-pointer' : '',
+  ].join(' ')
+
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
           {title}
@@ -55,6 +68,16 @@ export function KpiCard({ title, value, icon: Icon, deltaPct, tone = 'neutral' }
           </p>
         ) : null}
       </div>
-    </article>
+    </>
   )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {body}
+      </button>
+    )
+  }
+
+  return <article className={className}>{body}</article>
 }
