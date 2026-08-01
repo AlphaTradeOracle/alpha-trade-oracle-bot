@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { BrandLockup } from '../components/brand/BrandLockup'
-import { branding } from '../config/branding'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -51,12 +50,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </NavLink>
         ))}
       </nav>
-
-      <div className="border-t border-[var(--color-border-subtle)] p-4">
-        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
-          {branding.projectName} · Version {branding.version}
-        </p>
-      </div>
     </aside>
   )
 }

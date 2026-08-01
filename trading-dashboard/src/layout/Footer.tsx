@@ -38,9 +38,9 @@ export function Footer() {
       <div className="mx-auto w-full max-w-[1400px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <RiskDisclaimer />
 
-        <div className="flex flex-col items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-5 sm:flex-row">
+        <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <p className="order-2 text-center text-xs text-[var(--color-text-muted)] sm:order-1 sm:text-left">
-            © {branding.copyrightYear} {branding.projectName} · Version {branding.version}
+            © {branding.copyrightYear}
           </p>
 
           <nav aria-label="Social media" className="order-1 flex items-center gap-2 sm:order-2">
