@@ -81,19 +81,25 @@ export function useTradeCandles(
     providerRef.current = provider
 
     // Window must cover the whole trade plus context on both sides.
+    const now = Math.floor(Date.now() / 1000)
     const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
     const closed = trade.closedAt
       ? Math.floor(new Date(trade.closedAt).getTime() / 1000)
-      : Math.floor(Date.now() / 1000)
+      : now
     const span = Math.max(closed - opened, step)
     const padding = Math.max(span * 0.5, (INITIAL_BARS / 2) * step)
+
+    // Never request future candles; take the missing context from the past
+    // instead so the bar count stays the same.
+    const to = Math.min(closed + padding, now)
+    const from = opened - padding - Math.max(closed + padding - to, 0)
 
     setLoading(true)
     setError(null)
     setExhausted(false)
 
     provider
-      .loadInitial(opened - padding, closed + padding)
+      .loadInitial(from, to)
       .then((data) => {
         if (cancelled) return
         setCandles(data)

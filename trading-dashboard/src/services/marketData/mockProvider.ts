@@ -47,7 +47,9 @@ export function createMockMarketData(
 
       const step = INTERVAL_SECONDS[interval]
       const start = Math.max(alignToInterval(from, interval), alignToInterval(earliestTime, interval))
-      const end = alignToInterval(to, interval)
+      // A market never has candles beyond the present.
+      const latest = alignToInterval(Math.floor(Date.now() / 1000), interval)
+      const end = Math.min(alignToInterval(to, interval), latest)
       if (end < start) return []
 
       const curve = createPriceCurve({ symbol, anchors })

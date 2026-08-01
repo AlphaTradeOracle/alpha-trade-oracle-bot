@@ -3,7 +3,7 @@ import { Maximize2 } from 'lucide-react'
 import { useTradeCandles } from '../../../hooks/useTradeCandles'
 import type { CandleInterval } from '../../../services/marketData'
 import type { Trade } from '../../../types/trade'
-import { formatPrice } from '../../../utils/format'
+import { formatPrice, formatTimestamp } from '../../../utils/format'
 import { ChartControls, ChartToolbar } from '../shared'
 import {
   CHART_COLORS,
@@ -96,12 +96,7 @@ export function TradeChart({ trade, height = 420, defaultInterval = '1h' }: Trad
         {hover ? (
           <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 text-[11px] tabular shadow-lg">
             <div className="mb-1 text-[var(--color-text-muted)]">
-              {new Date(hover.time * 1000).toLocaleString('de-DE', {
-                day: '2-digit',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatTimestamp(hover.time)}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
               <span className="text-[var(--color-text-muted)]">O</span>

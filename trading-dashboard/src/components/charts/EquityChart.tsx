@@ -8,7 +8,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { EquityPoint } from '../../types/trade'
-import { formatMoney } from '../../utils/format'
+import { formatMoney, formatTimestamp } from '../../utils/format'
 
 interface EquityChartProps {
   data: EquityPoint[]
@@ -18,13 +18,8 @@ interface EquityChartProps {
 
 function labelFor(t: string): string {
   const d = new Date(t)
-  return d.toLocaleString('en-GB', {
-    month: 'short',
-    day: '2-digit',
-    hour: d.getHours() || d.getMinutes() ? '2-digit' : undefined,
-    minute: d.getHours() || d.getMinutes() ? '2-digit' : undefined,
-    hour12: false,
-  })
+  const withTime = Boolean(d.getHours() || d.getMinutes())
+  return formatTimestamp(Math.floor(d.getTime() / 1000), withTime)
 }
 
 export function EquityChart({ data, onOpenDetails }: EquityChartProps) {

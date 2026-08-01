@@ -58,14 +58,34 @@ export function formatSince(iso: string): string {
   return formatDuration(iso, null)
 }
 
+/** Single locale for every date shown in the UI. */
+const LOCALE = 'de-DE'
+
+const dateTimeFmt = new Intl.DateTimeFormat(LOCALE, {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+const dateFmt = new Intl.DateTimeFormat(LOCALE, {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = new Date(iso)
-  return d.toLocaleString('en-GB', {
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
+  if (Number.isNaN(d.getTime())) return '—'
+  return dateTimeFmt.format(d)
+}
+
+/** Chart tooltips work with unix seconds instead of ISO strings. */
+export function formatTimestamp(unixSeconds: number, withTime = true): string {
+  const d = new Date(unixSeconds * 1000)
+  if (Number.isNaN(d.getTime())) return '—'
+  return withTime ? dateTimeFmt.format(d) : dateFmt.format(d)
 }
