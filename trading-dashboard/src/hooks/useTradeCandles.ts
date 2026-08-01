@@ -1,65 +1,51 @@
-import { useEffect, useMemo, useState } from 'react'
-import { createMockMarketData } from '../services/marketData'
-import { INTERVAL_SECONDS, type CandleInterval } from '../services/marketData/types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  HistoricalDataProvider,
+  INTERVAL_SECONDS,
+  createMockMarketData,
+  type CandleInterval,
+} from '../services/marketData'
+import type { PriceAnchor } from '../services/marketData'
 import type { Candle, Trade } from '../types/trade'
 
-const DEFAULT_WINDOW_DAYS = 3
-const MIN_BARS = 48
+/** Bars shown when the chart opens, before the user zooms out. */
+const INITIAL_BARS = 260
+const PAGE_BARS = 400
 
-interface UseTradeCandlesResult {
+export interface TradeCandlesResult {
   candles: Candle[]
-  interval: CandleInterval
   loading: boolean
+  /** True while an older page is being appended */
+  loadingHistory: boolean
+  /** No further history available from the source */
+  exhausted: boolean
   error: string | null
+  /** Ask for one more page of history (used when panning left) */
+  loadOlder: () => void
 }
 
 /**
- * Loads the candle series backing a trade's chart.
+ * Supplies the trade chart with candles for the selected timeframe.
  *
- * The window always covers the full trade: it starts at three days by default
- * and widens automatically when the position ran longer, so entry and exit stay
- * visible. Data comes from the mock provider today; swapping in an exchange
- * adapter keeps this signature.
+ * History is paged through `HistoricalDataProvider`, so switching the mock
+ * source for a REST or WebSocket adapter needs no changes here or in the chart.
  */
 export function useTradeCandles(
   trade: Trade | null,
-  interval: CandleInterval = '1h',
-): UseTradeCandlesResult {
+  interval: CandleInterval,
+): TradeCandlesResult {
   const [candles, setCandles] = useState<Candle[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [exhausted, setExhausted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const request = useMemo(() => {
-    if (!trade) return null
+  const providerRef = useRef<HistoricalDataProvider | null>(null)
 
-    const step = INTERVAL_SECONDS[interval]
-    const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
-    const closed = trade.closedAt
-      ? Math.floor(new Date(trade.closedAt).getTime() / 1000)
-      : Math.floor(Date.now() / 1000)
-
-    const tradeSpan = Math.max(closed - opened, step)
-    const defaultSpan = DEFAULT_WINDOW_DAYS * 86_400
-    // Pad both sides so the trade never touches the chart edges.
-    const padding = Math.max(tradeSpan * 0.35, step * 6)
-    const span = Math.max(defaultSpan, tradeSpan + padding * 2)
-
-    const center = opened + tradeSpan / 2
-    const from = Math.floor(center - span / 2)
-    const to = Math.ceil(center + span / 2)
-
-    return {
-      symbol: trade.symbol,
-      interval,
-      from,
-      to: Math.max(to, from + MIN_BARS * step),
-    }
-  }, [trade, interval])
-
-  const anchors = useMemo(() => {
+  const anchors = useMemo<PriceAnchor[]>(() => {
     if (!trade) return []
     const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
-    const points = [{ time: opened, price: trade.entry }]
+    const points: PriceAnchor[] = [{ time: opened, price: trade.entry }]
 
     if (trade.closedAt && trade.exit != null) {
       points.push({
@@ -73,25 +59,50 @@ export function useTradeCandles(
     return points
   }, [trade])
 
+  const tradeKey = trade ? `${trade.id}:${interval}` : null
+
   useEffect(() => {
-    if (!request) {
+    if (!trade || !tradeKey) {
       setCandles([])
+      providerRef.current = null
       return
     }
 
     let cancelled = false
+    const step = INTERVAL_SECONDS[interval]
+
+    const source = createMockMarketData({ anchors })
+    const provider = new HistoricalDataProvider({
+      symbol: trade.symbol,
+      interval,
+      provider: source,
+      pageSize: PAGE_BARS,
+    })
+    providerRef.current = provider
+
+    // Window must cover the whole trade plus context on both sides.
+    const opened = Math.floor(new Date(trade.openedAt).getTime() / 1000)
+    const closed = trade.closedAt
+      ? Math.floor(new Date(trade.closedAt).getTime() / 1000)
+      : Math.floor(Date.now() / 1000)
+    const span = Math.max(closed - opened, step)
+    const padding = Math.max(span * 0.5, (INITIAL_BARS / 2) * step)
+
     setLoading(true)
     setError(null)
-
-    const provider = createMockMarketData({ anchors })
+    setExhausted(false)
 
     provider
-      .getCandles(request)
+      .loadInitial(opened - padding, closed + padding)
       .then((data) => {
-        if (!cancelled) setCandles(data)
+        if (cancelled) return
+        setCandles(data)
+        setExhausted(provider.exhausted)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load candles')
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Kerzen konnten nicht geladen werden')
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -100,7 +111,26 @@ export function useTradeCandles(
     return () => {
       cancelled = true
     }
-  }, [request, anchors])
+  }, [trade, tradeKey, interval, anchors])
 
-  return { candles, interval, loading, error }
+  const loadOlder = useCallback(() => {
+    const provider = providerRef.current
+    if (!provider || provider.exhausted) return
+    setLoadingHistory((busy) => {
+      if (busy) return busy
+      provider
+        .loadOlder()
+        .then((data) => {
+          setCandles(data)
+          setExhausted(provider.exhausted)
+        })
+        .catch(() => {
+          /* keep the existing window on failure */
+        })
+        .finally(() => setLoadingHistory(false))
+      return true
+    })
+  }, [])
+
+  return { candles, loading, loadingHistory, exhausted, error, loadOlder }
 }

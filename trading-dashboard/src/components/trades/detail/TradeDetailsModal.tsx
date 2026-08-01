@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { TradeChart } from '../../charts/TradeChart'
+import { TradeChart } from '../../charts/trade'
 import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
 import { PrototypeBanner } from '../../ui/PrototypeBanner'
-import { useTradeCandles } from '../../../hooks/useTradeCandles'
 import type { Trade } from '../../../types/trade'
 import { TradeNotes } from './TradeNotes'
 import { TradePerformance } from './TradePerformance'
@@ -22,7 +21,6 @@ interface TradeDetailsModalProps {
  */
 export function TradeDetailsModal({ trade, onClose }: TradeDetailsModalProps) {
   const [confirm, setConfirm] = useState<'primary' | 'edit' | null>(null)
-  const { candles, loading } = useTradeCandles(trade, '1h')
 
   if (!trade) return null
 
@@ -59,7 +57,7 @@ export function TradeDetailsModal({ trade, onClose }: TradeDetailsModalProps) {
         }
       >
         <div className="space-y-4">
-          <TradeChart trade={trade} candles={candles} loading={loading} />
+          <TradeChart trade={trade} />
 
           <div className="grid gap-4 xl:grid-cols-3">
             <div className="xl:col-span-2">
