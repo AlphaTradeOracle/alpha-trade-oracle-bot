@@ -1,135 +1,267 @@
 [
   {
+    "id": "1538",
+    "symbol": "ABTUSD",
+    "side": "SHORT",
+    "entry": 0.1725,
+    "mark": 0.1725,
+    "exit": null,
+    "stop": 0.1790682,
+    "upnl": null,
+    "realized": null,
+    "r": null,
+    "margin": 0.0,
+    "score": 20.4,
+    "status": "PENDING",
+    "openedAt": "2026-08-01T20:28:39.64777Z",
+    "closedAt": null,
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.1642357,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.1583027,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.1494032,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 7612.43567492,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h"
+  },
+  {
+    "id": "1537",
+    "symbol": "B3USDT",
+    "side": "SHORT",
+    "entry": 0.000465,
+    "mark": 0.000465,
+    "exit": null,
+    "stop": 0.00048903,
+    "upnl": null,
+    "realized": null,
+    "r": null,
+    "margin": 0.0,
+    "score": 23.3,
+    "status": "PENDING",
+    "openedAt": "2026-08-01T20:23:49.08757Z",
+    "closedAt": null,
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.00046069,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.00041693,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.00038603,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 2080303.17120724,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h"
+  },
+  {
+    "id": "1536",
+    "symbol": "SN3USDT",
+    "side": "SHORT",
+    "entry": 0.0002647,
+    "mark": 0.0002647,
+    "exit": null,
+    "stop": 0.00027745,
+    "upnl": null,
+    "realized": null,
+    "r": null,
+    "margin": 0.0,
+    "score": 24.9,
+    "status": "PENDING",
+    "openedAt": "2026-08-01T19:23:41.458593Z",
+    "closedAt": null,
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.00025013,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.00023921,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.00022282,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 3922383.41275356,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h"
+  },
+  {
+    "id": "1535",
+    "symbol": "APTUSDT",
+    "side": "SHORT",
+    "entry": 0.5518,
+    "mark": 0.5518,
+    "exit": null,
+    "stop": 0.55730116,
+    "upnl": null,
+    "realized": null,
+    "r": null,
+    "margin": 0.0,
+    "score": 24.2,
+    "status": "PENDING",
+    "openedAt": "2026-08-01T18:39:18.320485Z",
+    "closedAt": null,
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.54551296,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.54079769,
+        "size": 0.33,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.53372477,
+        "size": 0.33,
+        "hit": false
+      }
+    ],
+    "positionSize": 2718.37622327,
+    "leverage": 10.0,
+    "fees": 0.0,
+    "notes": "Waiting for retest \u00b7 TF 1h"
+  },
+  {
     "id": "1534",
     "symbol": "KAVAUSDT",
     "side": "SHORT",
-    "entry": 0.041,
-    "mark": 0.041,
+    "entry": 0.04112631,
+    "mark": null,
     "exit": null,
-    "stop": 0.04162735,
+    "stop": 0.04175366,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 22.95,
+    "margin": 150.0,
     "score": 23.6,
-    "status": "PENDING",
-    "openedAt": "2026-08-01T13:04:36Z",
+    "status": "OPEN",
+    "openedAt": "2026-08-01T14:00:00Z",
     "closedAt": null,
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.0405908,
+        "price": 0.04018528,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 0.03964467,
+        "price": 0.03955793,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 0.03879495,
+        "price": 0.03861691,
         "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 36585.36585366,
+    "positionSize": 36473.00333502,
     "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Waiting for retest \u00b7 TF 1h",
-    "entryZoneLow": 0.04093913,
-    "entryZoneHigh": 0.04106087
-  },
-  {
-    "id": "1533",
-    "symbol": "ASSETUSDT",
-    "side": "SHORT",
-    "entry": 0.2623,
-    "mark": 0.26214,
-    "exit": null,
-    "stop": 0.26503119,
-    "upnl": null,
-    "realized": null,
-    "r": null,
-    "margin": 15.62,
-    "score": 24.7,
-    "status": "PENDING",
-    "openedAt": "2026-08-01T12:58:12Z",
-    "closedAt": null,
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.25965891,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.25683761,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.25332608,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 5718.64277545,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Waiting for retest \u00b7 TF 1h",
-    "entryZoneLow": 0.26190983,
-    "entryZoneHigh": 0.26269017
+    "fees": 0.75,
+    "notes": "Retest filled \u00b7 TF 1h"
   },
   {
     "id": "1532",
     "symbol": "SKYUSDT",
     "side": "SHORT",
-    "entry": 0.05571,
-    "mark": 0.05593,
+    "entry": 0.05595,
+    "mark": null,
     "exit": null,
-    "stop": 0.05657474,
+    "stop": 0.05681474,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 23.28,
+    "margin": 150.0,
     "score": 19.9,
-    "status": "PENDING",
-    "openedAt": "2026-08-01T12:07:33Z",
+    "status": "OPEN",
+    "openedAt": "2026-08-01T13:00:00Z",
     "closedAt": null,
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
         "label": "TP1",
-        "price": 0.05550313,
+        "price": 0.05465289,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP2",
-        "price": 0.05386478,
+        "price": 0.05378815,
         "size": 0.33,
         "hit": false
       },
       {
         "label": "TP3",
-        "price": 0.05270337,
+        "price": 0.05249104,
         "size": 0.33,
         "hit": false
       }
     ],
-    "positionSize": 26925.14808831,
+    "positionSize": 26809.65147453,
     "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Waiting for retest \u00b7 TF 1h",
-    "entryZoneLow": 0.05561954,
-    "entryZoneHigh": 0.05580046
+    "fees": 0.75,
+    "notes": "Retest filled \u00b7 TF 1h"
   },
   {
     "id": "1530",
@@ -146,7 +278,9 @@
     "score": 24.7,
     "status": "CLOSED",
     "openedAt": "2026-08-01T10:00:00Z",
-    "closedAt": "2026-08-01T11:23:33Z",
+    "closedAt": "2026-08-01T11:23:33.536724Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -178,17 +312,19 @@
     "symbol": "HYPEUSDT",
     "side": "SHORT",
     "entry": 52.20262662,
-    "mark": 52.156,
-    "exit": null,
+    "mark": null,
+    "exit": 52.197,
     "stop": 53.14801152,
-    "upnl": 1.34,
-    "realized": null,
-    "r": 0.05,
-    "margin": 150.0,
+    "upnl": null,
+    "realized": -0.59,
+    "r": -0.02,
+    "margin": 0.0,
     "score": 23.1,
-    "status": "OPEN",
+    "status": "CLOSED",
     "openedAt": "2026-08-01T09:00:00Z",
-    "closedAt": null,
+    "closedAt": "2026-08-01T21:03:34.037202Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -212,67 +348,27 @@
     ],
     "positionSize": 28.73418633,
     "leverage": 10.0,
-    "fees": 0.75,
-    "notes": "Retest filled \u00b7 TF 1h"
-  },
-  {
-    "id": "1529",
-    "symbol": "KAVAUSDT",
-    "side": "SHORT",
-    "entry": 0.04129,
-    "mark": null,
-    "exit": null,
-    "stop": 0.04159462,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 24.0,
-    "status": "CLOSED",
-    "openedAt": "2026-08-01T04:04:28Z",
-    "closedAt": "2026-08-01T12:03:33Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.04094186,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.04068075,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.0402891,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 36328.40881569,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+    "fees": 1.5,
+    "notes": "Early Scratch \u00b7 TF 1h"
   },
   {
     "id": "1525",
     "symbol": "VANAUSDT",
     "side": "SHORT",
     "entry": 0.89907295,
-    "mark": 0.895,
+    "mark": null,
     "exit": null,
     "stop": 0.91880545,
-    "upnl": 6.8,
+    "upnl": null,
     "realized": null,
-    "r": 0.21,
+    "r": null,
     "margin": 150.0,
     "score": 25.0,
     "status": "OPEN",
     "openedAt": "2026-08-01T02:00:00Z",
     "closedAt": null,
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -300,106 +396,24 @@
     "notes": "Retest filled \u00b7 TF 1h"
   },
   {
-    "id": "1528",
-    "symbol": "HYPEUSDT",
-    "side": "SHORT",
-    "entry": 52.575,
-    "mark": null,
-    "exit": null,
-    "stop": 54.3664275,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 24.2,
-    "status": "CLOSED",
-    "openedAt": "2026-08-01T00:38:12Z",
-    "closedAt": "2026-08-01T08:03:33Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 51.985862,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 48.67976897,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 46.2426296,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 27.9107025,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
-  },
-  {
-    "id": "1527",
-    "symbol": "XCNUSDT",
-    "side": "SHORT",
-    "entry": 0.00308,
-    "mark": null,
-    "exit": null,
-    "stop": 0.00313606,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 22.6,
-    "status": "CLOSED",
-    "openedAt": "2026-08-01T00:35:25Z",
-    "closedAt": "2026-08-01T08:03:32Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.00305858,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.00296788,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.0028958,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 487012.98701299,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
-  },
-  {
     "id": "1526",
     "symbol": "ALEOUSD",
     "side": "SHORT",
     "entry": 0.017,
-    "mark": 0.0169,
+    "mark": 0.017,
     "exit": null,
     "stop": 0.01731408,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 27.71,
+    "margin": 0.0,
     "score": 22.8,
     "status": "PENDING",
-    "openedAt": "2026-08-01T00:28:37Z",
+    "openedAt": "2026-08-01T00:28:37.238433Z",
     "closedAt": null,
-    "strategy": "Downtrend Continuation",
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
     "takeProfits": [
       {
         "label": "TP1",
@@ -423,93 +437,7 @@
     "positionSize": 88235.29411765,
     "leverage": 10.0,
     "fees": 0.0,
-    "notes": "Waiting for retest \u00b7 TF 1h",
-    "entryZoneLow": 0.01695513,
-    "entryZoneHigh": 0.01704487
-  },
-  {
-    "id": "1524",
-    "symbol": "XDCUSDT",
-    "side": "SHORT",
-    "entry": 0.02608,
-    "mark": null,
-    "exit": null,
-    "stop": 0.02644962,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 24.4,
-    "status": "CLOSED",
-    "openedAt": "2026-07-31T21:55:07Z",
-    "closedAt": "2026-08-01T05:03:33Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.02601897,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.02526305,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.02475452,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 57515.33742331,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
-  },
-  {
-    "id": "1523",
-    "symbol": "KAVAUSDT",
-    "side": "SHORT",
-    "entry": 0.04149,
-    "mark": null,
-    "exit": null,
-    "stop": 0.04194826,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 23.2,
-    "status": "CLOSED",
-    "openedAt": "2026-07-31T19:06:08Z",
-    "closedAt": "2026-08-01T03:08:32Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.04141203,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.04057348,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.03998429,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 36153.28994939,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 Pending expired \u00b7 TF 1h"
+    "notes": "Waiting for retest \u00b7 TF 1h"
   },
   {
     "id": "1520",
@@ -526,7 +454,9 @@
     "score": 20.7,
     "status": "CLOSED",
     "openedAt": "2026-07-31T18:00:00Z",
-    "closedAt": "2026-08-01T01:28:34Z",
+    "closedAt": "2026-08-01T01:28:34.092578Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -554,63 +484,23 @@
     "notes": "Stop Loss \u00b7 TF 1h"
   },
   {
-    "id": "1522",
-    "symbol": "BATUSDT",
-    "side": "SHORT",
-    "entry": 0.0643,
-    "mark": null,
-    "exit": null,
-    "stop": 0.06503524,
-    "upnl": null,
-    "realized": 0.0,
-    "r": 0.0,
-    "margin": 0.0,
-    "score": 21.1,
-    "status": "CLOSED",
-    "openedAt": "2026-07-31T17:49:35Z",
-    "closedAt": "2026-08-01T00:08:19Z",
-    "strategy": "Downtrend Continuation",
-    "takeProfits": [
-      {
-        "label": "TP1",
-        "price": 0.06345972,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP2",
-        "price": 0.06282951,
-        "size": 0.33,
-        "hit": false
-      },
-      {
-        "label": "TP3",
-        "price": 0.0618842,
-        "size": 0.33,
-        "hit": false
-      }
-    ],
-    "positionSize": 23328.14930016,
-    "leverage": 10.0,
-    "fees": 0.0,
-    "notes": "Retest skipped \u00b7 SL before retest \u00b7 TF 1h"
-  },
-  {
     "id": "1521",
     "symbol": "ATOMUSDT",
     "side": "SHORT",
     "entry": 1.24082465,
-    "mark": 1.233,
-    "exit": null,
+    "mark": null,
+    "exit": 1.2335,
     "stop": 1.25722082,
-    "upnl": 9.46,
-    "realized": null,
-    "r": 0.48,
-    "margin": 150.0,
+    "upnl": null,
+    "realized": 8.11,
+    "r": 0.41,
+    "margin": 0.0,
     "score": 24.7,
-    "status": "OPEN",
+    "status": "CLOSED",
     "openedAt": "2026-07-31T17:00:00Z",
-    "closedAt": null,
+    "closedAt": "2026-08-01T17:08:33.210085Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -634,8 +524,8 @@
     ],
     "positionSize": 1208.87347318,
     "leverage": 10.0,
-    "fees": 0.75,
-    "notes": "Retest filled \u00b7 TF 1h"
+    "fees": 1.5,
+    "notes": "Expired \u00b7 TF 1h"
   },
   {
     "id": "1518",
@@ -652,7 +542,9 @@
     "score": 18.1,
     "status": "CLOSED",
     "openedAt": "2026-07-31T17:00:00Z",
-    "closedAt": "2026-08-01T03:08:37Z",
+    "closedAt": "2026-08-01T03:08:37.505253Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
     "strategy": "Downtrend Continuation",
     "takeProfits": [
       {
@@ -684,18 +576,20 @@
     "symbol": "KTAUSD",
     "side": "SHORT",
     "entry": 0.1042,
-    "mark": 0.1071,
+    "mark": 0.1042,
     "exit": null,
     "stop": 0.10761118,
     "upnl": null,
     "realized": null,
     "r": null,
-    "margin": 49.11,
+    "margin": 0.0,
     "score": 23.2,
     "status": "PENDING",
-    "openedAt": "2026-07-31T16:32:35Z",
+    "openedAt": "2026-07-31T16:32:35.022738Z",
     "closedAt": null,
-    "strategy": "Downtrend Continuation",
+    "entryZoneLow": 0.55,
+    "entryZoneHigh": 1.0,
+    "strategy": "Retest Entry",
     "takeProfits": [
       {
         "label": "TP1",
@@ -719,8 +613,6 @@
     "positionSize": 14395.39347409,
     "leverage": 10.0,
     "fees": 0.0,
-    "notes": "Waiting for retest \u00b7 TF 1h",
-    "entryZoneLow": 0.10371761,
-    "entryZoneHigh": 0.10468239
+    "notes": "Waiting for retest \u00b7 TF 1h"
   }
 ]
