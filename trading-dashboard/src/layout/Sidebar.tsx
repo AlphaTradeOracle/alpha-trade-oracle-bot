@@ -7,6 +7,7 @@ import {
   Hourglass,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { BrandLockup } from '../components/brand/BrandLockup'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -25,15 +26,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-full w-[240px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/90 backdrop-blur">
       <div className="border-b border-[var(--color-border-subtle)] px-5 py-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-            <span className="text-sm font-bold text-[var(--color-long)]">A</span>
-          </div>
-          <div>
-            <p className="text-sm font-semibold tracking-tight">Alpha Desk</p>
-            <p className="text-[11px] text-[var(--color-text-muted)]">Local trading console</p>
-          </div>
-        </div>
+        <BrandLockup size={40} />
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-3">

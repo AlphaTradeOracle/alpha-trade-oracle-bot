@@ -17,14 +17,34 @@ App: [http://127.0.0.1:5173](http://127.0.0.1:5173)
 
 ```
 src/
-  components/   KPI, Charts, Trade-Tabellen, Badges
+  components/   KPI, Charts, Trade-Tabellen, Badges, Brand, Icons, UI
   pages/        Dashboard, Open, Pending, Closed, Analytics, Settings
-  layout/       AppShell + Sidebar
-  hooks/        useTrades / usePortfolio / useTradeFilters
+  layout/       AppShell + Sidebar + Footer
+  hooks/        useTrades / usePortfolio / useTradeFilters / useSettings
   types/        Domain-Interfaces
+  config/       branding.ts, socialLinks.ts
   data/         Mock JSON (API-ready)
   utils/        Format, Score, Filter
 ```
+
+## Logo austauschen
+
+Eigene Datei nach `public/brand/logo.png` legen — fertig.
+Pfad und Projektname stehen zentral in `src/config/branding.ts`;
+solange keine Datei vorhanden ist, greift `logo-fallback.svg`.
+
+## Social Links
+
+Alle Links zentral in `src/config/socialLinks.ts` (aktuell Platzhalter `#`).
+
+## Statische Vorschau
+
+```bash
+npm run build
+python3 scripts/serve-static.py 5173
+```
+
+Der Server liefert `dist/` inkl. SPA-Fallback, damit Deep Links funktionieren.
 
 ## Spätere API-Anbindung
 

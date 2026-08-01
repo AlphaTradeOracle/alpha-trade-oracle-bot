@@ -1,6 +1,8 @@
 import { Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { BrandLockup } from '../components/brand/BrandLockup'
+import { Footer } from './Footer'
 import { Sidebar } from './Sidebar'
 
 export function AppShell() {
@@ -38,14 +40,22 @@ export function AppShell() {
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <p className="text-sm font-semibold">Alpha Desk</p>
+          <BrandLockup size={28} />
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
-            <Outlet />
-          </div>
-        </main>
+        {/*
+          Sticky footer: the scroll container is a column flex box, the content
+          area grows, so the footer sits at the viewport bottom on short pages
+          and directly below the content on long ones.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <main className="flex-1">
+            <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+              <Outlet />
+            </div>
+          </main>
+          <Footer />
+        </div>
       </div>
     </div>
   )
