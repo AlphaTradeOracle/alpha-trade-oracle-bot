@@ -67,6 +67,17 @@ class DeskEquityPoint(BaseModel):
     equity: float
 
 
+class DeskCandle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float | None = None
+
+
 class DeskSnapshot(BaseModel):
     """One-shot payload for dashboard load/refresh."""
 

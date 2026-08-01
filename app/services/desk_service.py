@@ -281,33 +281,41 @@ def build_equity_curve(
     *,
     initial_balance: float,
     fills: list[PaperFill] | list[dict[str, Any]],
+    live_equity: float | None = None,
+    start_at: datetime | None = None,
+    as_of: datetime | None = None,
 ) -> list[DeskEquityPoint]:
-    """Daily equity from cumulative fill PnL (entry fills contribute 0)."""
-    if not fills:
-        day = utc_now().date().isoformat()
-        return [DeskEquityPoint(t=day, equity=_round_money(initial_balance))]
+    """Fill-level equity curve ending at live mark-to-market equity."""
+    from app.charts.paper_equity_chart import build_equity_curve_points
 
-    running = float(initial_balance)
-    by_day: dict[str, float] = {}
+    now = as_of or utc_now()
+    fill_rows: list[tuple[datetime, float, float]] = []
     for fill in fills:
         if isinstance(fill, dict):
-            pnl = _f(fill.get("pnl"))
-            fee = _f(fill.get("fee"))
-            reason = str(fill.get("reason") or "")
             ts = fill.get("filled_at")
+            if ts is None:
+                continue
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            fill_rows.append((ts, _f(fill.get("pnl")), _f(fill.get("fee"))))
         else:
-            pnl = _f(fill.pnl)
-            fee = _f(fill.fee)
-            reason = fill.reason
-            ts = fill.filled_at
-        if reason.lower() == "entry":
-            # Entry fee is already in position.fees / cash path; keep curve simple: net pnl only.
-            running -= fee
-        else:
-            running += pnl
-        day = _iso(ts) or utc_now().isoformat()
-        by_day[day[:10]] = _round_money(running)
-    return [DeskEquityPoint(t=day, equity=eq) for day, eq in sorted(by_day.items())]
+            fill_rows.append((fill.filled_at, _f(fill.pnl), _f(fill.fee)))
+
+    curve_start = start_at or now
+    if fill_rows and fill_rows[0][0] < curve_start:
+        curve_start = fill_rows[0][0]
+    live = float(live_equity) if live_equity is not None else float(initial_balance)
+    points = build_equity_curve_points(
+        initial=float(initial_balance),
+        start_at=curve_start,
+        fills=fill_rows,
+        as_of=now,
+        live_equity=live,
+    )
+    return [
+        DeskEquityPoint(t=_iso(at) or now.isoformat(), equity=_round_money(eq))
+        for at, eq in points
+    ]
 
 
 class DeskService:
@@ -366,10 +374,16 @@ class DeskService:
             equityChangePct=0.0,
             realizedChangePct=0.0,
         )
+        start_at = getattr(account, "created_at", None) or utc_now()
         return DeskSnapshot(
             portfolio=portfolio,
             trades=trades,
-            equity=build_equity_curve(initial_balance=initial, fills=fills),
+            equity=build_equity_curve(
+                initial_balance=initial,
+                fills=fills,
+                live_equity=equity,
+                start_at=start_at,
+            ),
             generatedAt=_iso(utc_now()) or utc_now().isoformat(),
         )
 
@@ -426,6 +440,10 @@ def map_raw_export_to_snapshot(payload: dict[str, Any]) -> DeskSnapshot:
     return DeskSnapshot(
         portfolio=portfolio,
         trades=trades,
-        equity=build_equity_curve(initial_balance=initial, fills=fills),
+        equity=build_equity_curve(
+            initial_balance=initial,
+            fills=fills,
+            live_equity=equity,
+        ),
         generatedAt=_iso(utc_now()) or utc_now().isoformat(),
     )
