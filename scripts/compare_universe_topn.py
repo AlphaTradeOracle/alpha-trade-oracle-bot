@@ -198,7 +198,7 @@ async def main() -> int:
 
     print(
         f"Compare universe ranks 1-{args.top} · {args.days}d · {args.timeframe} · "
-        f"baseline-only · workers={args.workers} · by-rank (no in_universe) · "
+        f"baseline-only · workers={args.workers} · in_universe top-N by rank · "
         f"{start.date()} → {end.date()} · symbols={len(symbols)}",
         file=sys.stderr,
         flush=True,
@@ -257,10 +257,12 @@ async def main() -> int:
                     flush=True,
                 )
 
+    # Rank-buckets plus full loaded universe (ranks may exceed 500 via fill-down).
     buckets_raw = {
         "1-300": _bucket_rows(rows, 1, 300),
         "301-500": _bucket_rows(rows, 301, 500),
         "1-500": _bucket_rows(rows, 1, 500),
+        "universe-top": [r for r in rows if "error" not in r],
     }
     buckets = {name: _enrich(_aggregate(bucket_rows)) for name, bucket_rows in buckets_raw.items()}
     recommendation = _recommendation(buckets)
