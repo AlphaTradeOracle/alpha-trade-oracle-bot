@@ -78,8 +78,8 @@ class TestSignalMessage:
     def test_contains_core_signal_fields(self) -> None:
         message = format_signal_message(make_result())
         plain = message.replace("\\", "")
-        assert "Alpha Trade Oracle" in plain
-        assert plain.index("Alpha Trade Oracle") < plain.index("BTC/USDT")
+        assert "Alpha Trade Oracle" not in plain
+        assert plain.lstrip().startswith("BTC/USDT")
         assert "BTC/USDT" in message
         assert "LONG" in message
         assert "Confidence: 72/100" in message
@@ -206,12 +206,12 @@ class TestCaptionSplit:
         assert caption == "hello"
         assert body is None
 
-    def test_long_text_keeps_brand_in_caption(self) -> None:
-        head = "*Alpha Trade Oracle*\n*UNI/USDT* · *STRONG SHORT*\nConfidence: 78/100\n"
+    def test_long_text_keeps_head_in_caption(self) -> None:
+        head = "*UNI/USDT* · *STRONG SHORT*\nConfidence: 78/100\n"
         text = head + ("x" * 1200)
         caption, body = split_caption_and_body(text, caption_limit=200)
         assert caption is not None
-        assert "Alpha Trade Oracle" in caption
+        assert "UNI/USDT" in caption
         assert body is not None
         assert len(caption) <= 200
 

@@ -86,7 +86,6 @@ def format_signal_message(
     symbol_label = _pretty_symbol(result.symbol)
     direction = _DIRECTION_LABELS[result.direction]
     lines: list[str] = [
-        f"*{escape_markdown_v2('Alpha Trade Oracle')}*",
         f"*{escape_markdown_v2(symbol_label)}* · *{escape_markdown_v2(direction)}*",
         escape_markdown_v2(f"Confidence: {result.score:.0f}/100"),
     ]
@@ -243,8 +242,8 @@ def split_caption_and_body(
     """Text fuer Photo-Caption aufteilen.
 
     Passt alles in die Caption, gibt ``(caption, None)`` zurueck.
-    Sonst Kopf (inkl. Brand-Zeile) als Caption, Rest als Folgemessage —
-    damit unter dem Chart immer ``Alpha Trade Oracle`` sichtbar bleibt.
+    Sonst Kopf der Nachricht als Caption, Rest als Folgemessage —
+    damit Pair/Direction/Levels unter dem Chart sichtbar bleiben.
     """
     if len(text) <= caption_limit:
         return text, None
