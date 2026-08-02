@@ -40,7 +40,6 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       value: formatMoney(p.equity),
       icon: TrendingUp,
       tone: toneFromNumber(p.equity - p.totalCapital),
-      deltaPct: p.equityChangePct,
     },
     {
       title: 'Total Return',
@@ -78,7 +77,6 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       value: formatSignedMoney(p.realizedPnl),
       icon: CircleDollarSign,
       tone: toneFromNumber(p.realizedPnl),
-      deltaPct: p.realizedChangePct,
     },
     {
       title: 'Open Positions',
