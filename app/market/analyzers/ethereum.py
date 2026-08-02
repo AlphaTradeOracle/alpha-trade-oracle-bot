@@ -55,7 +55,9 @@ class EthereumAnalyzer:
             score += 15 if ind.macd_histogram > 0 else -15
 
         # Relative strength vs BTC when both closes present in metrics bag
-        btc_df = frames.get("btc_4h") or frames.get("BTCUSDT_4h")
+        btc_df = frames.get("btc_4h")
+        if btc_df is None:
+            btc_df = frames.get("BTCUSDT_4h")
         rel = None
         if btc_df is not None and len(btc_df) >= 20 and len(df) >= 20:
             eth_ret = float(df["close"].iloc[-1] / df["close"].iloc[-20] - 1.0)
