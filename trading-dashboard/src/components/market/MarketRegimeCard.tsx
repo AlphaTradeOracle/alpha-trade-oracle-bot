@@ -1,4 +1,6 @@
+import { getMarketTooltip } from '../../config/marketTooltips'
 import type { MarketRegimeSnapshot } from '../../types/trade'
+import { Tooltip } from '../ui/Tooltip'
 
 type Tone = 'neutral' | 'positive' | 'negative' | 'accent'
 
@@ -158,22 +160,28 @@ export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
         </p>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        {metrics.map((m) => (
-          <div
-            key={m.label}
-            className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg bg-[var(--color-surface-hover)]/55 px-2 py-3 text-center"
-          >
-            <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-              {m.label}
-            </dt>
-            <dd
-              className={`w-full truncate text-sm font-semibold tabular tracking-tight ${valueToneClass[m.tone ?? 'neutral']}`}
-            >
-              {m.value}
-            </dd>
-          </div>
-        ))}
+      <dl className="mt-4 grid grid-cols-2 gap-2 overflow-visible sm:grid-cols-4 sm:gap-3">
+        {metrics.map((m) => {
+          const tip = getMarketTooltip(m.label)
+          const tile = (
+            <div className="flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg bg-[var(--color-surface-hover)]/55 px-2 py-3 text-center">
+              <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+                {m.label}
+              </dt>
+              <dd
+                className={`w-full truncate text-sm font-semibold tabular tracking-tight ${valueToneClass[m.tone ?? 'neutral']}`}
+              >
+                {m.value}
+              </dd>
+            </div>
+          )
+          if (!tip) return <div key={m.label}>{tile}</div>
+          return (
+            <Tooltip key={m.label} content={tip}>
+              {tile}
+            </Tooltip>
+          )
+        })}
       </dl>
     </section>
   )
