@@ -3,6 +3,7 @@ import { EquityChart } from '../components/charts/EquityChart'
 import { EquityDetailsModal } from '../components/equity'
 import { KpiGrid } from '../components/kpi/KpiGrid'
 import { MarketRegimeCard } from '../components/market/MarketRegimeCard'
+import { TopCoinsBanner } from '../components/market/TopCoinsBanner'
 import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
 import { OpenTradesTable } from '../components/trades/OpenTradesTable'
 import { PendingTradesTable } from '../components/trades/PendingTradesTable'
@@ -32,6 +33,8 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <TopCoinsBanner />
+
       <PageHeader
         title="Trading Dashboard"
         subtitle="Überblick über Kapital, offene Positionen und Handelshistorie"

@@ -42,9 +42,11 @@ export interface Trade {
   /** Exit fill price when CLOSED */
   exit: number | null
   stop: number
+  /** Live managed stop (may differ from strategic stop after BE) */
+  currentStop?: number | null
   /** Unrealized PnL in quote currency (OPEN) */
   upnl: number | null
-  /** Realized PnL in quote currency (CLOSED) */
+  /** Realized PnL in quote currency (CLOSED or OPEN partials) */
   realized: number | null
   /** R-multiple vs initial risk */
   r: number | null
@@ -67,8 +69,10 @@ export interface Trade {
   takeProfits?: TakeProfit[]
   /** Position size in base asset (coins) */
   positionSize?: number
-  /** Entry notional in quote currency (margin × leverage) */
+  /** Quote notional for displayed size (remaining when OPEN) */
   notional?: number
+  /** Entry notional before scale-out */
+  initialNotional?: number
   /** Applied leverage multiplier */
   leverage?: number
   /** Trading fees paid in quote currency */
@@ -184,6 +188,10 @@ export interface PortfolioSnapshot {
   marginLocked: number
   /** Sum of closed realized PnL */
   realizedPnl: number
+  /** Scale-out profits still on OPEN rows */
+  openRealizedPnl?: number
+  /** Account ledger realized (closed + open partials) */
+  accountRealizedPnl?: number
   /** Sum of open unrealized PnL */
   openUpnl: number
   /** Open R exposure (sum of open R) */

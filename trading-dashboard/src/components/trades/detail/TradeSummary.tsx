@@ -47,6 +47,12 @@ export function TradeSummary({ trade }: TradeSummaryProps) {
         <DetailField label="Stop Loss">
           <span className="text-[var(--color-short)]">{formatPrice(trade.stop)}</span>
         </DetailField>
+        {trade.currentStop != null &&
+        Math.abs(trade.currentStop - trade.stop) > 1e-12 ? (
+          <DetailField label="Current Stop">
+            <span className="text-[var(--color-warn)]">{formatPrice(trade.currentStop)}</span>
+          </DetailField>
+        ) : null}
         <DetailField label="Risk / Unit">{formatPrice(risk)}</DetailField>
         <DetailField label="Reward / Unit">{reward != null ? formatPrice(reward) : '—'}</DetailField>
 

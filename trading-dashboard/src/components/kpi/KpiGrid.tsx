@@ -42,6 +42,18 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       tone: toneFromNumber(p.equity - p.totalCapital),
     },
     {
+      title: 'Cash',
+      value: formatMoney(p.cash),
+      icon: Wallet,
+      tone: 'accent' as KpiTone,
+    },
+    {
+      title: 'Realized PnL',
+      value: formatSignedMoney(p.realizedPnl),
+      icon: CircleDollarSign,
+      tone: toneFromNumber(p.realizedPnl),
+    },
+    {
       title: 'Total Return',
       value: formatPct(p.totalReturnPct),
       icon: Percent,
@@ -61,22 +73,10 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
         p.winRatePct != null ? toneFromNumber(p.winRatePct - 50) : ('neutral' as KpiTone),
     },
     {
-      title: 'Cash',
-      value: formatMoney(p.cash),
-      icon: Wallet,
-      tone: 'accent' as KpiTone,
-    },
-    {
       title: 'Margin Locked',
       value: formatMoney(p.marginLocked),
       icon: Lock,
       tone: 'neutral' as KpiTone,
-    },
-    {
-      title: 'Realized PnL',
-      value: formatSignedMoney(p.realizedPnl),
-      icon: CircleDollarSign,
-      tone: toneFromNumber(p.realizedPnl),
     },
     {
       title: 'Open Positions',
