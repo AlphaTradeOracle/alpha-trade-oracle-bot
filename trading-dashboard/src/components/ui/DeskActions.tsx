@@ -2,7 +2,7 @@ import { RefreshCw } from 'lucide-react'
 import { useDeskData } from '../../context/DeskDataContext'
 import { Button } from './Button'
 
-/** Manual desk refresh — live data also reloads on tab change and on a quiet interval. */
+/** Manual desk refresh — also polls quietly while the tab stays open. */
 export function DeskActions() {
   const { refresh, loading, error } = useDeskData()
 
@@ -11,7 +11,7 @@ export function DeskActions() {
       <Button
         variant="primary"
         onClick={() => void refresh()}
-        disabled={loading}
+        aria-busy={loading}
         className="min-w-[9.5rem] shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-accent)_35%,transparent),0_8px_20px_-12px_var(--color-accent)]"
         aria-label="Desk-Daten aktualisieren"
       >

@@ -21,9 +21,22 @@ const socials: SocialEntry[] = [
   { key: 'telegram', label: 'Telegram', Icon: TelegramIcon },
 ]
 
-/** Shared styling so the contact button matches the social icons exactly. */
+/**
+ * Shared icon chrome. Hover lift/accent only on real hover pointers —
+ * touch devices otherwise keep a sticky :hover “marked” look after tap.
+ */
 const iconButtonClass =
-  'group flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]'
+  [
+    'group flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg',
+    'border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)]',
+    'transition-colors duration-200',
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]',
+    'active:bg-[var(--color-surface-hover)]',
+    '[@media(hover:hover)_and_(pointer:fine)]:hover:-translate-y-0.5',
+    '[@media(hover:hover)_and_(pointer:fine)]:hover:border-[var(--color-accent)]/50',
+    '[@media(hover:hover)_and_(pointer:fine)]:hover:bg-[var(--color-accent-soft)]',
+    '[@media(hover:hover)_and_(pointer:fine)]:hover:text-[var(--color-accent)]',
+  ].join(' ')
 
 /** Risk notice + social bar. Rendered at the bottom of the app shell. */
 export function Footer() {
@@ -52,18 +65,28 @@ export function Footer() {
                 rel="noreferrer"
                 className={iconButtonClass}
               >
-                <Icon size={16} className="transition-transform duration-200 group-hover:scale-110" />
+                <Icon
+                  size={16}
+                  className="transition-transform duration-200 [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-110"
+                />
               </a>
             ))}
 
             <button
               type="button"
-              onClick={() => setContactOpen(true)}
+              onClick={(e) => {
+                setContactOpen(true)
+                // Drop sticky focus/hover chrome on touch after opening.
+                ;(e.currentTarget as HTMLButtonElement).blur()
+              }}
               aria-label="Kontakt"
               title="Kontakt"
               className={iconButtonClass}
             >
-              <Mail size={16} className="transition-transform duration-200 group-hover:scale-110" />
+              <Mail
+                size={16}
+                className="transition-transform duration-200 [@media(hover:hover)_and_(pointer:fine)]:group-hover:scale-110"
+              />
             </button>
           </nav>
         </div>

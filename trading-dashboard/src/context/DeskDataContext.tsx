@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useLocation } from 'react-router-dom'
 import equityFallback from '../data/equity.json'
 import portfolioFallback from '../data/portfolio.json'
 import tradesFallback from '../data/trades.json'
@@ -70,7 +69,6 @@ interface DeskDataValue {
 const DeskDataContext = createContext<DeskDataValue | null>(null)
 
 export function DeskDataProvider({ children }: { children: ReactNode }) {
-  const location = useLocation()
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(seedPortfolio)
   const [trades, setTrades] = useState<Trade[]>(seedTrades)
   const [equity, setEquity] = useState<EquityPoint[]>(
@@ -80,22 +78,35 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  /** Monotonic id so only the latest request may clear loading / write state. */
+  const requestId = useRef(0)
   const inFlight = useRef<AbortController | null>(null)
+  /** True while a non-silent (button / first load) refresh owns the spinner. */
+  const manualInFlight = useRef(false)
 
   const refresh = useCallback(async (options?: RefreshOptions) => {
+    const silent = Boolean(options?.silent)
+
+    // Background polls must not cancel / steal a visible refresh.
+    if (silent && manualInFlight.current) {
+      return
+    }
+
     inFlight.current?.abort()
     const controller = new AbortController()
     inFlight.current = controller
+    const id = ++requestId.current
 
-    const silent = Boolean(options?.silent)
     if (!silent) {
+      manualInFlight.current = true
       setLoading(true)
       setError(null)
     }
 
     try {
       const snap = await fetchDeskSnapshot(controller.signal)
-      if (controller.signal.aborted) return
+      if (id !== requestId.current) return
       setPortfolio(snap.portfolio)
       setTrades((snap.trades ?? []).filter(isBookTrade))
       setEquity(snap.equity ?? [])
@@ -103,21 +114,33 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
       setGeneratedAt(snap.generatedAt)
       setError(null)
     } catch (err) {
+      if (id !== requestId.current) return
       if (controller.signal.aborted) return
       setError(err instanceof Error ? err.message : 'Desk-Daten konnten nicht geladen werden.')
     } finally {
-      if (inFlight.current === controller) {
+      if (id === requestId.current) {
         inFlight.current = null
-        setLoading(false)
+        if (!silent) {
+          manualInFlight.current = false
+          setLoading(false)
+        } else if (!manualInFlight.current) {
+          // Keep spinner honest if a prior aborted manual left it up.
+          setLoading(false)
+        }
       }
     }
   }, [])
 
-  // First visit + every sidebar / route change.
+  // One initial load for the whole desk shell (shared across routes).
   useEffect(() => {
     void refresh()
-    return () => inFlight.current?.abort()
-  }, [location.pathname, refresh])
+    return () => {
+      requestId.current += 1
+      inFlight.current?.abort()
+      inFlight.current = null
+      manualInFlight.current = false
+    }
+  }, [refresh])
 
   // Background poll only while the browser tab is visible.
   useEffect(() => {
