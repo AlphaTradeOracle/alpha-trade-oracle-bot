@@ -25,7 +25,7 @@ upsert_env SIGNAL_SHORT_MAX_SCORE 25
 upsert_env SIGNAL_SHORT_MIN_SCORE 18
 
 echo "==> build + migrate + restart"
-docker compose build app worker
+docker compose build migrate app worker
 docker compose run --rm migrate
 docker compose up -d --no-deps app worker
 
