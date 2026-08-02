@@ -129,7 +129,6 @@ async def main() -> int:
                             use_multi_timeframe=not args.no_mtf,
                             short_max_score=SHORT_MAX,
                             short_min_score=floor,
-                            require_strong_signals=False,
                         )
                     overall = _pick(report.metrics.get("overall"))
                     short = _pick(report.metrics.get("short"))
