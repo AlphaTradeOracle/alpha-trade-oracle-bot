@@ -68,6 +68,9 @@ class Signal(Base, TimestampMixin):
     counter_arguments: Mapped[list[str] | None] = mapped_column(JSON_COLUMN, nullable=True)
     indicators_used: Mapped[list[str] | None] = mapped_column(JSON_COLUMN, nullable=True)
     llm_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Snapshot from MarketRegimeEngine (BTC bias, funding stubs, weights, …).
+    market_context: Mapped[dict[str, Any] | None] = mapped_column(JSON_COLUMN, nullable=True)
+    coin_score: Mapped[float | None] = mapped_column(SCORE, nullable=True)
 
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     is_dispatched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

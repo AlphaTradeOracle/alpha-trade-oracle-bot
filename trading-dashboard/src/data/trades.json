@@ -1,0 +1,239 @@
+[
+  {
+    "id": "1530",
+    "symbol": "NESUSDT",
+    "side": "SHORT",
+    "entry": 0.20734177,
+    "mark": null,
+    "exit": 0.2100377,
+    "stop": 0.2100377,
+    "upnl": null,
+    "realized": -20.26,
+    "r": -1.04,
+    "margin": 0.0,
+    "score": 24.7,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T10:00:00Z",
+    "closedAt": "2026-08-01T11:23:33.536724Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.20329788,
+        "size": 0.5,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.20060195,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.19655805,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 7234.43230293,
+    "leverage": 10.0,
+    "fees": 1.51,
+    "notes": "Stop Loss \u00b7 TF 1h",
+    "coinScore": 28.4,
+    "marketContext": {
+      "asof": "2026-08-01T10:00:00Z",
+      "overallBias": "bearish",
+      "marketScore": -36.2,
+      "btcPrice": 115420.0,
+      "btcBias": "bearish",
+      "btcTrend": "BEARISH",
+      "btcRsi": 42.1,
+      "btcEmaStatus": "below",
+      "btcVolatility": 2.4,
+      "btcDominance": null,
+      "usdtDominance": null,
+      "fearGreed": null,
+      "fundingRate": null,
+      "openInterest": null
+    }
+  },
+  {
+    "id": "1531",
+    "symbol": "HYPEUSDT",
+    "side": "SHORT",
+    "entry": 52.20262662,
+    "mark": null,
+    "exit": 52.197,
+    "stop": 53.14801152,
+    "upnl": null,
+    "realized": -0.59,
+    "r": -0.02,
+    "margin": 0.0,
+    "score": 23.1,
+    "status": "CLOSED",
+    "openedAt": "2026-08-01T09:00:00Z",
+    "closedAt": "2026-08-01T21:03:34.037202Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 50.78454927,
+        "size": 0.5,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 49.83916437,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 48.42108702,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 28.73418633,
+    "leverage": 10.0,
+    "fees": 1.5,
+    "notes": "Early Scratch \u00b7 TF 1h"
+  },
+  {
+    "id": "1520",
+    "symbol": "WUSDT",
+    "side": "SHORT",
+    "entry": 0.00802454,
+    "mark": null,
+    "exit": 0.0081664,
+    "stop": 0.0081664,
+    "upnl": null,
+    "realized": -27.28,
+    "r": -1.03,
+    "margin": 0.0,
+    "score": 20.7,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T18:00:00Z",
+    "closedAt": "2026-08-01T01:28:34.092578Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.00781175,
+        "size": 0.5,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.00766989,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.0074571,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 186926.55710216,
+    "leverage": 10.0,
+    "fees": 1.51,
+    "notes": "Stop Loss \u00b7 TF 1h"
+  },
+  {
+    "id": "1521",
+    "symbol": "ATOMUSDT",
+    "side": "SHORT",
+    "entry": 1.24082465,
+    "mark": null,
+    "exit": 1.2335,
+    "stop": 1.25722082,
+    "upnl": null,
+    "realized": 8.11,
+    "r": 0.41,
+    "margin": 0.0,
+    "score": 24.7,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T17:00:00Z",
+    "closedAt": "2026-08-01T17:08:33.210085Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 1.21623039,
+        "size": 0.5,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 1.19983422,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 1.17523997,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 1208.87347318,
+    "leverage": 10.0,
+    "fees": 1.5,
+    "notes": "Expired \u00b7 TF 1h"
+  },
+  {
+    "id": "1518",
+    "symbol": "IMXUSDT",
+    "side": "SHORT",
+    "entry": 0.10631754,
+    "mark": null,
+    "exit": 0.10887984,
+    "stop": 0.10887984,
+    "upnl": null,
+    "realized": -36.92,
+    "r": -1.02,
+    "margin": 0.0,
+    "score": 18.1,
+    "status": "CLOSED",
+    "openedAt": "2026-07-31T17:00:00Z",
+    "closedAt": "2026-08-01T03:08:37.505253Z",
+    "entryZoneLow": null,
+    "entryZoneHigh": null,
+    "strategy": "Downtrend Continuation",
+    "takeProfits": [
+      {
+        "label": "TP1",
+        "price": 0.10247409,
+        "size": 0.5,
+        "hit": false
+      },
+      {
+        "label": "TP2",
+        "price": 0.09991179,
+        "size": 0.25,
+        "hit": false
+      },
+      {
+        "label": "TP3",
+        "price": 0.09606834,
+        "size": 0.25,
+        "hit": false
+      }
+    ],
+    "positionSize": 14108.67898046,
+    "leverage": 10.0,
+    "fees": 1.52,
+    "notes": "Stop Loss \u00b7 TF 1h"
+  }
+]

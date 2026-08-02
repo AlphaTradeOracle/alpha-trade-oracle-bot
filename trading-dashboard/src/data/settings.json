@@ -1,0 +1,9 @@
+{
+  "exchange": "binance",
+  "refreshSeconds": 30,
+  "autoRefresh": false,
+  "discordWebhook": "",
+  "telegramEnabled": false,
+  "theme": "dark",
+  "defaultRiskR": 1
+}

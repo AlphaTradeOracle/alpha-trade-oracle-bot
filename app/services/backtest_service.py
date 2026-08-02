@@ -184,12 +184,55 @@ class BacktestService:
             )
             run_id = run.id
 
+        btc_frames: dict[str, object] = {}
+        eth_frames: dict[str, object] = {}
+        if config.market_regime_score_enabled and prefer_db and session is not None:
+            from app.repositories.asset_repository import AssetRepository
+
+            asset_repo = AssetRepository(session)
+            btc_symbol = self._settings.regime_btc_symbol.upper()
+            eth_symbol = self._settings.market_eth_symbol.upper()
+            btc_tfs = [
+                tf.strip()
+                for tf in self._settings.market_btc_timeframes.split(",")
+                if tf.strip() and tf.strip() != "1w"
+            ]
+            for tf in btc_tfs:
+                warmup_start = start_utc - timeframe_to_timedelta(tf) * WARMUP_CANDLES
+                series = await asset_repo.load_candle_series(
+                    btc_symbol,
+                    tf,
+                    start_time=warmup_start,
+                    end_time=end_utc,
+                    limit=100_000,
+                )
+                if series is not None and not series.is_empty:
+                    btc_frames[tf] = series.to_dataframe()
+            eth_warmup = start_utc - timeframe_to_timedelta("4h") * WARMUP_CANDLES
+            eth_series = await asset_repo.load_candle_series(
+                eth_symbol,
+                "4h",
+                start_time=eth_warmup,
+                end_time=end_utc,
+                limit=100_000,
+            )
+            if eth_series is not None and not eth_series.is_empty:
+                eth_frames["4h"] = eth_series.to_dataframe()
+
         try:
             engine = BacktestEngine(config)
             if config.use_multi_timeframe and len(mtf_frames) > 1:
-                outcome = engine.run(mtf_frames=mtf_frames)  # type: ignore[arg-type]
+                outcome = engine.run(
+                    mtf_frames=mtf_frames,  # type: ignore[arg-type]
+                    btc_frames=btc_frames or None,  # type: ignore[arg-type]
+                    eth_frames=eth_frames or None,  # type: ignore[arg-type]
+                )
             else:
-                outcome = engine.run(mtf_frames[timeframe])  # type: ignore[arg-type]
+                outcome = engine.run(
+                    mtf_frames[timeframe],  # type: ignore[arg-type]
+                    btc_frames=btc_frames or None,  # type: ignore[arg-type]
+                    eth_frames=eth_frames or None,  # type: ignore[arg-type]
+                )
             metrics = compute_metrics(outcome)
         except Exception as exc:
             if repository is not None and run_id is not None:

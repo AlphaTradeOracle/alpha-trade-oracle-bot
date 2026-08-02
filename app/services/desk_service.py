@@ -18,6 +18,8 @@ from app.models.paper import PaperFill, PaperPosition
 from app.repositories.paper_repository import PaperRepository
 from app.schemas.desk import (
     DeskEquityPoint,
+    DeskMarketContext,
+    DeskMarketRegime,
     DeskPortfolio,
     DeskSnapshot,
     DeskTakeProfit,
@@ -189,6 +191,8 @@ def map_position_to_desk_trade(
     fills: list[Any] | None = None,
     mark: float | None = None,
     scale_out: tuple[float, float, float] | None = None,
+    market_context: dict[str, Any] | None = None,
+    coin_score: float | None = None,
 ) -> DeskTrade | None:
     """Map one paper position. Returns ``None`` for cancelled / non-book rows."""
     if isinstance(position, dict):
@@ -209,6 +213,10 @@ def map_position_to_desk_trade(
         closed_at = position.get("closed_at")
         notes = position.get("notes")
         fill_list = fills
+        ctx = market_context or position.get("market_context") or position.get("marketContext")
+        cscore = coin_score if coin_score is not None else position.get("coin_score")
+        if cscore is None:
+            cscore = position.get("coinScore")
     else:
         status = position.status
         direction = position.direction
@@ -227,6 +235,8 @@ def map_position_to_desk_trade(
         closed_at = position.closed_at
         notes = position.notes
         fill_list = list(position.fills) if fills is None else fills
+        ctx = market_context
+        cscore = coin_score
 
     desk_status = desk_status_for(status)
     if desk_status is None:
@@ -260,6 +270,15 @@ def map_position_to_desk_trade(
     zone_lo, zone_hi = _parse_zone(str(notes) if notes else None)
     opened = _iso(opened_at) or utc_now().isoformat().replace("+00:00", "Z")
 
+    desk_ctx: DeskMarketContext | None = None
+    if isinstance(ctx, dict) and ctx:
+        # Prefer compact trade payload; strip nested full blob for the desk.
+        compact = {k: v for k, v in ctx.items() if k != "full"}
+        try:
+            desk_ctx = DeskMarketContext.model_validate(compact)
+        except Exception:  # noqa: BLE001
+            desk_ctx = None
+
     return DeskTrade(
         id=str(pos_id),
         symbol=symbol.upper(),
@@ -286,6 +305,8 @@ def map_position_to_desk_trade(
         leverage=leverage,
         fees=_round_money(fees),
         notes=_notes_for(position, desk_status),
+        marketContext=desk_ctx,
+        coinScore=float(cscore) if cscore is not None else None,
     )
 
 
@@ -341,6 +362,7 @@ class DeskService:
         session: AsyncSession,
         *,
         prices: dict[str, float] | None = None,
+        market_regime: DeskMarketRegime | None = None,
     ) -> DeskSnapshot:
         account = await self._paper.get_or_create_account(session)
         repo = PaperRepository(session)
@@ -348,14 +370,30 @@ class DeskService:
         fills = await repo.list_fills_for_account(account.id)
         summary = await self._paper.summary(session, prices=prices)
 
+        signal_ids = [p.signal_id for p in positions if p.signal_id is not None]
+        signal_ctx: dict[int, tuple[dict[str, Any] | None, float | None]] = {}
+        if signal_ids:
+            from app.models.signal import Signal
+
+            for sid in set(signal_ids):
+                sig = await session.get(Signal, sid)
+                if sig is not None:
+                    signal_ctx[sid] = (sig.market_context, sig.coin_score)
+
         marks = prices or {}
         trades: list[DeskTrade] = []
         open_upnl = 0.0
         open_r = 0.0
         for pos in positions:
+            ctx = None
+            cscore = None
+            if pos.signal_id is not None and pos.signal_id in signal_ctx:
+                ctx, cscore = signal_ctx[pos.signal_id]
             trade = map_position_to_desk_trade(
                 pos,
                 mark=marks.get(pos.symbol.upper()),
+                market_context=ctx,
+                coin_score=cscore,
             )
             if trade is None:
                 continue
@@ -397,6 +435,7 @@ class DeskService:
                 start_at=start_at,
             ),
             generatedAt=_iso(utc_now()) or utc_now().isoformat(),
+            marketRegime=market_regime,
         )
 
 
@@ -449,6 +488,14 @@ def map_raw_export_to_snapshot(payload: dict[str, Any]) -> DeskSnapshot:
         equityChangePct=0.0,
         realizedChangePct=0.0,
     )
+    regime_raw = payload.get("marketRegime") or payload.get("market_regime")
+    regime = None
+    if isinstance(regime_raw, dict):
+        try:
+            regime = DeskMarketRegime.model_validate(regime_raw)
+        except Exception:  # noqa: BLE001
+            regime = None
+
     return DeskSnapshot(
         portfolio=portfolio,
         trades=trades,
@@ -458,4 +505,5 @@ def map_raw_export_to_snapshot(payload: dict[str, Any]) -> DeskSnapshot:
             live_equity=equity,
         ),
         generatedAt=_iso(utc_now()) or utc_now().isoformat(),
+        marketRegime=regime,
     )

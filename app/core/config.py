@@ -127,6 +127,16 @@ class Settings(BaseSettings):
     regime_filter_enabled: bool = True
     regime_btc_symbol: str = "BTCUSDT"
     regime_timeframe: str = "4h"
+    #: Global Market Regime Filter — blendet Coin-Score mit Gesamtmarkt.
+    market_regime_score_enabled: bool = True
+    market_score_coin_weight: float = 0.60
+    market_score_market_weight: float = 0.25
+    market_score_funding_weight: float = 0.05
+    market_score_open_interest_weight: float = 0.05
+    market_score_liquidations_weight: float = 0.05
+    #: BTC Multi-TF fuer MarketRegimeEngine (Komma-getrennt).
+    market_btc_timeframes: str = "1h,4h,1d,1w"
+    market_eth_symbol: str = "ETHUSDT"
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 15

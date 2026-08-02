@@ -38,3 +38,4 @@ scripts/_vps_cleanup*.sh
 # Cursor VPS deploy key (never commit)
 .cursor/vps_deploy_key
 .cursor/vps_deploy_key.pub
+trading-dashboard/node_modules/
