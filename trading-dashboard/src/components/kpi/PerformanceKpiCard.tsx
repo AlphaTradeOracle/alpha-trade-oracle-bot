@@ -26,11 +26,11 @@ function formatWindowPct(pct: number | null): string {
 
 function WindowCell({ win }: { win: PerformanceWindow }) {
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+    <div className="flex flex-col items-center gap-1">
+      <dt className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         {win.label}
       </dt>
-      <dd className={`tabular text-[15px] font-semibold leading-none tracking-tight ${valueTone(win.pct)}`}>
+      <dd className={`tabular text-sm font-semibold leading-none tracking-tight ${valueTone(win.pct)}`}>
         {formatWindowPct(win.pct)}
       </dd>
     </div>
@@ -49,7 +49,7 @@ export function PerformanceKpiCard({ equity, loading = false }: PerformanceKpiCa
   const tip = getKpiTooltip('Performance')
 
   const card = (
-    <article className="panel relative flex h-[108px] w-full flex-col px-2.5 pb-2 pt-2 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
+    <article className="panel relative flex h-[108px] w-full flex-col px-3 pb-2 pt-2 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
       <span
         className="absolute right-2.5 top-2 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
         aria-hidden
@@ -59,11 +59,13 @@ export function PerformanceKpiCard({ equity, loading = false }: PerformanceKpiCa
       <p className="w-full shrink-0 px-7 text-center text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Performance
       </p>
-      <dl className="mt-1.5 grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-1">
-        {windows.map((win) => (
-          <WindowCell key={win.label} win={win} />
-        ))}
-      </dl>
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <dl className="grid w-full max-w-[11.5rem] grid-cols-2 gap-x-5 gap-y-2.5">
+          {windows.map((win) => (
+            <WindowCell key={win.label} win={win} />
+          ))}
+        </dl>
+      </div>
     </article>
   )
 
