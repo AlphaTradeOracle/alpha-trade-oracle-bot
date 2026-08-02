@@ -13,26 +13,10 @@ interface PerformanceKpiCardProps {
   loading?: boolean
 }
 
-function cellTone(pct: number | null): {
-  value: string
-  chip: string
-} {
-  if (pct == null || pct === 0) {
-    return {
-      value: 'text-[var(--color-text-secondary)]',
-      chip: 'bg-[var(--color-surface-hover)]/70',
-    }
-  }
-  if (pct > 0) {
-    return {
-      value: 'text-[var(--color-long)]',
-      chip: 'bg-[var(--color-long-soft)]',
-    }
-  }
-  return {
-    value: 'text-[var(--color-short)]',
-    chip: 'bg-[var(--color-short-soft)]',
-  }
+function valueTone(pct: number | null): string {
+  if (pct == null || pct === 0) return 'text-[var(--color-text-secondary)]'
+  if (pct > 0) return 'text-[var(--color-long)]'
+  return 'text-[var(--color-short)]'
 }
 
 function formatWindowPct(pct: number | null): string {
@@ -41,15 +25,12 @@ function formatWindowPct(pct: number | null): string {
 }
 
 function WindowCell({ win }: { win: PerformanceWindow }) {
-  const tone = cellTone(win.pct)
   return (
-    <div
-      className={`flex h-full min-h-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 ${tone.chip}`}
-    >
+    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1">
       <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
         {win.label}
       </dt>
-      <dd className={`tabular text-[15px] font-semibold leading-none tracking-tight ${tone.value}`}>
+      <dd className={`tabular text-[15px] font-semibold leading-none tracking-tight ${valueTone(win.pct)}`}>
         {formatWindowPct(win.pct)}
       </dd>
     </div>
@@ -78,7 +59,7 @@ export function PerformanceKpiCard({ equity, loading = false }: PerformanceKpiCa
       <p className="w-full shrink-0 px-7 text-center text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Performance
       </p>
-      <dl className="mt-1.5 grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-1.5">
+      <dl className="mt-1.5 grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-1">
         {windows.map((win) => (
           <WindowCell key={win.label} win={win} />
         ))}
