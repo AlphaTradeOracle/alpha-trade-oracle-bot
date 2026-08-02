@@ -71,13 +71,7 @@ export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
     {
       label: 'Liquidity Score',
       value:
-        regime.liquidityScore != null
-          ? `${fmtNum(regime.liquidityScore)}${
-              regime.liquidityVenues?.length
-                ? ` · ${regime.liquidityVenues.join('+')}`
-                : ''
-            }`
-          : '—',
+        regime.liquidityScore != null ? fmtNum(regime.liquidityScore) : '—',
     },
     { label: 'Global Score', value: fmtNum(regime.globalScore) },
   ]

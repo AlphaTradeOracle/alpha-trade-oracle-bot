@@ -59,9 +59,7 @@ export function TradeMarketContext({ trade }: TradeMarketContextProps) {
         </DetailField>
         <DetailField label="Liquidity Score">
           {liq.liquidityScore != null
-            ? `${fmt(liq.liquidityScore, 1)}${
-                liq.venues?.length ? ` · ${liq.venues.join('+')}` : ''
-              }`
+            ? fmt(liq.liquidityScore, 1)
             : liq.available
               ? fmt(liq.longUsd, 0)
               : '—'}
