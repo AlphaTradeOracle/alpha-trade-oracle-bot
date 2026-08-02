@@ -301,6 +301,8 @@ class TestRiskNormalizedSizing:
         assert sizing is not None
         assert float(sizing.margin) == pytest.approx(250.0)
         assert float(sizing.notional) == pytest.approx(2500.0)
+        # 1R := margin in fixed-margin mode (not qty×stop).
+        assert float(sizing.risk_amount) == pytest.approx(250.0)
 
 
 class TestPortfolioRiskLimits:

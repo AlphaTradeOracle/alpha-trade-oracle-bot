@@ -204,7 +204,9 @@ async def run_paper_update(
                 }
             else:
                 prices = await _collect_prices(provider, symbols, providers=providers)
-                updated = await paper.update_open_positions(session, prices)
+                updated = await paper.update_open_positions(
+                    session, prices, provider=provider, wick_timeframe="5m"
+                )
                 summary = {
                     "open_positions": len(open_positions),
                     "prices": len(prices),

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from app.services.desk_service import (
     desk_status_for,
     exit_fill_price,
@@ -139,6 +141,50 @@ def test_closed_with_exit_fill_mapped() -> None:
     assert trade.notional == 1000.0
     assert trade.stop == 110.0
     assert [tp.size for tp in trade.takeProfits] == [0.5, 0.25, 0.25]
+
+
+def test_open_after_scale_out_uses_original_stop_and_remaining_size() -> None:
+    trade = map_position_to_desk_trade(
+        {
+            "id": 9,
+            "symbol": "KASUSDT",
+            "direction": "SHORT",
+            "status": "open",
+            "entry_price": 0.02730527,
+            "stop_loss": 0.02755,
+            "current_stop": 0.02730527,
+            "take_profit_1": 0.026,
+            "take_profit_2": 0.025,
+            "take_profit_3": 0.024,
+            "initial_quantity": 91557.4288,
+            "remaining_quantity": 22889.3572,
+            "margin_used": 62.5,
+            "notional": 2500.0,
+            "realized_pnl": 28.6,
+            "fees": 1.5,
+            "risk_amount": 250.0,
+            "signal_score": 23.7,
+            "leverage": 10.0,
+            "exit_reason": None,
+            "timeframe": "1h",
+            "opened_at": "2026-08-01T12:00:00+00:00",
+            "closed_at": None,
+            "notes": "retest_filled",
+            "tp1_filled": True,
+            "tp2_filled": True,
+            "tp3_filled": False,
+        },
+        mark=0.0268,
+    )
+    assert trade is not None
+    assert trade.status == "OPEN"
+    assert trade.stop == 0.02755
+    assert trade.currentStop == 0.02730527
+    assert trade.positionSize == pytest.approx(22889.3572)
+    assert trade.notional == pytest.approx(625.0)
+    assert trade.initialNotional == pytest.approx(2500.0)
+    assert trade.realized == pytest.approx(28.6)
+    assert trade.r is not None
 
 
 def test_exit_fill_price_picks_last_non_entry() -> None:

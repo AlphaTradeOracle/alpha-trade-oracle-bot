@@ -6,7 +6,7 @@ Cancelled / retest-skipped positions are never exposed as CLOSED trades.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -380,6 +380,63 @@ def build_equity_curve(
     ]
 
 
+def _parse_desk_ts(value: str | datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    text = str(value).replace("Z", "+00:00")
+    try:
+        ts = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+
+
+def equity_change_pct(
+    points: list[DeskEquityPoint], *, hours: float = 24.0, as_of: datetime | None = None
+) -> float:
+    """Percent equity change vs the last curve point at/before ``hours`` ago."""
+    if len(points) < 2:
+        return 0.0
+    now = as_of or utc_now()
+    cutoff = now - timedelta(hours=hours)
+    baseline = points[0].equity
+    for point in points:
+        ts = _parse_desk_ts(point.t)
+        if ts is not None and ts <= cutoff:
+            baseline = point.equity
+    if abs(baseline) < 1e-12:
+        return 0.0
+    return round(((points[-1].equity - baseline) / abs(baseline)) * 100.0, 2)
+
+
+def realized_change_pct(
+    fills: list[PaperFill] | list[dict[str, Any]],
+    *,
+    initial_balance: float,
+    hours: float = 24.0,
+    as_of: datetime | None = None,
+) -> float:
+    """Net fill PnL over the window as percent of starting capital."""
+    if initial_balance <= 0:
+        return 0.0
+    now = as_of or utc_now()
+    cutoff = now - timedelta(hours=hours)
+    total = 0.0
+    for fill in fills:
+        if isinstance(fill, dict):
+            ts = _parse_desk_ts(fill.get("filled_at"))
+            pnl = _f(fill.get("pnl"))
+        else:
+            ts = _parse_desk_ts(fill.filled_at)
+            pnl = _f(fill.pnl)
+        if ts is None or ts < cutoff:
+            continue
+        total += pnl
+    return round((total / initial_balance) * 100.0, 2)
+
+
 class DeskService:
     """Build public desk snapshots from the paper ledger."""
 
@@ -430,6 +487,12 @@ class DeskService:
         # Equity curve: start at first fill when present (avoid flat pre-reset pad).
         fill_times = [f.filled_at for f in fills if getattr(f, "filled_at", None) is not None]
         start_at = min(fill_times) if fill_times else (getattr(account, "created_at", None) or utc_now())
+        curve = build_equity_curve(
+            initial_balance=initial,
+            fills=fills,
+            live_equity=equity,
+            start_at=start_at,
+        )
         portfolio = DeskPortfolio(
             totalCapital=_round_money(initial),
             equity=_round_money(equity),
@@ -445,8 +508,10 @@ class DeskService:
             pendingOrders=int(summary.pending_positions),
             closedTrades=int(summary.closed_trades),
             winRatePct=round(float(summary.win_rate) * 100.0, 1),
-            equityChangePct=0.0,
-            realizedChangePct=0.0,
+            equityChangePct=equity_change_pct(curve, hours=24.0),
+            realizedChangePct=realized_change_pct(
+                fills, initial_balance=initial, hours=24.0
+            ),
         )
         regime_out: DeskMarketRegime | None = None
         if isinstance(market_regime, DeskMarketRegime):
@@ -460,12 +525,7 @@ class DeskService:
         return DeskSnapshot(
             portfolio=portfolio,
             trades=trades,
-            equity=build_equity_curve(
-                initial_balance=initial,
-                fills=fills,
-                live_equity=equity,
-                start_at=start_at,
-            ),
+            equity=curve,
             generatedAt=_iso(utc_now()) or utc_now().isoformat(),
             marketRegime=regime_out,
         )

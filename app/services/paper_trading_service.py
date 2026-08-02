@@ -446,11 +446,13 @@ class PaperTradingService:
             margin = Decimal(str(self._settings.paper_margin_per_trade))
             notional = margin * leverage
             quantity = notional / entry
+            # Fixed-margin mode: 1R := margin so Trade-R / openR stay comparable
+            # across stop distances (qty×stop would swing 1R by 10×+).
             return PositionSizing(
                 quantity=quantity,
                 notional=notional,
                 margin=margin,
-                risk_amount=quantity * stop_distance,
+                risk_amount=margin if stop_distance > 0 else Decimal("0"),
             )
 
         quantity = Decimal(
@@ -1563,9 +1565,19 @@ class PaperTradingService:
                 break
 
     async def update_open_positions(
-        self, session: AsyncSession, prices: dict[str, float]
+        self,
+        session: AsyncSession,
+        prices: dict[str, float],
+        *,
+        provider=None,
+        wick_timeframe: str = "5m",
     ) -> list[PaperPosition]:
-        """Offene Positionen gegen aktuelle Preise pruefen (SL/TP Scale-out)."""
+        """Offene Positionen gegen Preise pruefen (SL/TP Scale-out).
+
+        Mit ``provider``: zuletzt geschlossene/aktuelle ``wick_timeframe``-Kerze
+        als OHLC-Replay (Stop vor TP), danach Mark-Preis — schliesst Intrabar-
+        Hits zwischen Polls.
+        """
         if not self.enabled:
             return []
 
@@ -1575,8 +1587,49 @@ class PaperTradingService:
         updated: list[PaperPosition] = []
 
         for position in open_positions:
+            # Heal legacy BE stops that ignored round-trip fees.
+            if (
+                position.tp1_filled
+                and self._settings.paper_move_stop_to_breakeven
+                and position.status == "open"
+            ):
+                entry = float(position.entry_price)
+                cur = float(position.current_stop or entry)
+                if abs(cur - entry) < 1e-12 * max(entry, 1.0):
+                    is_long = SignalDirection(position.direction).is_long
+                    healed = RiskManager.fee_aware_breakeven(
+                        entry,
+                        is_long=is_long,
+                        fee_percent=float(self._settings.paper_fee_percent),
+                    )
+                    if abs(healed - cur) > 1e-12:
+                        position.current_stop = Decimal(str(healed))
+
+            if provider is not None and position.status == "open":
+                try:
+                    series = await provider.get_candles(
+                        position.symbol.upper(),
+                        wick_timeframe,
+                        limit=1,
+                        include_unclosed=True,
+                    )
+                    bars = list(series.candles) if series is not None else []
+                    if bars:
+                        await self._replay_bars(session, account, position, bars)
+                        if position.status != "open":
+                            updated.append(position)
+                            continue
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "paper_wick_replay_failed",
+                        symbol=position.symbol,
+                        error=str(exc),
+                    )
+
             price = prices.get(position.symbol.upper())
             if price is None:
+                continue
+            if position.status != "open":
                 continue
             changed = await self._apply_price(session, account, position, float(price))
             if changed:
@@ -1897,7 +1950,16 @@ class PaperTradingService:
             if level == 1:
                 position.tp1_filled = True
                 if self._settings.paper_move_stop_to_breakeven:
-                    position.current_stop = position.entry_price
+                    is_long = SignalDirection(position.direction).is_long
+                    position.current_stop = Decimal(
+                        str(
+                            RiskManager.fee_aware_breakeven(
+                                float(position.entry_price),
+                                is_long=is_long,
+                                fee_percent=float(self._settings.paper_fee_percent),
+                            )
+                        )
+                    )
                 extend_mult = int(self._settings.paper_expiry_multiplier_after_tp1)
                 if extend_mult > 0 and position.opened_at is not None:
                     tf = position.timeframe or "1h"

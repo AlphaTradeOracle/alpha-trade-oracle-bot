@@ -32,6 +32,60 @@ EXCHANGE_IDENTIFIER_ALIASES: dict[str, frozenset[str]] = {
     "coinbase": frozenset({"coinbase", "gdax", "coinbase_exchange"}),
 }
 
+#: Wrapped / bridged / RWA / exchange-oddities die CoinGecko in die Top-N
+#: schiebt, aber kein sinnvolles Desk-Banner „Top Coin“ sind.
+_DESK_BANNER_EXCLUDED_IDS = frozenset(
+    {
+        "staked-ether",
+        "wrapped-steth",
+        "wrapped-bitcoin",
+        "weth",
+        "weeth",
+        "coinbase-wrapped-btc",
+        "tbtc",
+        "binance-bridged-usdt-bnb-smart-chain",
+        "binance-bridged-usdc-bnb-smart-chain",
+        "figure-heloc",
+        "whitebit",
+        "leo-token",
+        "rain",
+        "ethena-usde",
+        "susds",
+        "usds",
+        "ethena-staked-usde",
+        "kelp-dao-restaked-eth",
+        "renzo-restaked-eth",
+        "mantle-staked-ether",
+        "liquid-staked-ethereum",
+        "polygon-bridged-usdt-polygon",
+    }
+)
+_DESK_BANNER_EXCLUDED_SYMBOLS = frozenset(
+    {
+        "WETH",
+        "WBTC",
+        "STETH",
+        "WSTETH",
+        "WEETH",
+        "CBBTC",
+        "TBTC",
+        "WBT",
+        "FIGR_HELOC",
+        "LEO",
+        "RAIN",
+        "USDE",
+        "USDS",
+        "SUSDS",
+    }
+)
+_DESK_BANNER_NAME_FRAGMENTS = (
+    "wrapped",
+    "bridged",
+    "staked",
+    "restaked",
+    "heloc",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class CoinGeckoMarket:
@@ -120,14 +174,20 @@ class CoinGeckoClient:
         return markets
 
     async def fetch_live_markets(self, limit: int = 10) -> list[CoinGeckoLiveMarket]:
-        """Top-N Markets inkl. Preis, 24h-Change und 7d-Sparkline fuer das Desk-Banner."""
+        """Top-N Spot-Majors inkl. Preis, 24h-Change und 7d-Sparkline.
+
+        CoinGecko mischt Wrapped/RWA/Exchange-Tokens in ``market_cap_desc``.
+        Wir laden einen groesseren Pool und filtern auf handelbare Majors
+        (BTC/ETH/USDT/BNB/…), dann Display-Rank 1..N.
+        """
         if limit <= 0:
             return []
-        per_page = min(MAX_PER_PAGE, limit)
+        # Extra headroom so denylisted junk does not starve the banner.
+        fetch_n = min(MAX_PER_PAGE, max(limit * 5, 40))
         params = {
             "vs_currency": "usd",
             "order": "market_cap_desc",
-            "per_page": per_page,
+            "per_page": fetch_n,
             "page": 1,
             "sparkline": "true",
             "price_change_percentage": "24h",
@@ -161,12 +221,36 @@ class CoinGeckoClient:
         markets: list[CoinGeckoLiveMarket] = []
         for item in payload:
             parsed = _parse_live_market(item)
-            if parsed is not None:
-                markets.append(parsed)
+            if parsed is None or not _is_desk_banner_coin(parsed):
+                continue
+            markets.append(parsed)
             if len(markets) >= limit:
                 break
-        logger.info("coingecko_live_markets_loaded", requested=limit, received=len(markets))
-        return markets[:limit]
+
+        # Stable display ranks 1..N (CoinGecko rank may skip after filtering).
+        ranked = [
+            CoinGeckoLiveMarket(
+                id=m.id,
+                symbol=m.symbol,
+                name=m.name,
+                market_cap_rank=index,
+                price_usd=m.price_usd,
+                change_24h_pct=m.change_24h_pct,
+                market_cap_usd=m.market_cap_usd,
+                volume_24h_usd=m.volume_24h_usd,
+                circulating_supply=m.circulating_supply,
+                image_url=m.image_url,
+                sparkline=m.sparkline,
+            )
+            for index, m in enumerate(markets[:limit], start=1)
+        ]
+        logger.info(
+            "coingecko_live_markets_loaded",
+            requested=limit,
+            fetched=fetch_n,
+            received=len(ranked),
+        )
+        return ranked
 
     async def fetch_coin_tickers(self, coin_id: str, *, max_pages: int = 2) -> list[CoinGeckoTicker]:
         """Boersen-Ticker eines Coins laden — fuer das Mapping auf CEX-Symbole."""
@@ -328,6 +412,18 @@ def _parse_market(item: Any) -> CoinGeckoMarket | None:
         market_cap=market_cap,
         market_cap_rank=rank,
     )
+
+
+def _is_desk_banner_coin(market: CoinGeckoLiveMarket) -> bool:
+    """True for spot majors; false for wrapped/bridged/RWA/exchange oddities."""
+    if market.id in _DESK_BANNER_EXCLUDED_IDS:
+        return False
+    if market.symbol.upper() in _DESK_BANNER_EXCLUDED_SYMBOLS:
+        return False
+    name_l = market.name.lower()
+    if any(fragment in name_l for fragment in _DESK_BANNER_NAME_FRAGMENTS):
+        return False
+    return True
 
 
 def _parse_live_market(item: Any) -> CoinGeckoLiveMarket | None:

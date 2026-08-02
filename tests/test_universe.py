@@ -146,7 +146,10 @@ class TestCoinGeckoClient:
                 200,
                 json=[
                     _cg_live_market("bitcoin", "btc", 1, price=65000.0, change=-1.2),
+                    _cg_live_market("figure-heloc", "figr_heloc", 9, price=1.0, change=-1.0),
+                    _cg_live_market("whitebit", "wbt", 18, price=50.0, change=0.2),
                     _cg_live_market("tether", "usdt", 3, price=1.0, change=0.01),
+                    _cg_live_market("hyperliquid", "hype", 10, price=55.0, change=1.1),
                 ],
             )
 
@@ -161,8 +164,8 @@ class TestCoinGeckoClient:
         finally:
             await gecko.close()
 
-        assert len(markets) == 2
-        assert markets[0].symbol == "BTC"
+        assert [m.symbol for m in markets] == ["BTC", "USDT", "HYPE"]
+        assert [m.market_cap_rank for m in markets] == [1, 2, 3]
         assert markets[0].price_usd == 65000.0
         assert markets[0].change_24h_pct == pytest.approx(-1.2)
         assert markets[0].sparkline == (65000.0 * 0.9, 65000.0, 65000.0 * 1.05)

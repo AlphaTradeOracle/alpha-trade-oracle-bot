@@ -115,7 +115,9 @@ async def paper_update(
         return PaperUpdateResponse(updated=0, prices=0, open_positions=0)
 
     prices = await _collect_prices(provider, symbols, providers=providers)
-    updated = await paper.update_open_positions(session, prices)
+    updated = await paper.update_open_positions(
+        session, prices, provider=provider, wick_timeframe="5m"
+    )
     return PaperUpdateResponse(
         updated=len(updated),
         prices=len(prices),
