@@ -51,7 +51,7 @@ function seedPortfolio(): PortfolioSnapshot {
 }
 
 interface RefreshOptions {
-  /** Skip the full-page loading flag (background poll). */
+  /** Skip the button spinner (background poll). */
   silent?: boolean
 }
 
@@ -61,7 +61,10 @@ interface DeskDataValue {
   equity: EquityPoint[]
   marketRegime: MarketRegimeSnapshot | null
   generatedAt: string | null
+  /** True only before the first successful live snapshot. */
   loading: boolean
+  /** True while a user-triggered / initial fetch is in flight (soft UI). */
+  refreshing: boolean
   error: string | null
   refresh: (options?: RefreshOptions) => Promise<void>
 }
@@ -77,18 +80,17 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
   const [marketRegime, setMarketRegime] = useState<MarketRegimeSnapshot | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  /** Monotonic id so only the latest request may clear loading / write state. */
   const requestId = useRef(0)
   const inFlight = useRef<AbortController | null>(null)
-  /** True while a non-silent (button / first load) refresh owns the spinner. */
   const manualInFlight = useRef(false)
+  const hasLiveRef = useRef(false)
 
   const refresh = useCallback(async (options?: RefreshOptions) => {
     const silent = Boolean(options?.silent)
 
-    // Background polls must not cancel / steal a visible refresh.
     if (silent && manualInFlight.current) {
       return
     }
@@ -100,8 +102,12 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
 
     if (!silent) {
       manualInFlight.current = true
-      setLoading(true)
+      setRefreshing(true)
       setError(null)
+      // Hard loading gate only until the first live snapshot lands.
+      if (!hasLiveRef.current) {
+        setLoading(true)
+      }
     }
 
     try {
@@ -112,6 +118,7 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
       setEquity(snap.equity ?? [])
       setMarketRegime(snap.marketRegime ?? null)
       setGeneratedAt(snap.generatedAt)
+      hasLiveRef.current = true
       setError(null)
     } catch (err) {
       if (id !== requestId.current) return
@@ -122,16 +129,16 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
         inFlight.current = null
         if (!silent) {
           manualInFlight.current = false
+          setRefreshing(false)
           setLoading(false)
         } else if (!manualInFlight.current) {
-          // Keep spinner honest if a prior aborted manual left it up.
           setLoading(false)
+          setRefreshing(false)
         }
       }
     }
   }, [])
 
-  // One initial load for the whole desk shell (shared across routes).
   useEffect(() => {
     void refresh()
     return () => {
@@ -142,7 +149,6 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  // Background poll only while the browser tab is visible.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === 'visible') {
@@ -170,10 +176,21 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
       marketRegime,
       generatedAt,
       loading,
+      refreshing,
       error,
       refresh,
     }),
-    [portfolio, trades, equity, marketRegime, generatedAt, loading, error, refresh],
+    [
+      portfolio,
+      trades,
+      equity,
+      marketRegime,
+      generatedAt,
+      loading,
+      refreshing,
+      error,
+      refresh,
+    ],
   )
 
   return <DeskDataContext.Provider value={value}>{children}</DeskDataContext.Provider>
