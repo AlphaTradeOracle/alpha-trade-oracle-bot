@@ -6,7 +6,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import AdminGuard, PaperTradingDep, ProviderDep, SessionDep, UniverseProvidersDep
+from app.api.deps import (
+    AdminGuard,
+    PaperPriceProviderDep,
+    PaperTradingDep,
+    SessionDep,
+)
 from app.repositories.paper_repository import PaperRepository
 from app.scheduler.jobs import _collect_prices
 from app.schemas.paper import PaperPositionResponse, PaperSummaryResponse, PaperUpdateResponse
@@ -105,8 +110,7 @@ async def paper_positions(
 async def paper_update(
     session: SessionDep,
     paper: PaperTradingDep,
-    provider: ProviderDep,
-    providers: UniverseProvidersDep,
+    price_provider: PaperPriceProviderDep,
 ) -> PaperUpdateResponse:
     account = await paper.get_or_create_account(session)
     open_positions = await PaperRepository(session).list_open_positions(account.id)
@@ -114,9 +118,10 @@ async def paper_update(
     if not symbols:
         return PaperUpdateResponse(updated=0, prices=0, open_positions=0)
 
-    prices = await _collect_prices(provider, symbols, providers=providers)
+    # Perp router — no spot venue fallback.
+    prices = await _collect_prices(price_provider, symbols, providers=None)
     updated = await paper.update_open_positions(
-        session, prices, provider=provider, wick_timeframe="5m"
+        session, prices, provider=price_provider, wick_timeframe="5m"
     )
     return PaperUpdateResponse(
         updated=len(updated),

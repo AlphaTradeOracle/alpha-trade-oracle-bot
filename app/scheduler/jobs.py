@@ -169,9 +169,13 @@ async def run_paper_update(
     job_key: str,
     *,
     providers: dict[str, MarketDataProvider] | None = None,
+    price_provider: MarketDataProvider | None = None,
 ) -> None:
     """Pending Retest-Entries aufloesen und offene Positionen gegen Kurse pruefen."""
     set_correlation_id()
+    # Prefer perpetual router for fills / wicks / marks (no spot fallback).
+    fill_provider = price_provider or provider
+    price_fallbacks = None if price_provider is not None else providers
 
     async with session_scope() as session:
         claimed = await ScheduledJobRepository(session).claim(job_key)
@@ -180,13 +184,13 @@ async def run_paper_update(
         logger.debug("job_skipped_not_due", job_key=job_key)
         return
 
-    logger.info("job_started", job_key=job_key)
+    logger.info("job_started", job_key=job_key, fill_provider=fill_provider.name)
 
     try:
         async with session_scope() as session:
             pending_summary: dict[str, int] = {"filled": 0, "skipped": 0, "still_pending": 0}
             if paper.retest_enabled:
-                resolve = await paper.resolve_pending_retest(session, provider)
+                resolve = await paper.resolve_pending_retest(session, fill_provider)
                 pending_summary = {
                     "filled": resolve.filled,
                     "skipped": resolve.skipped,
@@ -203,9 +207,11 @@ async def run_paper_update(
                     **{f"retest_{k}": v for k, v in pending_summary.items()},
                 }
             else:
-                prices = await _collect_prices(provider, symbols, providers=providers)
+                prices = await _collect_prices(
+                    fill_provider, symbols, providers=price_fallbacks
+                )
                 updated = await paper.update_open_positions(
-                    session, prices, provider=provider, wick_timeframe="5m"
+                    session, prices, provider=fill_provider, wick_timeframe="5m"
                 )
                 summary = {
                     "open_positions": len(open_positions),
@@ -250,9 +256,12 @@ async def run_paper_digest(
     job_key: str,
     *,
     providers: dict[str, MarketDataProvider] | None = None,
+    price_provider: MarketDataProvider | None = None,
 ) -> None:
     """Stuendlichen Paper-Digest an Telegram senden."""
     set_correlation_id()
+    fill_provider = price_provider or provider
+    price_fallbacks = None if price_provider is not None else providers
 
     async with session_scope() as session:
         claimed = await ScheduledJobRepository(session).claim(job_key)
@@ -269,7 +278,9 @@ async def run_paper_digest(
             open_positions = await PaperRepository(session).list_open_positions(account.id)
             symbols = [position.symbol for position in open_positions]
             prices = (
-                await _collect_prices(provider, symbols, providers=providers)
+                await _collect_prices(
+                    fill_provider, symbols, providers=price_fallbacks
+                )
                 if symbols
                 else {}
             )

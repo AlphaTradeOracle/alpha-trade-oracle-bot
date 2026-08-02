@@ -17,7 +17,11 @@ from app.llm.factory import create_llm_service
 from app.llm.service import LLMService
 from app.market_data.base import MarketDataProvider
 from app.market_data.coingecko import CoinGeckoClient
-from app.market_data.factory import create_market_data_provider, create_universe_providers
+from app.market_data.factory import (
+    create_market_data_provider,
+    create_paper_price_provider,
+    create_universe_providers,
+)
 from app.monitoring.health import HealthService
 from app.sentiment.service import SentimentService
 from app.services.analysis_service import AnalysisService
@@ -38,6 +42,8 @@ class ApplicationContainer:
     settings: Settings
     provider: MarketDataProvider
     universe_providers: dict[str, MarketDataProvider]
+    #: Perpetual (or spot) feed used for paper fills / TP / SL / marks.
+    paper_price_provider: MarketDataProvider
     coingecko: CoinGeckoClient
     llm_service: LLMService
     sentiment_service: SentimentService
@@ -65,7 +71,10 @@ class ApplicationContainer:
             except Exception as exc:
                 logger.warning("shutdown_step_failed", component=name, error=str(exc))
 
-        for exchange, provider in self.universe_providers.items():
+        for label, provider in (
+            ("paper_price_provider", self.paper_price_provider),
+            *self.universe_providers.items(),
+        ):
             if id(provider) in closed:
                 continue
             try:
@@ -74,7 +83,7 @@ class ApplicationContainer:
             except Exception as exc:
                 logger.warning(
                     "shutdown_step_failed",
-                    component=f"market_data_provider:{exchange}",
+                    component=f"market_data_provider:{label}",
                     error=str(exc),
                 )
 
@@ -105,6 +114,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     universe_service = UniverseService(universe_providers, coingecko, settings=cfg)
     data_retention = DataRetentionService(universe_providers, settings=cfg)
     paper_trading = PaperTradingService(settings=cfg)
+    paper_price_provider = create_paper_price_provider(cfg)
 
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
@@ -119,6 +129,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     logger.info(
         "container_built",
         provider=provider.name,
+        paper_price_provider=paper_price_provider.name,
         llm_enabled=llm_service.is_enabled,
         sentiment_enabled=cfg.enable_sentiment,
         universe_scan=cfg.enable_universe_scan,
@@ -129,6 +140,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         settings=cfg,
         provider=provider,
         universe_providers=universe_providers,
+        paper_price_provider=paper_price_provider,
         coingecko=coingecko,
         llm_service=llm_service,
         sentiment_service=sentiment_service,

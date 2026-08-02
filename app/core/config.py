@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     binance_base_url: str = "https://api.binance.com"
     kucoin_base_url: str = "https://api.kucoin.com"
     coinbase_base_url: str = "https://api.coinbase.com/api/v3/brokerage"
+    #: Paper fill / TP / SL / mark prices from perpetual venues (not spot).
+    paper_use_perp_prices: bool = True
+    paper_perp_venues: str = "binance,kucoin,aster,hyperliquid"
+    binance_futures_base_url: str = "https://fapi.binance.com"
+    kucoin_futures_base_url: str = "https://api-futures.kucoin.com"
+    aster_futures_base_url: str = "https://fapi.asterdex.com"
+    hyperliquid_base_url: str = "https://api.hyperliquid.xyz"
     coingecko_api_key: SecretStr = SecretStr("")
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"
     coinmarketcap_api_key: SecretStr = SecretStr("")
@@ -150,7 +157,6 @@ class Settings(BaseSettings):
     market_score_weight_liquidations: float = 0.05
     #: Optional paid JSON feed later (CoinGlass/Hyblock/…). Empty = free venues only.
     liquidation_api_url: str = ""
-    binance_futures_base_url: str = "https://fapi.binance.com"
 
     # --- Institutional Knowledge Base (Parts 1–9) ---------------------------
     #: Explainability + market intel always on; hard no-trade mutations off by default

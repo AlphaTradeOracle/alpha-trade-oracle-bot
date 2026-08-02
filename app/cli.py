@@ -321,6 +321,7 @@ async def _run_worker() -> None:
         paper_trading=container.paper_trading,
         provider=container.provider,
         providers=container.universe_providers,
+        price_provider=container.paper_price_provider,
         notifier=telegram_notifier,
     )
 
@@ -607,11 +608,16 @@ async def _run_paper_backfill(
             symbols = [position.symbol for position in opens]
             if symbols:
                 prices = await _collect_prices(
-                    container.provider,
+                    container.paper_price_provider,
                     symbols,
-                    providers=container.universe_providers,
+                    providers=None,
                 )
-                changed = await container.paper_trading.update_open_positions(session, prices)
+                changed = await container.paper_trading.update_open_positions(
+                    session,
+                    prices,
+                    provider=container.paper_price_provider,
+                    wick_timeframe="5m",
+                )
                 updated = len(changed)
         summary = await container.paper_trading.summary(session)
 
@@ -684,9 +690,9 @@ async def _run_paper_digest_once(*, send: bool = True) -> None:
         symbols = [position.symbol for position in open_positions]
         prices = (
             await _collect_prices(
-                container.provider,
+                container.paper_price_provider,
                 symbols,
-                providers=container.universe_providers,
+                providers=None,
             )
             if symbols
             else {}
@@ -756,8 +762,8 @@ async def _run_paper_rebuild(
         result = await container.paper_trading.rebuild_from_signals(
             session,
             since=since_dt,
-            provider=container.provider,
-            providers=container.universe_providers,
+            provider=container.paper_price_provider,
+            providers=None,
             dispatched_only=dispatched_only,
             one_per_symbol=one_per_symbol,
             symbols=allowed,

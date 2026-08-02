@@ -9,7 +9,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import PaperTradingDep, ProviderDep, SessionDep, UniverseProvidersDep
+from app.api.deps import (
+    PaperPriceProviderDep,
+    PaperTradingDep,
+    ProviderDep,
+    SessionDep,
+    UniverseProvidersDep,
+)
 from app.core.config import get_settings
 from app.core.errors import MarketDataError, SymbolNotFoundError
 from app.core.logging import get_logger
@@ -92,6 +98,7 @@ async def desk_snapshot(
     session: SessionDep,
     paper: PaperTradingDep,
     provider: ProviderDep,
+    price_provider: PaperPriceProviderDep,
     providers: UniverseProvidersDep,
 ) -> DeskSnapshot:
     """Read-only book for the public trading desk.
@@ -112,7 +119,8 @@ async def desk_snapshot(
     async def _prices() -> dict[str, float]:
         if not symbols:
             return {}
-        return await _collect_prices(provider, symbols, providers=providers)
+        # Open marks from the same perp venues used for paper fills.
+        return await _collect_prices(price_provider, symbols, providers=None)
 
     prices, market_regime = await asyncio.gather(
         _prices(),

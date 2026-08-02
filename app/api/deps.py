@@ -71,6 +71,19 @@ def market_data_provider(request: Request) -> MarketDataProvider:
     return provider  # type: ignore[no-any-return]
 
 
+def paper_price_provider(request: Request) -> MarketDataProvider:
+    """Perp (or spot) feed used for paper fills / open marks."""
+    provider = getattr(request.app.state, "paper_price_provider", None)
+    if provider is None:
+        container = getattr(request.app.state, "container", None)
+        provider = (
+            getattr(container, "paper_price_provider", None) if container is not None else None
+        )
+    if provider is None:
+        return market_data_provider(request)
+    return provider  # type: ignore[no-any-return]
+
+
 def universe_providers(request: Request) -> dict[str, MarketDataProvider]:
     providers = getattr(request.app.state, "universe_providers", None)
     if providers is None:
@@ -117,6 +130,7 @@ AnalysisServiceDep = Annotated[AnalysisService, Depends(analysis_service)]
 BacktestServiceDep = Annotated[BacktestService, Depends(backtest_service)]
 PaperTradingDep = Annotated[PaperTradingService, Depends(paper_trading_service)]
 ProviderDep = Annotated[MarketDataProvider, Depends(market_data_provider)]
+PaperPriceProviderDep = Annotated[MarketDataProvider, Depends(paper_price_provider)]
 UniverseProvidersDep = Annotated[dict[str, MarketDataProvider], Depends(universe_providers)]
 HealthServiceDep = Annotated[HealthService, Depends(health_service)]
 AdminGuard = Depends(require_admin_token)

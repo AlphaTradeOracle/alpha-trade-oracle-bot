@@ -66,6 +66,7 @@ class SchedulerRunner:
         paper_trading: PaperTradingService | None = None,
         provider: MarketDataProvider | None = None,
         providers: dict[str, MarketDataProvider] | None = None,
+        price_provider: MarketDataProvider | None = None,
         notifier: TelegramNotifier | None = None,
     ) -> None:
         self._settings = settings or get_settings()
@@ -75,6 +76,7 @@ class SchedulerRunner:
         self._paper = paper_trading
         self._provider = provider
         self._providers = providers or {}
+        self._price_provider = price_provider
         self._notifier = notifier
         self._scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -158,6 +160,7 @@ class SchedulerRunner:
                     "provider": self._provider,
                     "job_key": paper_definition.key,
                     "providers": self._providers,
+                    "price_provider": self._price_provider,
                 },
                 next_run_time=next_runs[paper_definition.key],
                 misfire_grace_time=120,
@@ -177,6 +180,7 @@ class SchedulerRunner:
                     "provider": self._provider,
                     "notifier": self._notifier,
                     "job_key": digest_definition.key,
+                    "price_provider": self._price_provider,
                     "providers": self._providers,
                 },
                 next_run_time=next_runs[digest_definition.key],

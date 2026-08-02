@@ -12,6 +12,7 @@ from app.market_data.binance import BinanceMarketDataProvider
 from app.market_data.cache import CachedMarketDataProvider
 from app.market_data.coinbase import CoinbaseMarketDataProvider
 from app.market_data.kucoin import KucoinMarketDataProvider
+from app.market_data.perp_router import PerpRouterProvider
 
 logger = get_logger(__name__)
 
@@ -80,3 +81,20 @@ def create_universe_providers(
             provider = CachedMarketDataProvider(provider, redis_client, cfg)  # type: ignore[assignment]
         providers[name] = provider
     return providers
+
+
+def create_paper_price_provider(settings: Settings | None = None) -> MarketDataProvider:
+    """Price/candle source for paper fills.
+
+    When ``paper_use_perp_prices`` is true (default), returns a perpetual router
+    across Binance / KuCoin / Aster / Hyperliquid. Otherwise the spot primary.
+    """
+    cfg = settings or get_settings()
+    if getattr(cfg, "paper_use_perp_prices", True):
+        router = PerpRouterProvider(cfg)
+        logger.info(
+            "paper_price_provider_perp",
+            venues=router.venue_names,
+        )
+        return router
+    return create_market_data_provider(cfg)
