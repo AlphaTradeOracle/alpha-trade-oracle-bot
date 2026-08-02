@@ -110,6 +110,13 @@ Diese Prüfungen überschreiben jede Richtung:
   Short wenn RSI < `SIGNAL_RSI_SHORT_MIN` (**33**, erhöht von 25 — Short-Erschöpfung).
 - Short-Score in Erschöpfungsband: Score ≤ `SIGNAL_SHORT_MIN_SCORE` (**18**) →
   `NO_TRADE` (25 Trades @ 24 % WR, −$352 im Paper-Sample).
+- **Late short bounce / thin volume** (`SIGNAL_SHORT_BOUNCE_BLOCK_ENABLED=true`):
+  Short → `NO_TRADE`, wenn RSI vom jüngsten Extremtief
+  (`≤ SIGNAL_SHORT_RSI_EXTREME`, Default 30) bereits um
+  `≥ SIGNAL_SHORT_RSI_BOUNCE_POINTS` (Default 12) Punkte gestiegen ist
+  **oder** `volume_ratio < SIGNAL_SHORT_MIN_VOLUME_RATIO` (Default 0.5×).
+  Verhindert Continuation-Shorts nach bereits laufender Mean-Reversion
+  (Beispiel OPUSDT #1613).
 - **Regime-Filter** (`REGIME_FILTER_ENABLED=true`): BTCUSDT auf **4h** —
   Close vs. EMA20/EMA50 + Supertrend (≥3 Stimmen → bull/bear, sonst neutral).
   Blockiert neue **Shorts** in bullischem und **Longs** in bärischem Regime.

@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     signal_rsi_short_min: float = 33.0
     #: Shorts mit Score <= diesem Wert gelten als ueberverkauft/Erschoepfung (NO_TRADE).
     signal_short_min_score: float = 18.0
+    #: Block late shorts after a bounce from RSI extremes (mean-reversion already running).
+    signal_short_bounce_block_enabled: bool = True
+    #: Recent RSI low at or below this counts as an extreme trough.
+    signal_short_rsi_extreme: float = 30.0
+    #: If RSI has risen this many points off the recent extreme low → NO_TRADE short.
+    signal_short_rsi_bounce_points: float = 12.0
+    #: Block shorts when primary volume_ratio is below this (thin continuation).
+    signal_short_min_volume_ratio: float = 0.5
     signal_block_range_market: bool = True
     signal_min_adx: float = 30.0
     atr_multiplier: float = 1.5

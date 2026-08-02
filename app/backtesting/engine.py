@@ -74,6 +74,11 @@ class BacktestConfig:
     min_adx: float = 20.0
     rsi_long_max: float = 75.0
     rsi_short_min: float = 25.0
+    short_bounce_block_enabled: bool = True
+    short_rsi_extreme: float = 30.0
+    short_rsi_bounce_points: float = 12.0
+    short_min_volume_ratio: float = 0.5
+    short_min_score: float = 18.0
     regime_filter_enabled: bool = True
     #: Nur ein Trade gleichzeitig — ohne Positionsverwaltung waere die
     #: Kapitalkurve nicht interpretierbar.
@@ -122,6 +127,11 @@ class BacktestConfig:
             "min_adx": settings.signal_min_adx,
             "rsi_long_max": settings.signal_rsi_long_max,
             "rsi_short_min": settings.signal_rsi_short_min,
+            "short_bounce_block_enabled": settings.signal_short_bounce_block_enabled,
+            "short_rsi_extreme": settings.signal_short_rsi_extreme,
+            "short_rsi_bounce_points": settings.signal_short_rsi_bounce_points,
+            "short_min_volume_ratio": settings.signal_short_min_volume_ratio,
+            "short_min_score": settings.signal_short_min_score,
             "regime_filter_enabled": settings.regime_filter_enabled,
             "scale_out_fractions": tuple(settings.parsed_scale_out_fractions),
             "move_stop_to_breakeven_after_tp1": settings.paper_move_stop_to_breakeven,
@@ -241,6 +251,11 @@ class BacktestEngine:
             min_adx=config.min_adx,
             rsi_long_max=config.rsi_long_max,
             rsi_short_min=config.rsi_short_min,
+            short_min_score=config.short_min_score,
+            short_bounce_block_enabled=config.short_bounce_block_enabled,
+            short_rsi_extreme=config.short_rsi_extreme,
+            short_rsi_bounce_points=config.short_rsi_bounce_points,
+            short_min_volume_ratio=config.short_min_volume_ratio,
             regime_filter_enabled=config.regime_filter_enabled,
             strategy_version_label="backtest:1",
         )
