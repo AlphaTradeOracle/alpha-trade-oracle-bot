@@ -72,7 +72,7 @@ async def test_run_paper_digest_sends_when_claimed() -> None:
         total_open_upnl_r=0.0,
         risk_per_trade=50.0,
         leverage=10.0,
-        max_notional=1500.0,
+        max_notional=2500.0,
         max_open=20,
     )
 

@@ -363,9 +363,9 @@ class TestPaperDigestFormatting:
             ],
             total_open_upnl_usd=42.1,
             total_open_upnl_r=0.84,
-            risk_per_trade=50.0,
+            risk_per_trade=0.0,
             leverage=10.0,
-            max_notional=1500.0,
+            max_notional=2500.0,
             max_open=20,
             windows=[
                 PaperDigestWindowStats(

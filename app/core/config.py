@@ -200,14 +200,14 @@ class Settings(BaseSettings):
     # --- Paper-Trading -----------------------------------------------------
     enable_paper_trading: bool = True
     paper_initial_balance: float = 5_000.0
-    paper_margin_per_trade: float = 200.0
+    paper_margin_per_trade: float = 250.0
     paper_leverage: float = 10.0
-    #: 0 = fixe Margin x Hebel (jedes Paper-Trade gleiche Margin, Default $200).
+    #: 0 = fixe Margin x Hebel (jedes Paper-Trade gleiche Margin, Default $250).
     #: >0 = Stueckzahl aus Risikobetrag und Stop-Abstand (1R-Sizing).
     paper_risk_per_trade_usd: float = 0.0
     #: Obergrenze fuer das Nominal, damit sehr enge Stops keinen absurden Hebel
     #: erzeugen (0 = keine Grenze). Bei fixer Margin meist margin*leverage.
-    paper_max_notional_usd: float = 2_000.0
+    paper_max_notional_usd: float = 2_500.0
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
     paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).

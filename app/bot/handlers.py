@@ -425,9 +425,13 @@ class BotHandlers:
                 f"Gebuehren: {summary.fees_r:.2f}R  ({summary.r_trades} Trades mit 1R)"
             ),
             escape_markdown_v2(
-                f"Risiko je Trade: ${self._settings.paper_risk_per_trade_usd:.0f} "
-                f"| Hebel {self._settings.paper_leverage:.0f}x "
-                f"| Notional-Cap ${self._settings.paper_max_notional_usd:.0f}"
+                (
+                    f"Margin je Trade: ${self._settings.paper_margin_per_trade:.0f} "
+                    if self._settings.paper_risk_per_trade_usd <= 0
+                    else f"Risiko je Trade: ${self._settings.paper_risk_per_trade_usd:.0f} "
+                )
+                + f"| Hebel {self._settings.paper_leverage:.0f}x "
+                + f"| Notional-Cap ${self._settings.paper_max_notional_usd:.0f}"
             ),
         ]
 

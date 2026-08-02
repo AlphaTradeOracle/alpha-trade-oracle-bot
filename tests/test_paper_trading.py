@@ -292,11 +292,15 @@ class TestRiskNormalizedSizing:
         assert float(sizing.margin) == pytest.approx(150.0)
 
     def test_zero_risk_budget_falls_back_to_fixed_margin(self) -> None:
-        service = self._service(paper_risk_per_trade_usd=0.0)
+        service = self._service(
+            paper_risk_per_trade_usd=0.0,
+            paper_margin_per_trade=250.0,
+            paper_max_notional_usd=2500.0,
+        )
         sizing = service._size_position(Decimal("100"), Decimal("95"))
         assert sizing is not None
-        assert float(sizing.margin) == pytest.approx(100.0)
-        assert float(sizing.notional) == pytest.approx(1000.0)
+        assert float(sizing.margin) == pytest.approx(250.0)
+        assert float(sizing.notional) == pytest.approx(2500.0)
 
 
 class TestPortfolioRiskLimits:

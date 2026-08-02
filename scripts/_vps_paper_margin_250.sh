@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fixed $200 margin per paper trade (×10 → $2000 notional), rebuild ledger.
+# Fixed $250 margin per paper trade (×10 → $2500 notional), rebuild ledger.
 set -euo pipefail
 cd /opt/alpha-trade-oracle-bot
 
@@ -15,16 +15,17 @@ run_sql() {
     psql -U alpha_trade_oracle -d alpha_trade_oracle -t -A -f -
 }
 
-echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) paper fixed \$200 margin start ====="
+echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) paper fixed \$250 margin start ====="
 
-python3 - <<'PY'
+apply_env() {
+  python3 - <<'PY'
 from pathlib import Path
 path = Path(".env")
 text = path.read_text(encoding="utf-8")
 repl = {
-    "PAPER_MARGIN_PER_TRADE": "200",
+    "PAPER_MARGIN_PER_TRADE": "250",
     "PAPER_RISK_PER_TRADE_USD": "0",
-    "PAPER_MAX_NOTIONAL_USD": "2000",
+    "PAPER_MAX_NOTIONAL_USD": "2500",
     "PAPER_LEVERAGE": "10",
 }
 lines = []
@@ -42,35 +43,14 @@ for key, val in repl.items():
 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 print("env", ", ".join(f"{k}={v}" for k, v in repl.items()))
 PY
+}
+
+apply_env
 grep -E '^PAPER_MARGIN_PER_TRADE=|^PAPER_RISK_PER_TRADE_USD=|^PAPER_MAX_NOTIONAL_USD=|^PAPER_LEVERAGE=' .env
 
 git fetch origin main
 git reset --hard origin/main
-# .env is gitignored — re-assert after reset
-python3 - <<'PY'
-from pathlib import Path
-path = Path(".env")
-text = path.read_text(encoding="utf-8")
-repl = {
-    "PAPER_MARGIN_PER_TRADE": "200",
-    "PAPER_RISK_PER_TRADE_USD": "0",
-    "PAPER_MAX_NOTIONAL_USD": "2000",
-    "PAPER_LEVERAGE": "10",
-}
-lines = []
-seen = set()
-for line in text.splitlines():
-    key = line.split("=", 1)[0] if "=" in line and not line.strip().startswith("#") else None
-    if key in repl:
-        lines.append(f"{key}={repl[key]}")
-        seen.add(key)
-    else:
-        lines.append(line)
-for key, val in repl.items():
-    if key not in seen:
-        lines.append(f"{key}={val}")
-path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-PY
+apply_env
 
 docker compose build worker app
 docker compose up -d --no-deps worker app
@@ -86,6 +66,9 @@ print(
     "max_n", s.paper_max_notional_usd,
     "lev", s.paper_leverage,
 )
+assert s.paper_margin_per_trade == 250.0
+assert s.paper_risk_per_trade_usd == 0.0
+assert s.paper_max_notional_usd == 2500.0
 PY
 
 echo "==> Paper rebuild"
@@ -100,7 +83,7 @@ run_sql <<'SQL'
 \pset tuples_only on
 \pset format unaligned
 SELECT 'AFTER|' || status || '|' || COUNT(*)
-  || '|avg_m=' || ROUND(AVG(margin)::numeric,2)
+  || '|avg_m=' || ROUND(AVG(margin_used)::numeric,2)
   || '|avg_n=' || ROUND(AVG(notional)::numeric,2)
   || '|pnl=' || COALESCE(ROUND(SUM(realized_pnl)::numeric,2),0)
 FROM paper_positions GROUP BY status ORDER BY status;
@@ -108,7 +91,7 @@ SELECT 'ACCT|margin_setting=' || ROUND(margin_per_trade::numeric,2)
   || '|cash=' || ROUND(cash_balance::numeric,2)
   || '|realized=' || ROUND(realized_pnl::numeric,2)
 FROM paper_accounts WHERE name='default';
-SELECT 'OPEN|' || symbol || '|m=' || ROUND(margin::numeric,2)
+SELECT 'OPEN|' || symbol || '|m=' || ROUND(margin_used::numeric,2)
   || '|n=' || ROUND(notional::numeric,2)
 FROM paper_positions WHERE status='open' ORDER BY opened_at;
 SQL
@@ -129,4 +112,4 @@ print(
 )
 PY
 
-echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) paper fixed \$200 margin done ====="
+echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) paper fixed \$250 margin done ====="
