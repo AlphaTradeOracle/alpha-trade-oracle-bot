@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { apiBase } from '../../services/deskApi'
 
 export interface TopCoin {
@@ -22,8 +21,12 @@ interface TopCoinsResponse {
   source: string
 }
 
-const STABLES = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'USDE', 'USDS'])
+/** Client-side safety net; API already drops these. */
+const STABLES = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'USDE', 'USDS', 'TUSD', 'USDD'])
 const REFRESH_MS = 60_000
+const DISPLAY_COUNT = 10
+/** Fetch a few extra so USDT/USDC (and other stables) can be skipped. */
+const FETCH_LIMIT = 15
 
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
@@ -41,46 +44,8 @@ function formatUsdPrice(price: number): string {
   return `$${price.toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 6 })}`
 }
 
-function formatCompactUsd(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—'
-  return `$${value.toLocaleString('en-US', {
-    notation: 'compact',
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function sparkPath(values: number[], width: number, height: number): string {
-  if (values.length < 2) return ''
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = max - min || 1
-  return values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * width
-      const y = height - ((v - min) / span) * (height - 4) - 2
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
-    })
-    .join(' ')
-}
-
-function sparkArea(values: number[], width: number, height: number): string {
-  const line = sparkPath(values, width, height)
-  if (!line) return ''
-  return `${line} L${width},${height} L0,${height} Z`
-}
-
-function downsample(values: number[], maxPoints = 40): number[] {
-  if (values.length <= maxPoints) return values
-  const step = (values.length - 1) / (maxPoints - 1)
-  const out: number[] = []
-  for (let i = 0; i < maxPoints; i += 1) {
-    out.push(values[Math.round(i * step)]!)
-  }
-  return out
-}
-
 async function fetchTopCoins(signal?: AbortSignal): Promise<TopCoin[]> {
-  const response = await fetch(`${apiBase()}/api/v1/desk/top-coins?limit=10`, {
+  const response = await fetch(`${apiBase()}/api/v1/desk/top-coins?limit=${FETCH_LIMIT}`, {
     method: 'GET',
     headers: { Accept: 'application/json' },
     cache: 'no-store',
@@ -90,97 +55,37 @@ async function fetchTopCoins(signal?: AbortSignal): Promise<TopCoin[]> {
     throw new Error(`Top coins ${response.status}`)
   }
   const data = (await response.json()) as TopCoinsResponse
-  return data.coins ?? []
+  return (data.coins ?? [])
+    .filter((c) => !STABLES.has(c.symbol.toUpperCase()))
+    .slice(0, DISPLAY_COUNT)
 }
 
-function CoinTile({ coin }: { coin: TopCoin }) {
+function CoinChip({ coin }: { coin: TopCoin }) {
   const change = coin.change24hPct
   const up = (change ?? 0) > 0
   const down = (change ?? 0) < 0
-  const stroke = down ? 'var(--color-short)' : up ? 'var(--color-long)' : 'var(--color-accent)'
-  const points = useMemo(() => downsample(coin.sparkline ?? []), [coin.sparkline])
-  const w = 160
-  const h = 22
-  const path = sparkPath(points, w, h)
-  const area = sparkArea(points, w, h)
-  const isStable = STABLES.has(coin.symbol)
-  const arrowTone = up
-    ? 'bg-[var(--color-long-soft)] text-[var(--color-long)]'
-    : down
-      ? 'bg-[var(--color-short-soft)] text-[var(--color-short)]'
-      : 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]'
   const changeTone = up
     ? 'text-[var(--color-long)]'
     : down
       ? 'text-[var(--color-short)]'
       : 'text-[var(--color-text-muted)]'
+  const changeLabel =
+    change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`
 
   return (
-    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
-      <span className={`absolute right-3 top-3 rounded-lg p-1.5 ${arrowTone}`} aria-hidden>
-        {up ? (
-          <ArrowUpRight size={15} strokeWidth={1.8} />
-        ) : down ? (
-          <ArrowDownRight size={15} strokeWidth={1.8} />
-        ) : (
-          <ArrowUpRight size={15} strokeWidth={1.8} className="opacity-40" />
-        )}
-      </span>
-
-      <div className="flex w-full items-center justify-center gap-1.5 px-6">
-        {coin.imageUrl ? (
-          <img
-            src={coin.imageUrl}
-            alt=""
-            width={16}
-            height={16}
-            className="h-4 w-4 shrink-0 rounded-full"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        ) : null}
-        <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-          {coin.symbol}
-        </p>
-      </div>
-
-      <p className="tabular w-full truncate px-2 text-xl font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[1.35rem]">
+    <div className="flex min-h-[72px] flex-col items-center justify-center gap-1 px-2 py-2.5 text-center">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+        {coin.symbol}
+      </p>
+      <p className="tabular truncate text-sm font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[0.95rem]">
         {formatUsdPrice(coin.priceUsd)}
       </p>
-
-      <p className={`tabular text-xs font-medium ${changeTone}`}>
-        {isStable
-          ? `Circ. ${formatCompactUsd(coin.circulatingSupply)}`
-          : change == null
-            ? '—'
-            : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`}
-      </p>
-
-      {path ? (
-        <svg
-          width="100%"
-          height={h}
-          viewBox={`0 0 ${w} ${h}`}
-          preserveAspectRatio="none"
-          className="mt-0.5 block h-[22px] w-full max-w-[140px] opacity-90"
-          aria-hidden
-        >
-          <path d={area} fill={stroke} opacity={0.14} />
-          <path
-            d={path}
-            fill="none"
-            stroke={stroke}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : null}
-    </article>
+      <p className={`tabular text-[11px] font-medium leading-none ${changeTone}`}>{changeLabel}</p>
+    </div>
   )
 }
 
-/** Top-10 market-cap banner — tile chrome matches KPI cards. */
+/** Compact top-10 majors banner (no stables) — full-width strip aligned with KPI grid. */
 export function TopCoinsBanner() {
   const [coins, setCoins] = useState<TopCoin[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -215,7 +120,7 @@ export function TopCoinsBanner() {
   }
   if (coins.length === 0) {
     return (
-      <div className="panel flex min-h-[108px] items-center justify-center px-4">
+      <div className="panel flex min-h-[72px] items-center justify-center px-4">
         <p className="text-xs text-[var(--color-text-muted)]">Loading top markets…</p>
       </div>
     )
@@ -226,9 +131,15 @@ export function TopCoinsBanner() {
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
         Top 10 Coins
       </h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Same gap / column rhythm as KpiGrid (2→3→4→5/6); 5×2 fills 10 majors. */}
+      <div className="panel grid grid-cols-2 gap-px overflow-hidden bg-[var(--color-border)] sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5">
         {coins.map((coin) => (
-          <CoinTile key={coin.id} coin={coin} />
+          <div
+            key={coin.id}
+            className="bg-[var(--color-surface)] transition-colors hover:bg-[var(--color-surface-hover)]"
+          >
+            <CoinChip coin={coin} />
+          </div>
         ))}
       </div>
     </section>
