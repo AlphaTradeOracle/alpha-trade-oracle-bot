@@ -33,9 +33,9 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Slim market ticker — matches Sidebar nav height, full content width */}
+      {/* Slim market ticker — full content width, no separator line below */}
       <div className="-mx-4 -mt-6 sm:-mx-6 lg:-mx-8">
-        <div className="border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/80 px-4 py-2 sm:px-6 lg:px-8">
+        <div className="px-4 py-2 sm:px-6 lg:px-8">
           <TopCoinsBanner />
         </div>
       </div>
