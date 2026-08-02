@@ -186,17 +186,27 @@ class BacktestService:
 
         btc_frames: dict[str, object] = {}
         eth_frames: dict[str, object] = {}
-        if config.market_regime_score_enabled and prefer_db and session is not None:
+        needs_btc_regime = config.regime_filter_enabled or config.market_regime_score_enabled
+        needs_eth = (
+            config.market_regime_score_enabled or config.market_intelligence_enabled
+        )
+        if needs_btc_regime and prefer_db and session is not None:
             from app.repositories.asset_repository import AssetRepository
 
             asset_repo = AssetRepository(session)
             btc_symbol = self._settings.regime_btc_symbol.upper()
             eth_symbol = self._settings.market_eth_symbol.upper()
-            btc_tfs = [
-                tf.strip()
-                for tf in self._settings.market_btc_timeframes.split(",")
-                if tf.strip() and tf.strip() != "1w"
-            ]
+            if config.market_intelligence_enabled or config.market_regime_score_enabled:
+                btc_tfs = [
+                    tf.strip()
+                    for tf in self._settings.market_btc_timeframes.split(",")
+                    if tf.strip() and tf.strip() != "1w"
+                ]
+            else:
+                # Legacy hard gate only needs BTC 4h.
+                btc_tfs = [self._settings.regime_timeframe or "4h"]
+            if self._settings.regime_timeframe not in btc_tfs:
+                btc_tfs.append(self._settings.regime_timeframe)
             for tf in btc_tfs:
                 warmup_start = start_utc - timeframe_to_timedelta(tf) * WARMUP_CANDLES
                 series = await asset_repo.load_candle_series(
@@ -208,16 +218,17 @@ class BacktestService:
                 )
                 if series is not None and not series.is_empty:
                     btc_frames[tf] = series.to_dataframe()
-            eth_warmup = start_utc - timeframe_to_timedelta("4h") * WARMUP_CANDLES
-            eth_series = await asset_repo.load_candle_series(
-                eth_symbol,
-                "4h",
-                start_time=eth_warmup,
-                end_time=end_utc,
-                limit=100_000,
-            )
-            if eth_series is not None and not eth_series.is_empty:
-                eth_frames["4h"] = eth_series.to_dataframe()
+            if needs_eth:
+                eth_warmup = start_utc - timeframe_to_timedelta("4h") * WARMUP_CANDLES
+                eth_series = await asset_repo.load_candle_series(
+                    eth_symbol,
+                    "4h",
+                    start_time=eth_warmup,
+                    end_time=end_utc,
+                    limit=100_000,
+                )
+                if eth_series is not None and not eth_series.is_empty:
+                    eth_frames["4h"] = eth_series.to_dataframe()
 
         try:
             engine = BacktestEngine(config)

@@ -98,6 +98,9 @@ class BacktestConfig:
     regime_filter_enabled: bool = True
     #: Soft gate: only strong bull/bear block the opposite side.
     regime_soft_gate_enabled: bool = True
+    #: Use MarketRegimeEngine (BTC MTF) for the regime gate. False = legacy
+    #: BTC-4h ``regime_from_indicators`` hard bull/bear gate.
+    market_intelligence_enabled: bool = True
 
     @classmethod
     def from_settings(
@@ -140,6 +143,7 @@ class BacktestConfig:
             "short_min_score": settings.signal_short_min_score,
             "regime_filter_enabled": settings.regime_filter_enabled,
             "regime_soft_gate_enabled": settings.regime_soft_gate_enabled,
+            "market_intelligence_enabled": settings.market_intelligence_enabled,
         }
         params.update(overrides)
         return cls(**params)  # type: ignore[arg-type]
@@ -293,8 +297,17 @@ class BacktestEngine:
             )
         return self._run_single(df)
 
+    def _needs_market_context(self) -> bool:
+        """Blend and/or soft MTF regime gate both need BTC market context."""
+        if self._config.market_regime_score_enabled:
+            return True
+        return (
+            self._config.regime_filter_enabled
+            and self._config.market_intelligence_enabled
+        )
+
     def _market_context_at(self, cutoff: datetime) -> MarketContext | None:
-        if not self._config.market_regime_score_enabled:
+        if not self._needs_market_context():
             return None
         if not self._btc_frames:
             return None
@@ -320,6 +333,51 @@ class BacktestEngine:
         )
         self._market_context_cache[cutoff] = context
         return context
+
+    def _legacy_hard_regime_at(self, cutoff: datetime):
+        """Previous-bot BTC-4h hard gate via ``regime_from_indicators``."""
+        from app.signals.regime import RegimeSnapshot, regime_from_indicators
+
+        if not self._config.regime_filter_enabled:
+            return None
+        if self._config.market_intelligence_enabled:
+            return None
+        if not self._btc_frames:
+            return None
+        frame = self._btc_frames.get("4h")
+        if frame is None:
+            # Fall back to any available BTC frame.
+            frame = next(iter(self._btc_frames.values()), None)
+        if frame is None:
+            return None
+        window = frame.loc[frame.index <= cutoff]
+        if len(window) < WARMUP_CANDLES:
+            return None
+        try:
+            indicators = self._indicators.compute(
+                window,
+                "4h" if "4h" in self._btc_frames else next(iter(self._btc_frames)),
+                symbol="BTCUSDT",
+                strict=False,
+            )
+            snap = regime_from_indicators(indicators)
+            return snap.regime if snap.available else None
+        except Exception:
+            return None
+
+    def _resolve_market_regime(self, cutoff: datetime):
+        """Regime for SignalEngine: soft MTF intel or legacy hard 4h."""
+        if not self._config.regime_filter_enabled:
+            return None
+        if self._config.market_intelligence_enabled:
+            market_context = self._market_context_at(cutoff)
+            if market_context is None:
+                return None
+            snap = self._market_engine.to_legacy_regime(
+                market_context, soft=self._config.regime_soft_gate_enabled
+            )
+            return snap.regime if snap.available else None
+        return self._legacy_hard_regime_at(cutoff)
 
     def _run_single(self, df: pd.DataFrame) -> BacktestOutcome:
         """Backtest auf einem OHLCV-DataFrame ausfuehren.
@@ -536,12 +594,7 @@ class BacktestEngine:
             )
             candle_time = ensure_utc(_index_time(window, len(window) - 1))
             market_context = self._market_context_at(candle_time)
-            market_regime = None
-            if market_context is not None and self._config.regime_filter_enabled:
-                snap = self._market_engine.to_legacy_regime(
-                    market_context, soft=self._config.regime_soft_gate_enabled
-                )
-                market_regime = snap.regime if snap.available else None
+            market_regime = self._resolve_market_regime(candle_time)
             return self._signal_engine.generate(
                 self._config.symbol,
                 {self._config.timeframe: indicators},
@@ -582,12 +635,7 @@ class BacktestEngine:
             coverage = len(indicator_sets) / max(len(requested), 1)
             data_quality = 100.0 * coverage
             market_context = self._market_context_at(cutoff)
-            market_regime = None
-            if market_context is not None and self._config.regime_filter_enabled:
-                snap = self._market_engine.to_legacy_regime(
-                    market_context, soft=self._config.regime_soft_gate_enabled
-                )
-                market_regime = snap.regime if snap.available else None
+            market_regime = self._resolve_market_regime(cutoff)
             return self._signal_engine.generate(
                 self._config.symbol,
                 indicator_sets,  # type: ignore[arg-type]
