@@ -205,13 +205,13 @@ class Settings(BaseSettings):
     #: Risikobetrag je Trade in USD. Die Stueckzahl folgt daraus und dem
     #: Stop-Abstand, damit ein Stop-Treffer immer gleich viel kostet.
     #: 0 = altes Verhalten (fixe Margin x Hebel, Risiko haengt am Stop-Abstand).
-    paper_risk_per_trade_usd: float = 100.0
+    #: 0 = fixe Margin x Hebel (jedes Paper-Trade gleiche Margin, Default $200).
+    #: >0 = Stueckzahl aus Risikobetrag und Stop-Abstand (1R-Sizing).
+    paper_risk_per_trade_usd: float = 0.0
     #: Obergrenze fuer das Nominal, damit sehr enge Stops keinen absurden Hebel
-    #: erzeugen (0 = keine Grenze).
-    paper_max_notional_usd: float = 3_000.0
+    #: erzeugen (0 = keine Grenze). Bei fixer Margin meist margin*leverage.
+    paper_max_notional_usd: float = 2_000.0
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
-    #: Im Ledger standen bis zu 32 Positionen gleichzeitig offen — mit 100 USD je
-    #: Trade waeren das 64% des Kontos in einem Zug (0 = keine Grenze).
     paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
     paper_max_open_positions: int = 20
