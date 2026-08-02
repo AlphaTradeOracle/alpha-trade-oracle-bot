@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -26,6 +28,43 @@ router = APIRouter(prefix="/api/v1/desk", tags=["desk"])
 _ALLOWED_INTERVALS = frozenset(
     {"1m", "5m", "15m", "30m", "1h", "4h", "12h", "1d", "3d", "1w"}
 )
+
+# Process-local regime cache — full resolve hits many external venues (~5–8s).
+_REGIME_TTL_SECONDS = 90.0
+_regime_cache: DeskMarketRegime | None = None
+_regime_cache_at: float = 0.0
+_regime_lock = asyncio.Lock()
+
+
+async def _cached_desk_regime(provider: MarketDataProvider) -> DeskMarketRegime | None:
+    """Return market regime, refreshing at most once per TTL window."""
+    global _regime_cache, _regime_cache_at
+
+    settings = get_settings()
+    if not settings.market_regime_enabled:
+        return None
+
+    now = time.monotonic()
+    if _regime_cache is not None and (now - _regime_cache_at) < _REGIME_TTL_SECONDS:
+        return _regime_cache
+
+    async with _regime_lock:
+        now = time.monotonic()
+        if _regime_cache is not None and (now - _regime_cache_at) < _REGIME_TTL_SECONDS:
+            return _regime_cache
+
+        engine = MarketRegimeEngine(settings)
+        try:
+            snap = await engine.resolve(provider, refresh=True)
+            regime = DeskMarketRegime.model_validate(snap.to_desk_dict())
+            _regime_cache = regime
+            _regime_cache_at = time.monotonic()
+            return regime
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("desk_market_regime_failed", error=str(exc))
+            return _regime_cache
+        finally:
+            await engine.close()
 
 
 @router.get(
@@ -53,21 +92,16 @@ async def desk_snapshot(
     account = await paper.get_or_create_account(session)
     open_positions = await PaperRepository(session).list_open_positions(account.id)
     symbols = [p.symbol for p in open_positions]
-    prices: dict[str, float] = {}
-    if symbols:
-        prices = await _collect_prices(provider, symbols, providers=providers)
 
-    market_regime: DeskMarketRegime | None = None
-    settings = get_settings()
-    if settings.market_regime_enabled:
-        engine = MarketRegimeEngine(settings)
-        try:
-            snap = await engine.resolve(provider, refresh=True)
-            market_regime = DeskMarketRegime.model_validate(snap.to_desk_dict())
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("desk_market_regime_failed", error=str(exc))
-        finally:
-            await engine.close()
+    async def _prices() -> dict[str, float]:
+        if not symbols:
+            return {}
+        return await _collect_prices(provider, symbols, providers=providers)
+
+    prices, market_regime = await asyncio.gather(
+        _prices(),
+        _cached_desk_regime(provider),
+    )
 
     return await DeskService(paper).snapshot(
         session, prices=prices, market_regime=market_regime
