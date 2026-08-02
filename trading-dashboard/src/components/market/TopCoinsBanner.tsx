@@ -223,12 +223,9 @@ export function TopCoinsBanner() {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-          Top 10 Coins
-        </h2>
-        <span className="text-[10px] text-[var(--color-text-muted)]">Live · 7d</span>
-      </div>
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+        Top 10 Coins
+      </h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {coins.map((coin) => (
           <CoinTile key={coin.id} coin={coin} />
