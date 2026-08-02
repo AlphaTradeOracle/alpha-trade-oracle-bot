@@ -198,10 +198,12 @@ def map_position_to_desk_trade(
         pos_id = position.get("id")
         symbol = str(position.get("symbol") or "")
         entry = _f(position.get("entry_price"))
-        stop = _f(position.get("current_stop") or position.get("stop_loss"))
+        orig_stop = _f(position.get("stop_loss"))
+        current_stop = _f(position.get("current_stop") or position.get("stop_loss"))
         realized = _f(position.get("realized_pnl"))
         risk = _f(position.get("risk_amount"))
         margin = _f(position.get("margin_used"))
+        notional = _f(position.get("notional"))
         score = _f(position.get("signal_score"), 0.0)
         leverage = _f(position.get("leverage"), 1.0)
         fees = _f(position.get("fees"))
@@ -216,10 +218,12 @@ def map_position_to_desk_trade(
         pos_id = position.id
         symbol = position.symbol
         entry = _f(position.entry_price)
-        stop = _f(position.current_stop or position.stop_loss)
+        orig_stop = _f(position.stop_loss)
+        current_stop = _f(position.current_stop or position.stop_loss)
         realized = _f(position.realized_pnl)
         risk = _f(position.risk_amount)
         margin = _f(position.margin_used)
+        notional = _f(position.notional)
         score = _f(position.signal_score, 0.0)
         leverage = _f(position.leverage, 1.0)
         fees = _f(position.fees)
@@ -238,6 +242,15 @@ def map_position_to_desk_trade(
     # Guard: a CLOSED desk row without an exit fill is a mapping bug — drop it.
     if desk_status == "CLOSED" and exit_px is None:
         return None
+
+    if notional <= 0 and qty > 0 and entry > 0:
+        notional = qty * entry
+    lev = leverage if leverage > 0 else 1.0
+    initial_margin = notional / lev if notional > 0 else 0.0
+    # Closed rows zero ``margin_used`` in the ledger — restore entry margin for desk UI.
+    margin_out = margin if margin > 0 else initial_margin
+    # Risk/Unit should use the original SL; current_stop is often BE (= entry) after TP1.
+    stop_out = orig_stop if desk_status == "CLOSED" and orig_stop > 0 else current_stop
 
     r_mult: float | None = None
     if desk_status == "CLOSED" and risk > 0:
@@ -274,11 +287,11 @@ def map_position_to_desk_trade(
         entry=entry,
         mark=mark_out,
         exit=exit_px,
-        stop=stop,
+        stop=stop_out,
         upnl=upnl,
         realized=_round_money(realized) if desk_status == "CLOSED" else None,
         r=r_mult,
-        margin=_round_money(margin) if desk_status != "CLOSED" else 0.0,
+        margin=_round_money(margin_out),
         score=round(score, 1),
         status=desk_status,
         openedAt=opened,
@@ -290,6 +303,7 @@ def map_position_to_desk_trade(
             position, exit_price=exit_px, side=side, scale_out=scale_out
         ),
         positionSize=qty if qty else None,
+        notional=_round_money(notional) if notional > 0 else None,
         leverage=leverage,
         fees=_round_money(fees),
         notes=_notes_for(position, desk_status),

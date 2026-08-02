@@ -59,7 +59,10 @@ class DeskTrade(BaseModel):
     entryZoneHigh: float | None = None
     strategy: str | None = None
     takeProfits: list[DeskTakeProfit] = Field(default_factory=list)
+    #: Base-asset quantity (can look huge on cheap alts).
     positionSize: float | None = None
+    #: Quote notional at entry (margin × leverage); preferred desk size display.
+    notional: float | None = None
     leverage: float | None = None
     fees: float | None = None
     notes: str | None = None

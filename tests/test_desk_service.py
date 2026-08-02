@@ -105,6 +105,7 @@ def test_closed_with_exit_fill_mapped() -> None:
             "initial_quantity": 1.0,
             "remaining_quantity": 0.0,
             "margin_used": 0.0,
+            "notional": 1000.0,
             "realized_pnl": -10.5,
             "fees": 1.2,
             "risk_amount": 10.0,
@@ -134,6 +135,9 @@ def test_closed_with_exit_fill_mapped() -> None:
     assert trade.exit == 110.0
     assert trade.realized == -10.5
     assert trade.r == -1.05
+    assert trade.margin == 100.0
+    assert trade.notional == 1000.0
+    assert trade.stop == 110.0
     assert [tp.size for tp in trade.takeProfits] == [0.5, 0.25, 0.25]
 
 
