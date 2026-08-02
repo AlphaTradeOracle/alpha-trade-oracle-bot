@@ -1,5 +1,5 @@
 import type { Trade } from '../../types/trade'
-import { formatMoney, formatPrice, formatSince } from '../../utils/format'
+import { formatMoney, formatPrice, formatSince, tradeProfitPct } from '../../utils/format'
 import { EmptyState } from '../ui/EmptyState'
 import { PnLCell } from './PnLCell'
 import { ScoreBadge } from './ScoreBadge'
@@ -32,7 +32,7 @@ export function OpenTradesTable({ trades, onRowClick }: OpenTradesTableProps) {
                 'Mark Price',
                 'Stop',
                 'uPnL',
-                'R',
+                'Profit %',
                 'Margin',
                 'Score',
                 'Opened Since',
@@ -68,7 +68,7 @@ export function OpenTradesTable({ trades, onRowClick }: OpenTradesTableProps) {
                   <PnLCell value={t.upnl} />
                 </td>
                 <td className="px-4 py-3">
-                  <PnLCell value={t.r} asR />
+                  <PnLCell value={tradeProfitPct(t)} asPct />
                 </td>
                 <td className="px-4 py-3 tabular text-[var(--color-text-secondary)]">
                   {formatMoney(t.margin)}

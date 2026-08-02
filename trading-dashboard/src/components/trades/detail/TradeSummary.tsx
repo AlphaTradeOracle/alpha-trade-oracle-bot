@@ -1,5 +1,5 @@
 import type { Trade } from '../../../types/trade'
-import { formatMoney, formatPrice, formatR, formatSignedMoney } from '../../../utils/format'
+import { formatMoney, formatPrice, formatSignedMoney, tradeProfitPct } from '../../../utils/format'
 import { PnLCell } from '../PnLCell'
 import { ScoreBadge } from '../ScoreBadge'
 import { SideBadge } from '../SideBadge'
@@ -89,7 +89,14 @@ export function TradeSummary({ trade }: TradeSummaryProps) {
             <PnLCell value={trade.realized} />
           </dd>
         </div>
-        <DetailField label="R-Multiple">{formatR(trade.r)}</DetailField>
+        <div className="min-w-0">
+          <dt className="text-[10px] font-medium uppercase tracking-[0.09em] text-[var(--color-text-muted)]">
+            Profit %
+          </dt>
+          <dd className="mt-1">
+            <PnLCell value={tradeProfitPct(trade)} asPct />
+          </dd>
+        </div>
 
         <DetailField label="Fees">
           {trade.fees != null ? formatSignedMoney(-trade.fees) : '—'}

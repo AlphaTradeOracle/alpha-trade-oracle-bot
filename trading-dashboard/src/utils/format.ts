@@ -34,6 +34,26 @@ export function formatR(value: number | null | undefined): string {
   return `${sign}${value.toFixed(2)}R`
 }
 
+/** Margin return in percent: PnL / margin × 100 (falls back to R×100). */
+export function tradeProfitPct(trade: {
+  status: string
+  margin: number
+  realized: number | null
+  upnl: number | null
+  r: number | null
+}): number | null {
+  if (trade.margin > 0) {
+    const pnl = trade.status === 'CLOSED' ? trade.realized : trade.upnl
+    if (pnl != null && Number.isFinite(pnl)) {
+      return (pnl / trade.margin) * 100
+    }
+  }
+  if (trade.r != null && Number.isFinite(trade.r)) {
+    return trade.r * 100
+  }
+  return null
+}
+
 export function formatPrice(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—'
   if (value >= 100) return value.toFixed(2)

@@ -20,7 +20,7 @@ export function TradeFilters({
     { value: 'openedAt', label: 'Opened' },
     { value: 'symbol', label: 'Symbol' },
     { value: 'score', label: 'Score' },
-    { value: 'r', label: 'R' },
+    { value: 'r', label: 'Profit %' },
   ],
 }: TradeFiltersProps) {
   const patch = (partial: Partial<TradeFilterState>) => onChange({ ...filters, ...partial })

@@ -28,7 +28,7 @@ export function OpenTradesPage() {
           { value: 'symbol', label: 'Symbol' },
           { value: 'score', label: 'Score' },
           { value: 'upnl', label: 'uPnL' },
-          { value: 'r', label: 'R' },
+          { value: 'r', label: 'Profit %' },
         ]}
       />
       <OpenTradesTable trades={filtered} onRowClick={setSelected} />

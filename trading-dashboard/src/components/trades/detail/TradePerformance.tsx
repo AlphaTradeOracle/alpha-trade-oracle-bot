@@ -1,5 +1,5 @@
 import type { Trade } from '../../../types/trade'
-import { formatPct, formatR, formatSignedMoney } from '../../../utils/format'
+import { formatPct, formatSignedMoney, tradeProfitPct } from '../../../utils/format'
 import { DetailCard } from './DetailField'
 
 interface TradePerformanceProps {
@@ -25,15 +25,18 @@ const toneClass: Record<Tone, string> = {
  */
 export function TradePerformance({ trade }: TradePerformanceProps) {
   const pnl = trade.realized ?? trade.upnl ?? 0
-  const returnPct = trade.margin > 0 ? (pnl / trade.margin) * 100 : 0
+  const returnPct = tradeProfitPct(trade)
   const outcome =
     trade.status !== 'CLOSED' ? 'Offen' : pnl >= 0 ? 'Win' : 'Loss'
 
   const metrics = [
     { label: 'Ergebnis', value: outcome, tone: toneOf(trade.status === 'CLOSED' ? pnl : null) },
     { label: 'PnL', value: formatSignedMoney(pnl), tone: toneOf(pnl) },
-    { label: 'Return', value: formatPct(returnPct), tone: toneOf(returnPct) },
-    { label: 'R-Multiple', value: formatR(trade.r), tone: toneOf(trade.r) },
+    {
+      label: 'Profit %',
+      value: returnPct == null ? '—' : formatPct(returnPct),
+      tone: toneOf(returnPct),
+    },
     { label: 'Score', value: trade.score.toFixed(1), tone: 'neutral' as Tone },
   ]
 

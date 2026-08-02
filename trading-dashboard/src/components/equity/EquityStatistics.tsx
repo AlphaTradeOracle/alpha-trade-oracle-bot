@@ -1,7 +1,7 @@
 import type { EquitySample } from '../../services/equityData'
 import type { Trade } from '../../types/trade'
 import { computeEquityStats } from '../../utils/equityStats'
-import { formatMoney, formatPct, formatR, formatSignedMoney } from '../../utils/format'
+import { formatMoney, formatPct, formatSignedMoney } from '../../utils/format'
 
 interface EquityStatisticsProps {
   samples: EquitySample[]
@@ -74,7 +74,12 @@ export function EquityStatistics({ samples, closedTrades }: EquityStatisticsProp
           value: stats.winratePct != null ? `${stats.winratePct.toFixed(1)}%` : '—',
           tone: toneOf(stats.winratePct, 50),
         },
-        { label: 'Average R', value: formatR(stats.averageR), tone: toneOf(stats.averageR) },
+        {
+          label: 'Avg Profit %',
+          value:
+            stats.averageR != null ? formatPct(stats.averageR * 100) : '—',
+          tone: toneOf(stats.averageR),
+        },
         {
           label: 'Ø Tagesgewinn',
           value:

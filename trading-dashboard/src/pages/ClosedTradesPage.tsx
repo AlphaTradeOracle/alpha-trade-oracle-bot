@@ -28,7 +28,7 @@ export function ClosedTradesPage() {
           { value: 'symbol', label: 'Symbol' },
           { value: 'score', label: 'Score' },
           { value: 'realized', label: 'PnL' },
-          { value: 'r', label: 'R' },
+          { value: 'r', label: 'Profit %' },
         ]}
       />
       <ClosedTradesTable trades={filtered} onRowClick={setSelected} />

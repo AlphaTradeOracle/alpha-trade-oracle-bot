@@ -1,12 +1,12 @@
-import { formatR, formatSignedMoney } from '../../utils/format'
+import { formatPct, formatSignedMoney } from '../../utils/format'
 
 interface PnLCellProps {
   value: number | null | undefined
-  /** When true, append R suffix formatting instead of money */
-  asR?: boolean
+  /** When true, format as signed percent instead of money */
+  asPct?: boolean
 }
 
-export function PnLCell({ value, asR = false }: PnLCellProps) {
+export function PnLCell({ value, asPct = false }: PnLCellProps) {
   if (value == null || Number.isNaN(value)) {
     return <span className="tabular text-[var(--color-text-muted)]">—</span>
   }
@@ -21,7 +21,7 @@ export function PnLCell({ value, asR = false }: PnLCellProps) {
 
   return (
     <span className={`tabular font-medium ${color}`}>
-      {asR ? formatR(value) : formatSignedMoney(value)}
+      {asPct ? formatPct(value) : formatSignedMoney(value)}
     </span>
   )
 }

@@ -27,8 +27,8 @@ const modules = [
   },
   {
     id: 'avg-r',
-    title: 'Average R',
-    blurb: 'Mittleres R-Vielfaches des geschlossenen Buchs.',
+    title: 'Avg Profit %',
+    blurb: 'Mittlerer Margin-Profit in Prozent des geschlossenen Buchs.',
     icon: TrendingUp,
   },
   {
@@ -46,7 +46,7 @@ const modules = [
   {
     id: 'risk',
     title: 'Risk Management',
-    blurb: 'Exposure, Margin und offenes R im Blick.',
+    blurb: 'Exposure, Margin und offener Profit im Blick.',
     icon: ShieldAlert,
   },
   {

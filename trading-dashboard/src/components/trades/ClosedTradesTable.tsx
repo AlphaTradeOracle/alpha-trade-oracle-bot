@@ -1,5 +1,5 @@
 import type { Trade } from '../../types/trade'
-import { formatDateTime, formatDuration, formatPrice } from '../../utils/format'
+import { formatDateTime, formatDuration, formatPrice, tradeProfitPct } from '../../utils/format'
 import { EmptyState } from '../ui/EmptyState'
 import { PnLCell } from './PnLCell'
 import { ScoreBadge } from './ScoreBadge'
@@ -25,7 +25,7 @@ export function ClosedTradesTable({ trades, onRowClick }: ClosedTradesTableProps
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--color-border-subtle)] text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-              {['Symbol', 'Side', 'Entry', 'Exit', 'PnL', 'R', 'Score', 'Duration', 'Closed At'].map(
+              {['Symbol', 'Side', 'Entry', 'Exit', 'PnL', 'Profit %', 'Score', 'Duration', 'Closed At'].map(
                 (h) => (
                   <th key={h} className="px-4 py-3 font-medium whitespace-nowrap">
                     {h}
@@ -56,7 +56,7 @@ export function ClosedTradesTable({ trades, onRowClick }: ClosedTradesTableProps
                   <PnLCell value={t.realized} />
                 </td>
                 <td className="px-4 py-3">
-                  <PnLCell value={t.r} asR />
+                  <PnLCell value={tradeProfitPct(t)} asPct />
                 </td>
                 <td className="px-4 py-3">
                   <ScoreBadge score={t.score} />

@@ -62,7 +62,7 @@ export function DashboardPage() {
             { value: 'symbol', label: 'Symbol' },
             { value: 'score', label: 'Score' },
             { value: 'upnl', label: 'uPnL' },
-            { value: 'r', label: 'R' },
+            { value: 'r', label: 'Profit %' },
           ]}
         />
         <OpenTradesTable trades={openFilters.filtered} onRowClick={setSelected} />
@@ -98,7 +98,7 @@ export function DashboardPage() {
             { value: 'symbol', label: 'Symbol' },
             { value: 'score', label: 'Score' },
             { value: 'realized', label: 'PnL' },
-            { value: 'r', label: 'R' },
+            { value: 'r', label: 'Profit %' },
           ]}
         />
         <ClosedTradesTable trades={closedFilters.filtered} onRowClick={setSelected} />
