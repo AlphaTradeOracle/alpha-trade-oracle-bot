@@ -111,10 +111,7 @@ function CoinChip({ coin }: { coin: TopCoin }) {
     >
       <CoinIcon coin={coin} />
       <div className="min-w-0 flex-1 leading-none">
-        <p className="tabular truncate text-xs font-semibold tracking-tight text-[var(--color-text)] sm:text-[13px]">
-          {formatUsdPrice(coin.priceUsd)}
-        </p>
-        <div className="mt-0.5 flex min-w-0 items-baseline gap-1">
+        <div className="flex min-w-0 items-baseline gap-1">
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
             {coin.symbol}
           </span>
@@ -122,6 +119,9 @@ function CoinChip({ coin }: { coin: TopCoin }) {
             {changeLabel}
           </span>
         </div>
+        <p className="mt-0.5 tabular truncate text-xs font-semibold tracking-tight text-[var(--color-text)] sm:text-[13px]">
+          {formatUsdPrice(coin.priceUsd)}
+        </p>
       </div>
     </div>
   )
