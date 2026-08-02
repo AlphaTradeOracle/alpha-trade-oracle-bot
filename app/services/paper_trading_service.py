@@ -793,7 +793,10 @@ class PaperTradingService:
 
         cfg = self._retest_config()
         cutoff = ensure_utc(end_time or utc_now())
-        regime_snapshot = await self._fetch_regime_snapshot(provider)
+        # Historical rebuild must not apply *current* BTC regime to past fills.
+        regime_snapshot = (
+            None if historical else await self._fetch_regime_snapshot(provider)
+        )
         # ATR braucht Warmup; etwas Historie vor Armed-Zeit laden.
         lookback_pad = timedelta(days=14)
 
