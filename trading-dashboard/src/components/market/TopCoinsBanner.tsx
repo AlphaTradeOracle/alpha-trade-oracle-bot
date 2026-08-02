@@ -29,8 +29,8 @@ const DISPLAY_COUNT = 10
 const FETCH_LIMIT = 15
 /** CoinGecko sparkline is hourly over 7d (~168 pts); last 24 ≈ 1D. */
 const SPARK_1D_POINTS = 24
-const SPARK_W = 72
-const SPARK_H = 36
+const SPARK_W = 120
+const SPARK_H = 52
 
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
@@ -97,23 +97,23 @@ function CoinIcon({ coin }: { coin: TopCoin }) {
 
   return (
     <span
-      className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)]"
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)] sm:h-10 sm:w-10"
       aria-hidden
     >
       {showImg ? (
         <img
           src={coin.imageUrl!}
           alt=""
-          width={28}
-          height={28}
-          className="h-7 w-7 object-cover"
+          width={40}
+          height={40}
+          className="h-full w-full object-cover"
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
           {coin.symbol.slice(0, 2)}
         </span>
       )}
@@ -135,20 +135,20 @@ function Sparkline1d({ values, up, down }: { values: number[]; up: boolean; down
 
   return (
     <svg
-      width={SPARK_W}
-      height={SPARK_H}
       viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-      className="block shrink-0 opacity-95"
+      preserveAspectRatio="none"
+      className="block h-[52px] w-[46%] max-w-[140px] min-w-[72px] shrink-0 opacity-95 sm:h-[58px] sm:max-w-[160px]"
       aria-hidden
     >
-      <path d={area} fill={stroke} opacity={0.14} />
+      <path d={area} fill={stroke} opacity={0.16} />
       <path
         d={path}
         fill="none"
         stroke={stroke}
-        strokeWidth={1.6}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   )
@@ -167,18 +167,20 @@ function CoinChip({ coin }: { coin: TopCoin }) {
     change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`
 
   return (
-    <div className="flex min-h-[78px] items-center gap-2 px-2.5 py-2.5 sm:gap-2.5 sm:px-3">
-      <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-1">
-        <div className="flex items-center gap-1.5">
+    <div className="flex h-full min-h-[108px] items-center gap-2.5 px-3 py-3 sm:gap-3 sm:px-3.5">
+      <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-1.5">
+        <div className="flex items-center gap-2">
           <CoinIcon coin={coin} />
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)] sm:text-[13px]">
             {coin.symbol}
           </p>
         </div>
-        <p className="tabular truncate text-sm font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[0.95rem]">
+        <p className="tabular w-full truncate text-lg font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-xl">
           {formatUsdPrice(coin.priceUsd)}
         </p>
-        <p className={`tabular text-[11px] font-medium leading-none ${changeTone}`}>{changeLabel}</p>
+        <p className={`tabular text-xs font-medium leading-none sm:text-[13px] ${changeTone}`}>
+          {changeLabel}
+        </p>
       </div>
       <Sparkline1d values={coin.sparkline ?? []} up={up} down={down} />
     </div>
@@ -220,7 +222,7 @@ export function TopCoinsBanner() {
   }
   if (coins.length === 0) {
     return (
-      <div className="panel flex min-h-[72px] items-center justify-center px-4">
+      <div className="panel flex min-h-[108px] items-center justify-center px-4">
         <p className="text-xs text-[var(--color-text-muted)]">Loading top markets…</p>
       </div>
     )
