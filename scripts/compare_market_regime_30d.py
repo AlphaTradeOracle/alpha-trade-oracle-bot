@@ -209,7 +209,8 @@ async def main() -> int:
     )
     args = parser.parse_args()
 
-    configure_logging(get_settings())
+    settings = get_settings()
+    configure_logging(settings.log_level, json_output=False)
     container = build_container()
     symbols = await _symbols(args.top)
     if not symbols:
