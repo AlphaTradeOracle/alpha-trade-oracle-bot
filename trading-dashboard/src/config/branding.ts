@@ -1,9 +1,8 @@
 /**
  * Central brand configuration.
  *
- * To swap the logo, drop your file into `public/brand/` and point
- * `logoSrc` at it — no component changes required.
- * Recommended: square SVG mark (transparent). PNG only as fallback asset.
+ * Primary mark is the same crystal-clear PNG used for Telegram / chart overlays.
+ * Drop a replacement into `public/brand/` and point `logoSrc` at it.
  */
 export const branding = {
   projectName: 'Alpha Trade Oracle',
@@ -11,9 +10,9 @@ export const branding = {
   tagline: 'Live Dashboard',
   version: '0.1 Alpha',
   copyrightYear: 2026,
-  /** Primary logo — SVG stays sharp at small sidebar sizes. */
-  logoSrc: '/brand/logo.svg',
-  /** Legacy raster mark (optional). */
+  /** Full lockup (icon + wordmark) — matches Telegram / chart asset. */
+  logoSrc: '/brand/logo.png',
+  /** Optional alternate mark path. */
   logoFallbackSrc: '/brand/logo.png',
 } as const
 
