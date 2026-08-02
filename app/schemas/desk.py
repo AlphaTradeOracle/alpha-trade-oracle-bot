@@ -80,6 +80,8 @@ class DeskPortfolio(BaseModel):
     openPositions: int
     pendingOrders: int
     closedTrades: int
+    #: Closed-trade win rate in percent (0–100).
+    winRatePct: float = 0.0
     equityChangePct: float | None = None
     realizedChangePct: float | None = None
 

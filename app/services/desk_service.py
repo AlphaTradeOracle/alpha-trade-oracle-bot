@@ -392,6 +392,7 @@ class DeskService:
             openPositions=int(summary.open_positions),
             pendingOrders=int(summary.pending_positions),
             closedTrades=int(summary.closed_trades),
+            winRatePct=round(float(summary.win_rate) * 100.0, 1),
             equityChangePct=0.0,
             realizedChangePct=0.0,
         )
@@ -465,6 +466,7 @@ def map_raw_export_to_snapshot(payload: dict[str, Any]) -> DeskSnapshot:
         openPositions=open_n,
         pendingOrders=pending_n,
         closedTrades=closed_n,
+        winRatePct=0.0,
         equityChangePct=0.0,
         realizedChangePct=0.0,
     )
