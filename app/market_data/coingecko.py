@@ -43,6 +43,11 @@ _DESK_BANNER_EXCLUDED_IDS = frozenset(
         "weeth",
         "coinbase-wrapped-btc",
         "tbtc",
+        "tether",
+        "usd-coin",
+        "dai",
+        "first-digital-usd",
+        "true-usd",
         "binance-bridged-usdt-bnb-smart-chain",
         "binance-bridged-usdc-bnb-smart-chain",
         "figure-heloc",
@@ -73,9 +78,16 @@ _DESK_BANNER_EXCLUDED_SYMBOLS = frozenset(
         "FIGR_HELOC",
         "LEO",
         "RAIN",
+        # Stablecoins — banner shows majors only (Top-N after skipping these).
+        "USDT",
+        "USDC",
+        "DAI",
+        "FDUSD",
+        "TUSD",
         "USDE",
         "USDS",
         "SUSDS",
+        "USDD",
     }
 )
 _DESK_BANNER_NAME_FRAGMENTS = (
