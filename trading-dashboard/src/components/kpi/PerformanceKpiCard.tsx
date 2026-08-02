@@ -25,18 +25,19 @@ export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
   const windows: PerformanceWindow[] = computePerformanceWindows(equity)
 
   return (
-    <article className="panel flex min-h-[108px] w-full flex-col justify-between gap-2 p-4 text-left">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-          Performance
-        </p>
-        <span className="rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]">
-          <Gauge size={15} strokeWidth={1.8} />
-        </span>
-      </div>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center">
+      <span
+        className="absolute right-3 top-3 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
+        aria-hidden
+      >
+        <Gauge size={15} strokeWidth={1.8} />
+      </span>
+      <p className="w-full px-6 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+        Performance
+      </p>
+      <dl className="grid w-full grid-cols-2 gap-x-2 gap-y-2">
         {windows.map((win) => (
-          <div key={win.label} className="flex items-baseline justify-between gap-2">
+          <div key={win.label} className="flex flex-col items-center gap-0.5">
             <dt className="text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
               {win.label}
             </dt>

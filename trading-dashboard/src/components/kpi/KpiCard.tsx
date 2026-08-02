@@ -38,42 +38,43 @@ export function KpiCard({
   onClick,
 }: KpiCardProps) {
   const className = [
-    'panel flex min-h-[108px] w-full flex-col justify-between gap-3 p-4 text-left transition-colors hover:bg-[var(--color-surface-hover)]',
+    'panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]',
     onClick ? 'cursor-pointer' : '',
   ].join(' ')
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-          {title}
+      <span
+        className={`absolute right-3 top-3 rounded-lg p-1.5 ${toneIcon[tone]}`}
+        aria-hidden
+      >
+        <Icon size={15} strokeWidth={1.8} />
+      </span>
+      <p className="w-full px-6 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+        {title}
+      </p>
+      <p
+        className={`tabular w-full text-xl font-semibold leading-none tracking-tight sm:text-[1.35rem] ${toneValue[tone]}`}
+      >
+        {value}
+      </p>
+      {hint ? (
+        <p className="tabular text-xs text-[var(--color-text-muted)]">{hint}</p>
+      ) : null}
+      {deltaPct != null ? (
+        <p
+          className={[
+            'tabular text-xs',
+            deltaPct > 0
+              ? 'text-[var(--color-long)]'
+              : deltaPct < 0
+                ? 'text-[var(--color-short)]'
+                : 'text-[var(--color-text-muted)]',
+          ].join(' ')}
+        >
+          {formatPct(deltaPct)} vs prior
         </p>
-        <span className={`rounded-lg p-1.5 ${toneIcon[tone]}`}>
-          <Icon size={15} strokeWidth={1.8} />
-        </span>
-      </div>
-      <div>
-        <p className={`tabular text-xl font-semibold tracking-tight sm:text-[1.35rem] ${toneValue[tone]}`}>
-          {value}
-        </p>
-        {hint ? (
-          <p className="mt-1 text-xs tabular text-[var(--color-text-muted)]">{hint}</p>
-        ) : null}
-        {deltaPct != null ? (
-          <p
-            className={[
-              'mt-1 text-xs tabular',
-              deltaPct > 0
-                ? 'text-[var(--color-long)]'
-                : deltaPct < 0
-                  ? 'text-[var(--color-short)]'
-                  : 'text-[var(--color-text-muted)]',
-            ].join(' ')}
-          >
-            {formatPct(deltaPct)} vs prior
-          </p>
-        ) : null}
-      </div>
+      ) : null}
     </>
   )
 

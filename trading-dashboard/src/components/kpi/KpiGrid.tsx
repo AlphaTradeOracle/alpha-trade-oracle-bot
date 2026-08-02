@@ -56,12 +56,7 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
     },
     {
       title: 'Winrate',
-      value:
-        p.winRatePct != null
-          ? `${Number(p.winRatePct).toLocaleString('de-DE', {
-              maximumFractionDigits: 1,
-            })}%`
-          : '—',
+      value: p.winRatePct != null ? `${Number(p.winRatePct).toFixed(1)}%` : '—',
       icon: Percent,
       tone:
         p.winRatePct != null ? toneFromNumber(p.winRatePct - 50) : ('neutral' as KpiTone),
