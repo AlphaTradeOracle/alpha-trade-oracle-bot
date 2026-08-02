@@ -104,6 +104,18 @@ class TestBitcoinAnalyzer:
         assert not result.available
 
 
+class TestEthereumAnalyzer:
+    def test_relative_strength_with_btc_frame(self, uptrend_df, downtrend_df) -> None:
+        from app.market.analyzers.ethereum import EthereumAnalyzer
+
+        result = EthereumAnalyzer().analyze(
+            asof=NOW,
+            frames={"4h": uptrend_df, "btc_4h": downtrend_df},
+        )
+        assert result.available
+        assert result.metrics.get("relativeStrengthVsBtc20") is not None
+
+
 class TestMarketRegimeEngine:
     def test_aggregates_btc_and_stubs(self, uptrend_df) -> None:
         engine = MarketRegimeEngine()
