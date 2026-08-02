@@ -124,3 +124,20 @@ class ScheduledJobRepository:
     async def list_all(self) -> list[ScheduledJob]:
         result = await self._session.execute(select(ScheduledJob).order_by(ScheduledJob.job_key))
         return list(result.scalars())
+
+    async def disable_job_types(self, job_types: set[str], *, reason: str) -> list[str]:
+        """Deaktiviert alle Jobs der genannten Typen (z. B. abgeschaffte Digests)."""
+        if not job_types:
+            return []
+        result = await self._session.execute(
+            select(ScheduledJob).where(ScheduledJob.job_type.in_(job_types))
+        )
+        disabled: list[str] = []
+        for job in result.scalars():
+            if not job.is_enabled and job.last_status == "disabled":
+                continue
+            job.is_enabled = False
+            job.last_status = "disabled"
+            job.last_error = reason[:2000]
+            disabled.append(job.job_key)
+        return disabled

@@ -561,3 +561,20 @@ class TestScheduledJobRepository:
         assert job.last_status == "failed"
         assert job.last_error == "Timeout"
         assert job.last_success_at is None
+
+    @pytest.mark.asyncio
+    async def test_disable_job_types(self, session: AsyncSession) -> None:
+        repository = ScheduledJobRepository(session)
+        await repository.register("paper_digest:60m", "paper_digest", 3600)
+        await repository.register("market_scan:15m", "market_scan", 900)
+
+        disabled = await repository.disable_job_types(
+            {"paper_digest"}, reason="disabled by test"
+        )
+        assert disabled == ["paper_digest:60m"]
+
+        digest = await repository.get("paper_digest:60m")
+        scan = await repository.get("market_scan:15m")
+        assert digest is not None and digest.is_enabled is False
+        assert digest.last_status == "disabled"
+        assert scan is not None and scan.is_enabled is True
