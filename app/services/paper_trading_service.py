@@ -1056,11 +1056,14 @@ class PaperTradingService:
         since: datetime,
         dispatched_only: bool = False,
         one_per_symbol: bool = True,
+        symbols: set[str] | None = None,
     ) -> PaperBackfillResult:
         """Qualifizierende Signale ab ``since`` als Paper-Trades nachziehen."""
         result = PaperBackfillResult()
         if not self.enabled:
             return result
+
+        allowed = {s.upper() for s in symbols} if symbols else None
 
         with self._without_notifications():
             signals = await SignalRepository(session).list_since(
@@ -1090,6 +1093,9 @@ class PaperTradingService:
                     result.skipped_filters += 1
                     continue
                 symbol = symbol.upper()
+                if allowed is not None and symbol not in allowed:
+                    result.skipped_filters += 1
+                    continue
                 if one_per_symbol and symbol in seen_symbols:
                     result.skipped_filters += 1
                     continue
@@ -1249,6 +1255,7 @@ class PaperTradingService:
         providers: list | None = None,
         dispatched_only: bool = False,
         one_per_symbol: bool = True,
+        symbols: set[str] | None = None,
     ) -> PaperRebuildResult:
         """Paper-Ledger leeren, Retest-Entries aufloesen und per Kerzen replayen."""
         from app.scheduler.jobs import _collect_prices
@@ -1256,6 +1263,8 @@ class PaperTradingService:
         out = PaperRebuildResult()
         if not self.enabled:
             return out
+
+        allowed = {s.upper() for s in symbols} if symbols else None
 
         account = await self.get_or_create_account(session)
         repo = PaperRepository(session)
@@ -1270,6 +1279,7 @@ class PaperTradingService:
                     since=since,
                     dispatched_only=dispatched_only,
                     out=out,
+                    symbols=allowed,
                 )
             else:
                 out.backfill = await self.backfill_from_signals(
@@ -1277,6 +1287,7 @@ class PaperTradingService:
                     since=since,
                     dispatched_only=dispatched_only,
                     one_per_symbol=one_per_symbol,
+                    symbols=allowed,
                 )
                 if self.retest_enabled:
                     resolve = await self.resolve_pending_retest(
@@ -1327,9 +1338,11 @@ class PaperTradingService:
         since: datetime,
         dispatched_only: bool,
         out: PaperRebuildResult,
+        symbols: set[str] | None = None,
     ) -> PaperBackfillResult:
         """Signale chronologisch: Entry (IST oder Retest) -> Exit-Replay -> naechstes."""
         backfill = PaperBackfillResult()
+        allowed = {s.upper() for s in symbols} if symbols else None
         signals = await SignalRepository(session).list_since(
             since,
             actionable_only=True,
@@ -1353,6 +1366,9 @@ class PaperTradingService:
                 backfill.skipped_filters += 1
                 continue
             symbol = symbol.upper()
+            if allowed is not None and symbol not in allowed:
+                backfill.skipped_filters += 1
+                continue
             if not self._passes_paper_gates(signal):
                 backfill.skipped_filters += 1
                 continue

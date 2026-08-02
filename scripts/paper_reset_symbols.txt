@@ -1,0 +1,27 @@
+# Coins that appeared in the paper ledger since Top-400 reset (pre-flood rebuild).
+# Used by: paper rebuild --symbols-file scripts/paper_reset_symbols.txt
+ATOMUSDT
+IMXUSDT
+WUSDT
+VANAUSDT
+NESUSDT
+SKYUSDT
+SOLUSDT
+APTUSDT
+WAVESUSDT
+OPUSDT
+SKRUSDT
+WIFUSDT
+KASUSDT
+NPCUSDT
+B3USDT
+BASEDUSDT
+BARDUSDT
+RENDERUSDT
+DEEPUSDT
+SEIUSDT
+ETCUSDT
+HYPEUSDT
+XCNUSDT
+KAVAUSDT
+BATUSDT

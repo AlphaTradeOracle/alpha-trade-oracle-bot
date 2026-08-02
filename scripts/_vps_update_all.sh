@@ -25,6 +25,7 @@ upsert_env MARKET_REGIME_HARD_VETO true
 upsert_env INSTITUTIONAL_KB_ENABLED true
 upsert_env INSTITUTIONAL_ENFORCE_GATES false
 upsert_env SIGNAL_SHORT_MAX_SCORE 25
+upsert_env PAPER_HOURLY_DIGEST_ENABLED false
 
 echo "==> bot build/restart"
 docker compose build migrate app worker

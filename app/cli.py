@@ -158,9 +158,25 @@ def paper_rebuild(
             help="Nur juengstes Signal je Symbol (Default: alle chronologisch fuer Retest-Retro)",
         ),
     ] = False,
+    symbols: Annotated[
+        str | None,
+        typer.Option("--symbols", help="Kommaliste erlaubter Symbole"),
+    ] = None,
+    symbols_file: Annotated[
+        str | None,
+        typer.Option("--symbols-file", help="Datei mit einem Symbol pro Zeile"),
+    ] = None,
 ) -> None:
     """Paper-Ledger zuruecksetzen und mit aktueller Entry-/Expiry-Logik neu berechnen."""
-    asyncio.run(_run_paper_rebuild(since, dispatched_only, one_per_symbol))
+    asyncio.run(
+        _run_paper_rebuild(
+            since,
+            dispatched_only,
+            one_per_symbol,
+            symbols=symbols,
+            symbols_file=symbols_file,
+        )
+    )
 
 
 @paper_app.command("reset")
@@ -698,8 +714,31 @@ async def _run_paper_digest_once(*, send: bool = True) -> None:
     await container.aclose()
 
 
+def _load_rebuild_symbols(
+    symbols: str | None, symbols_file: str | None
+) -> set[str] | None:
+    from pathlib import Path
+
+    out: set[str] = set()
+    if symbols:
+        out.update(s.strip().upper() for s in symbols.split(",") if s.strip())
+    if symbols_file:
+        text = Path(symbols_file).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            out.add(line.upper())
+    return out or None
+
+
 async def _run_paper_rebuild(
-    since: str, dispatched_only: bool, one_per_symbol: bool = False
+    since: str,
+    dispatched_only: bool,
+    one_per_symbol: bool = False,
+    *,
+    symbols: str | None = None,
+    symbols_file: str | None = None,
 ) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=False)
@@ -711,6 +750,8 @@ async def _run_paper_rebuild(
     else:
         since_dt = ensure_utc(datetime.fromisoformat(since))
 
+    allowed = _load_rebuild_symbols(symbols, symbols_file)
+
     async with session_scope() as session:
         result = await container.paper_trading.rebuild_from_signals(
             session,
@@ -719,6 +760,7 @@ async def _run_paper_rebuild(
             providers=container.universe_providers,
             dispatched_only=dispatched_only,
             one_per_symbol=one_per_symbol,
+            symbols=allowed,
         )
         summary = await container.paper_trading.summary(session)
         opened = result.backfill.opened if result.backfill else 0
@@ -727,6 +769,9 @@ async def _run_paper_rebuild(
     typer.echo("")
     typer.secho("Paper-Rebuild abgeschlossen", fg=typer.colors.GREEN, bold=True)
     typer.echo(f"  since:              {since_dt.isoformat()}")
+    if allowed:
+        typer.echo(f"  symbols_filter:     {len(allowed)} ({', '.join(sorted(allowed)[:20])}"
+                   f"{'...' if len(allowed) > 20 else ''})")
     typer.echo(f"  reset_positions:    {result.reset_positions}")
     typer.echo(f"  opened:             {opened}")
     typer.echo(f"  retest_filled:      {result.retest_filled}")
