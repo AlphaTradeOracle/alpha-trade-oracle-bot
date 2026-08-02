@@ -202,9 +202,6 @@ class Settings(BaseSettings):
     paper_initial_balance: float = 5_000.0
     paper_margin_per_trade: float = 200.0
     paper_leverage: float = 10.0
-    #: Risikobetrag je Trade in USD. Die Stueckzahl folgt daraus und dem
-    #: Stop-Abstand, damit ein Stop-Treffer immer gleich viel kostet.
-    #: 0 = altes Verhalten (fixe Margin x Hebel, Risiko haengt am Stop-Abstand).
     #: 0 = fixe Margin x Hebel (jedes Paper-Trade gleiche Margin, Default $200).
     #: >0 = Stueckzahl aus Risikobetrag und Stop-Abstand (1R-Sizing).
     paper_risk_per_trade_usd: float = 0.0
