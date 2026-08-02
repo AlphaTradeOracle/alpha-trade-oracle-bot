@@ -91,13 +91,13 @@ interface MarketRegimeCardProps {
   regime: MarketRegimeSnapshot | null
 }
 
-/** Dashboard card: live global market regime summary. */
+/** Dashboard card: live market sentiment / regime summary. */
 export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
   if (!regime) {
     return (
       <section className="panel p-4 sm:p-5">
         <h3 className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-          Market Regime
+          Market Sentiment
         </h3>
         <p className="text-center text-sm text-[var(--color-text-muted)]">Keine Marktdaten geladen.</p>
       </section>
@@ -137,12 +137,12 @@ export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
 
   return (
     <section className="panel p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-          Market Regime
+      <div className="relative mb-3 flex items-center justify-center gap-3">
+        <h3 className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+          Market Sentiment
         </h3>
         {!regime.available ? (
-          <span className="rounded-md bg-[var(--color-surface-hover)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+          <span className="absolute right-0 rounded-md bg-[var(--color-surface-hover)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
             Degraded
           </span>
         ) : null}
