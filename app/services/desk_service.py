@@ -18,6 +18,7 @@ from app.models.paper import PaperFill, PaperPosition
 from app.repositories.paper_repository import PaperRepository
 from app.schemas.desk import (
     DeskEquityPoint,
+    DeskMarketRegime,
     DeskPortfolio,
     DeskSnapshot,
     DeskTakeProfit,
@@ -260,6 +261,12 @@ def map_position_to_desk_trade(
     zone_lo, zone_hi = _parse_zone(str(notes) if notes else None)
     opened = _iso(opened_at) or utc_now().isoformat().replace("+00:00", "Z")
 
+    market_context = None
+    if isinstance(position, dict):
+        market_context = position.get("market_context")
+    else:
+        market_context = getattr(position, "market_context", None)
+
     return DeskTrade(
         id=str(pos_id),
         symbol=symbol.upper(),
@@ -286,6 +293,7 @@ def map_position_to_desk_trade(
         leverage=leverage,
         fees=_round_money(fees),
         notes=_notes_for(position, desk_status),
+        marketContext=dict(market_context) if isinstance(market_context, dict) else None,
     )
 
 
@@ -341,6 +349,7 @@ class DeskService:
         session: AsyncSession,
         *,
         prices: dict[str, float] | None = None,
+        market_regime: DeskMarketRegime | dict[str, Any] | None = None,
     ) -> DeskSnapshot:
         account = await self._paper.get_or_create_account(session)
         repo = PaperRepository(session)
@@ -387,6 +396,15 @@ class DeskService:
             realizedChangePct=0.0,
         )
         start_at = getattr(account, "created_at", None) or utc_now()
+        regime_out: DeskMarketRegime | None = None
+        if isinstance(market_regime, DeskMarketRegime):
+            regime_out = market_regime
+        elif isinstance(market_regime, dict):
+            try:
+                regime_out = DeskMarketRegime.model_validate(market_regime)
+            except Exception:  # noqa: BLE001
+                regime_out = None
+
         return DeskSnapshot(
             portfolio=portfolio,
             trades=trades,
@@ -397,6 +415,7 @@ class DeskService:
                 start_at=start_at,
             ),
             generatedAt=_iso(utc_now()) or utc_now().isoformat(),
+            marketRegime=regime_out,
         )
 
 

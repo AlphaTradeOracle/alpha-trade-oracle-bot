@@ -114,11 +114,14 @@ class ScanService:
         )
 
         self._analysis.clear_regime_cache()
-        regime_snapshot = await self._analysis.resolve_market_regime(refresh=True)
-        if self._settings.regime_filter_enabled:
+        market_snap = await self._analysis.resolve_market_regime_snapshot(refresh=True)
+        regime_snapshot = await self._analysis.resolve_market_regime()
+        if self._settings.regime_filter_enabled or self._settings.market_regime_enabled:
             logger.info(
                 "market_regime_resolved",
                 regime=regime_snapshot.regime.value if regime_snapshot.regime else None,
+                bias=market_snap.bias.value if market_snap and market_snap.available else None,
+                global_score=market_snap.global_score if market_snap else None,
                 available=regime_snapshot.available,
                 detail=regime_snapshot.detail,
             )

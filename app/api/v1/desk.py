@@ -8,13 +8,15 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import PaperTradingDep, ProviderDep, SessionDep, UniverseProvidersDep
+from app.core.config import get_settings
 from app.core.errors import MarketDataError, SymbolNotFoundError
 from app.core.logging import get_logger
 from app.core.time import ms_to_datetime
 from app.market_data.base import MarketDataProvider
+from app.market_regime import MarketRegimeEngine
 from app.repositories.paper_repository import PaperRepository
 from app.scheduler.jobs import _collect_prices
-from app.schemas.desk import DeskCandle, DeskSnapshot
+from app.schemas.desk import DeskCandle, DeskMarketRegime, DeskSnapshot
 from app.services.desk_service import DeskService
 
 logger = get_logger(__name__)
@@ -55,7 +57,21 @@ async def desk_snapshot(
     if symbols:
         prices = await _collect_prices(provider, symbols, providers=providers)
 
-    return await DeskService(paper).snapshot(session, prices=prices)
+    market_regime: DeskMarketRegime | None = None
+    settings = get_settings()
+    if settings.market_regime_enabled:
+        engine = MarketRegimeEngine(settings)
+        try:
+            snap = await engine.resolve(provider, refresh=True)
+            market_regime = DeskMarketRegime.model_validate(snap.to_desk_dict())
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("desk_market_regime_failed", error=str(exc))
+        finally:
+            await engine.close()
+
+    return await DeskService(paper).snapshot(
+        session, prices=prices, market_regime=market_regime
+    )
 
 
 @router.get(

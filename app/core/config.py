@@ -127,6 +127,37 @@ class Settings(BaseSettings):
     regime_filter_enabled: bool = True
     regime_btc_symbol: str = "BTCUSDT"
     regime_timeframe: str = "4h"
+    #: Global Market Regime Filter (MTF BTC + aux modules + score blend).
+    market_regime_enabled: bool = True
+    market_regime_hard_veto: bool = True
+    market_regime_btc_timeframes: str = "1h,4h,1d,1w"
+    market_regime_eth_enabled: bool = True
+    market_regime_eth_symbol: str = "ETHUSDT"
+    market_regime_funding_enabled: bool = True
+    market_regime_fear_greed_enabled: bool = True
+    market_regime_dominance_enabled: bool = True
+    market_regime_oi_enabled: bool = True
+    market_regime_liquidations_enabled: bool = True
+    #: Free liquidity venues (comma-separated): binance,bybit,hyperliquid.
+    market_regime_liquidity_venues: str = "binance,bybit,hyperliquid"
+    market_score_weight_coin: float = 0.60
+    market_score_weight_global: float = 0.25
+    market_score_weight_funding: float = 0.05
+    market_score_weight_oi: float = 0.05
+    market_score_weight_liquidations: float = 0.05
+    #: Optional paid JSON feed later (CoinGlass/Hyblock/…). Empty = free venues only.
+    liquidation_api_url: str = ""
+    binance_futures_base_url: str = "https://fapi.binance.com"
+
+    # --- Institutional Knowledge Base (Parts 1–9) ---------------------------
+    #: Explainability + market intel always on; hard no-trade mutations off by default
+    #: (soft blend = regime score blend + SIGNAL_SHORT_MAX_SCORE).
+    institutional_kb_enabled: bool = True
+    institutional_enforce_gates: bool = False
+    institutional_min_confidence_pct: float = 55.0
+    institutional_min_data_quality: float = 70.0
+    institutional_require_positive_ev: bool = False
+    institutional_reject_thin_liquidity: bool = False
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 15

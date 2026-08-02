@@ -185,11 +185,17 @@ class BacktestService:
             run_id = run.id
 
         try:
+            btc_mtf = await self._load_btc_regime_frames(
+                start_utc=start_utc,
+                end_utc=end_utc,
+                session=session,
+                prefer_db=prefer_db,
+            )
             engine = BacktestEngine(config)
             if config.use_multi_timeframe and len(mtf_frames) > 1:
-                outcome = engine.run(mtf_frames=mtf_frames)  # type: ignore[arg-type]
+                outcome = engine.run(mtf_frames=mtf_frames, btc_mtf_frames=btc_mtf)  # type: ignore[arg-type]
             else:
-                outcome = engine.run(mtf_frames[timeframe])  # type: ignore[arg-type]
+                outcome = engine.run(mtf_frames[timeframe], btc_mtf_frames=btc_mtf)  # type: ignore[arg-type]
             metrics = compute_metrics(outcome)
         except Exception as exc:
             if repository is not None and run_id is not None:
@@ -219,3 +225,48 @@ class BacktestService:
         return BacktestReport(
             run_id=run_id, outcome=outcome, metrics=metrics, candles_loaded=candles_loaded
         )
+
+    async def _load_btc_regime_frames(
+        self,
+        *,
+        start_utc: datetime,
+        end_utc: datetime,
+        session: AsyncSession | None,
+        prefer_db: bool,
+    ) -> dict[str, object] | None:
+        """Load BTC MTF series for regime alignment (fail-open on errors)."""
+        if not self._settings.regime_filter_enabled and not self._settings.market_regime_enabled:
+            return None
+        btc = self._settings.regime_btc_symbol.upper()
+        tfs = [
+            tf.strip()
+            for tf in self._settings.market_regime_btc_timeframes.split(",")
+            if tf.strip()
+        ] or ["1h", "4h", "1d", "1w"]
+        frames: dict[str, object] = {}
+        for tf in tfs:
+            warmup_start = start_utc - timeframe_to_timedelta(tf) * WARMUP_CANDLES
+            try:
+                if prefer_db and session is not None:
+                    from app.repositories.asset_repository import AssetRepository
+
+                    series = await AssetRepository(session).load_candle_series(
+                        btc,
+                        tf,
+                        start_time=warmup_start,
+                        end_time=end_utc,
+                        limit=100_000,
+                    )
+                else:
+                    series = await self._provider.get_candles(
+                        btc, tf, limit=100_000, start_time=warmup_start, end_time=end_utc
+                    )
+                if series is None or series.is_empty or len(series) < 50:
+                    continue
+                frames[tf] = series.to_dataframe()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("backtest_btc_regime_tf_failed", timeframe=tf, error=str(exc))
+        if not frames:
+            logger.warning("backtest_btc_regime_unavailable", symbol=btc)
+            return None
+        return frames

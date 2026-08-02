@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+from typing import Any
+
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -17,7 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import PRICE, Base, CreatedAtMixin, TimestampMixin
+from app.database.base import JSON_COLUMN, PRICE, Base, CreatedAtMixin, TimestampMixin
 
 
 class PaperAccount(Base, TimestampMixin):
@@ -94,6 +96,8 @@ class PaperPosition(Base, TimestampMixin):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Market Regime snapshot at arm/entry time (BTC bias, funding, F&G, …).
+    market_context: Mapped[dict[str, Any] | None] = mapped_column(JSON_COLUMN, nullable=True)
 
     account: Mapped[PaperAccount] = relationship(back_populates="positions")
     fills: Mapped[list[PaperFill]] = relationship(

@@ -30,6 +30,7 @@ from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta
 from app.indicators.engine import IndicatorEngine
 from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
+from app.market_regime import MarketRegimeEngine, bias_to_market_regime
 from app.signals.regime import regime_from_indicators
 from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
@@ -226,6 +227,8 @@ class BacktestEngine:
     def __init__(self, config: BacktestConfig) -> None:
         self._config = config
         self._indicators = IndicatorEngine(min_candles=WARMUP_CANDLES)
+        self._regime_engine = MarketRegimeEngine()
+        self._btc_mtf_frames: dict[str, pd.DataFrame] | None = None
         engine_config = SignalEngineConfig(
             weights=config.weights,
             primary_timeframe=config.timeframe,
@@ -258,8 +261,10 @@ class BacktestEngine:
         df: pd.DataFrame | None = None,
         *,
         mtf_frames: dict[str, pd.DataFrame] | None = None,
+        btc_mtf_frames: dict[str, pd.DataFrame] | None = None,
     ) -> BacktestOutcome:
         """Backtest auf historischen OHLCV-Daten ausfuehren."""
+        self._btc_mtf_frames = btc_mtf_frames
         if mtf_frames is not None:
             return self._run_mtf(mtf_frames)
         if df is None:
@@ -268,6 +273,19 @@ class BacktestEngine:
                 detail="run(df=...) oder run(mtf_frames={...}) verwenden",
             )
         return self._run_single(df)
+
+    def _market_regime_at(self, cutoff: datetime):
+        """BTC-aligned regime at bar time; falls back to None when no BTC series."""
+        if not self._config.regime_filter_enabled or not self._btc_mtf_frames:
+            return None
+        sliced: dict[str, pd.DataFrame] = {}
+        for tf, frame in self._btc_mtf_frames.items():
+            window = frame.loc[frame.index <= cutoff]
+            if len(window) >= 50:
+                sliced[tf] = window
+        if not sliced:
+            return None
+        return self._regime_engine.resolve_from_btc_frames(sliced)
 
     def _run_single(self, df: pd.DataFrame) -> BacktestOutcome:
         """Backtest auf einem OHLCV-DataFrame ausfuehren.
@@ -491,16 +509,28 @@ class BacktestEngine:
             )
             candle_time = ensure_utc(_index_time(window, len(window) - 1))
             market_regime = None
+            market_snap = self._market_regime_at(candle_time)
             if self._config.regime_filter_enabled:
-                # Approximation: Symbol-Regime (Live nutzt BTC 4h). Besser als kein Filter.
-                market_regime = regime_from_indicators(indicators).regime
-            return self._signal_engine.generate(
+                if market_snap is not None and market_snap.available:
+                    market_regime = bias_to_market_regime(market_snap.bias)
+                else:
+                    # Fallback: symbol TF proxy when no BTC series supplied.
+                    market_regime = regime_from_indicators(indicators).regime
+            result = self._signal_engine.generate(
                 self._config.symbol,
                 {self._config.timeframe: indicators},
                 data_quality=100.0,
                 now=candle_time,
                 market_regime=market_regime,
             )
+            if market_snap is not None and market_snap.available:
+                result.coin_score = result.score
+                blended = self._regime_engine.score_calculator.blend(
+                    result.score, result.direction, market_snap
+                )
+                result.score = blended.final_score
+                result.market_context = market_snap.to_context_dict()
+            return result
         except Exception as exc:
             logger.debug("backtest_signal_skipped", index=index, error=str(exc))
             return None
@@ -533,18 +563,29 @@ class BacktestEngine:
             coverage = len(indicator_sets) / max(len(requested), 1)
             data_quality = 100.0 * coverage
             market_regime = None
+            market_snap = self._market_regime_at(cutoff)
             if self._config.regime_filter_enabled:
-                # Prefer 4h if present (closer to live BTC-regime TF), else primary.
-                regime_tf = "4h" if "4h" in indicator_sets else self._config.timeframe
-                regime_ind = indicator_sets.get(regime_tf) or next(iter(indicator_sets.values()))
-                market_regime = regime_from_indicators(regime_ind).regime  # type: ignore[arg-type]
-            return self._signal_engine.generate(
+                if market_snap is not None and market_snap.available:
+                    market_regime = bias_to_market_regime(market_snap.bias)
+                else:
+                    regime_tf = "4h" if "4h" in indicator_sets else self._config.timeframe
+                    regime_ind = indicator_sets.get(regime_tf) or next(iter(indicator_sets.values()))
+                    market_regime = regime_from_indicators(regime_ind).regime  # type: ignore[arg-type]
+            result = self._signal_engine.generate(
                 self._config.symbol,
                 indicator_sets,  # type: ignore[arg-type]
                 data_quality=data_quality,
                 now=cutoff,
                 market_regime=market_regime,
             )
+            if market_snap is not None and market_snap.available:
+                result.coin_score = result.score
+                blended = self._regime_engine.score_calculator.blend(
+                    result.score, result.direction, market_snap
+                )
+                result.score = blended.final_score
+                result.market_context = market_snap.to_context_dict()
+            return result
         except Exception as exc:
             logger.debug("backtest_mtf_signal_skipped", index=index, error=str(exc))
             return None

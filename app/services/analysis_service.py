@@ -28,6 +28,11 @@ from app.repositories.strategy_repository import StrategyRepository
 from app.sentiment.service import SentimentService
 from app.signals.engine import SignalEngine, signal_engine_config_from_settings
 from app.signals.data_quality import compute_analysis_data_quality
+from app.intelligence import InstitutionalIntelligenceOrchestrator
+from app.intelligence.data_quality import evaluate_data_quality
+from app.intelligence.types import InstitutionalContext
+from app.market_regime import MarketRegimeEngine, to_legacy_regime_snapshot
+from app.market_regime.types import MarketRegimeSnapshot
 from app.signals.regime import RegimeSnapshot, log_regime_degraded, regime_from_indicators
 from app.signals.risk import RiskConfig, RiskManager, tp_multipliers_from_settings
 from app.signals.types import SignalResult
@@ -76,15 +81,53 @@ class AnalysisService:
         self._indicators = indicator_engine or IndicatorEngine(
             min_candles=self._settings.min_candles_required
         )
+        self._regime_engine = MarketRegimeEngine(
+            self._settings, indicator_engine=self._indicators
+        )
+        self._intel = InstitutionalIntelligenceOrchestrator(self._settings)
         self._regime_cache: RegimeSnapshot | None = None
+        self._market_regime_cache: MarketRegimeSnapshot | None = None
+        self._intel_cache: InstitutionalContext | None = None
+
+    async def resolve_market_regime_snapshot(
+        self,
+        *,
+        refresh: bool = False,
+        symbol: str | None = None,
+    ) -> MarketRegimeSnapshot | None:
+        """Full global market regime snapshot (cached per scan cycle)."""
+        if not self._settings.market_regime_enabled and not self._settings.regime_filter_enabled:
+            return None
+        if self._market_regime_cache is not None and not refresh:
+            return self._market_regime_cache
+        if self._settings.market_regime_enabled:
+            snap = await self._regime_engine.resolve(
+                self._provider, symbol=symbol, refresh=refresh
+            )
+            self._market_regime_cache = snap
+            self._regime_cache = to_legacy_regime_snapshot(snap)
+            if not snap.available:
+                log_regime_degraded(snap.detail)
+            return snap
+        # Legacy single-TF BTC path when market_regime_enabled=false.
+        legacy = await self._resolve_legacy_regime(refresh=refresh)
+        self._regime_cache = legacy
+        return None
 
     async def resolve_market_regime(self, *, refresh: bool = False) -> RegimeSnapshot:
-        """BTC-Regime fuer den aktuellen Scan-Zyklus (gecacht)."""
-        if not self._settings.regime_filter_enabled:
+        """BTC-/Market-Regime fuer den aktuellen Scan-Zyklus (gecacht, legacy shape)."""
+        if not self._settings.regime_filter_enabled and not self._settings.market_regime_enabled:
             return RegimeSnapshot(None, "regime_filter_disabled", False)
         if self._regime_cache is not None and not refresh:
             return self._regime_cache
+        await self.resolve_market_regime_snapshot(refresh=refresh)
+        if self._regime_cache is not None:
+            return self._regime_cache
+        return RegimeSnapshot(None, "regime_unavailable", False)
 
+    async def _resolve_legacy_regime(self, *, refresh: bool = False) -> RegimeSnapshot:
+        if self._regime_cache is not None and not refresh:
+            return self._regime_cache
         symbol = self._settings.regime_btc_symbol.upper()
         timeframe = self._settings.regime_timeframe
         try:
@@ -106,12 +149,36 @@ class AnalysisService:
         except Exception as exc:
             log_regime_degraded(str(exc))
             snapshot = RegimeSnapshot(None, f"btc_regime_error: {exc}", False)
-
         self._regime_cache = snapshot
         return snapshot
 
     def clear_regime_cache(self) -> None:
         self._regime_cache = None
+        self._market_regime_cache = None
+        self._intel_cache = None
+        self._regime_engine.clear_cache()
+
+    async def resolve_market_intelligence(
+        self,
+        *,
+        candle_data_quality: float = 100.0,
+        exchange_ok: bool = True,
+        refresh: bool = False,
+        symbol: str | None = None,
+    ) -> InstitutionalContext:
+        """Market Intelligence (KB Parts 2–4/7–8) — mandatory before coin scoring."""
+        if self._intel_cache is not None and not refresh:
+            return self._intel_cache
+        market_snap = await self.resolve_market_regime_snapshot(
+            refresh=refresh, symbol=symbol
+        )
+        ctx = self._intel.build_market_intelligence(
+            market_snap,
+            candle_data_quality=candle_data_quality,
+            exchange_ok=exchange_ok,
+        )
+        self._intel_cache = ctx
+        return ctx
 
     @property
     def provider(self) -> MarketDataProvider:
@@ -167,6 +234,21 @@ class AnalysisService:
                 detail=f"Status beim Provider {provider.name}: inaktiv",
             )
 
+        # KB Parts 2/4: Market Intelligence MUST finish before any coin analysis.
+        intel = await self.resolve_market_intelligence(
+            candle_data_quality=100.0,
+            exchange_ok=True,
+            symbol=normalized,
+        )
+        market_snap = intel.market_regime
+        regime_snapshot = self._regime_cache or await self.resolve_market_regime()
+        hard_veto = (
+            self._settings.regime_filter_enabled
+            and self._settings.market_regime_hard_veto
+            and regime_snapshot.available
+        )
+        market_regime = regime_snapshot.regime if hard_veto else None
+
         series_map = await provider.get_multi_timeframe_candles(
             normalized, target_timeframes, limit=self._settings.candle_limit
         )
@@ -187,6 +269,16 @@ class AnalysisService:
                 self._settings.min_candles_required,
             )
 
+        # Refresh data-quality snapshot with coin candle quality (Part 7).
+        intel.data_quality = evaluate_data_quality(
+            candle_data_quality=data_quality,
+            regime=market_snap,
+            exchange_ok=True,
+            min_quality=float(
+                getattr(self._settings, "institutional_min_data_quality", 70.0)
+            ),
+        )
+
         # Gewichtung: Vorgabe > aktive Strategieversion > Standard.
         effective_weights = weights
         version_id = strategy_version_id
@@ -198,13 +290,6 @@ class AnalysisService:
         engine = self._build_engine(effective_weights)
         sentiment_score = await self._load_sentiment(normalized)
 
-        regime_snapshot = await self.resolve_market_regime()
-        market_regime = (
-            regime_snapshot.regime
-            if self._settings.regime_filter_enabled and regime_snapshot.available
-            else None
-        )
-
         result = engine.generate(
             normalized,
             indicator_sets,
@@ -212,13 +297,49 @@ class AnalysisService:
             sentiment_score=sentiment_score,
             market_regime=market_regime,
         )
+        result.coin_score = result.score
+        if self._settings.market_regime_enabled and market_snap is not None:
+            blended = self._regime_engine.score_calculator.blend(
+                result.score, result.direction, market_snap
+            )
+            result.score = blended.final_score
+            result.market_context = market_snap.to_context_dict()
+            result.market_context["blend"] = {
+                "coinScore": blended.coin_score,
+                "finalScore": blended.final_score,
+                "globalScore": blended.global_score,
+                "fundingScore": blended.funding_score,
+                "oiScore": blended.oi_score,
+                "liquidationScore": blended.liquidation_score,
+                "weights": blended.weights_used,
+                "detail": blended.detail,
+            }
+            if result.is_actionable and abs(blended.final_score - blended.coin_score) >= 0.5:
+                result.reasons.append(
+                    f"Market regime blend: coin {blended.coin_score:.1f} → "
+                    f"final {blended.final_score:.1f} ({market_snap.bias.label})"
+                )
+        else:
+            result.market_context = result.market_context or {}
+
+        explain = self._intel.finalize_trade(result, intel)
+        result.confidence_pct = explain.confidence_pct
+        result.explainability = explain.to_dict()
+        if result.market_context is None:
+            result.market_context = {}
+        result.market_context["intelligence"] = intel.to_desk_dict()
+        result.market_context["explainability"] = explain.to_dict()
 
         logger.info(
             "analysis_completed",
             symbol=normalized,
             direction=result.direction.value,
             score=result.score,
+            coin_score=result.coin_score,
+            market_bias=market_snap.bias.value if market_snap and market_snap.available else None,
             confidence=result.confidence.value,
+            confidence_pct=result.confidence_pct,
+            decision=explain.decision.value,
             data_quality=result.data_quality,
             timeframes=result.analyzed_timeframes,
             skipped_timeframes=skipped,

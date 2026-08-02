@@ -25,11 +25,22 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ENABLE_LLM_ANALYSIS", "false")
 os.environ.setdefault("ENABLE_SENTIMENT", "false")
 os.environ.setdefault("ADMIN_API_TOKEN", "test-admin-token")
+# Market-regime aux sources talk to the public internet — keep them off in tests.
+os.environ.setdefault("MARKET_REGIME_FUNDING_ENABLED", "false")
+os.environ.setdefault("MARKET_REGIME_FEAR_GREED_ENABLED", "false")
+os.environ.setdefault("MARKET_REGIME_DOMINANCE_ENABLED", "false")
+os.environ.setdefault("MARKET_REGIME_OI_ENABLED", "false")
+os.environ.setdefault("MARKET_REGIME_LIQUIDATIONS_ENABLED", "false")
+os.environ.setdefault("MARKET_REGIME_ETH_ENABLED", "false")
+# Explainability on; hard no-trade mutations off unless a test opts in.
+os.environ.setdefault("INSTITUTIONAL_ENFORCE_GATES", "false")
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.database.base import Base
 from app.indicators.engine import IndicatorEngine, IndicatorSet
 from app.models import *  # noqa: F403 - registriert alle Tabellen an Base.metadata
+
+get_settings.cache_clear()
 
 RANDOM_SEED = 20240101
 BASE_TIME = datetime(2024, 1, 1, tzinfo=UTC)

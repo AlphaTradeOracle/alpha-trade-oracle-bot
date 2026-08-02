@@ -61,6 +61,7 @@ class SignalRepository:
             llm_summary=llm_summary,
             fingerprint=result.fingerprint,
             is_dispatched=False,
+            market_context=getattr(result, "market_context", None),
         )
 
         signal.score_components = [

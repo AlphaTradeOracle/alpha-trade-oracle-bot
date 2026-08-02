@@ -22,6 +22,7 @@ from app.repositories.paper_repository import PaperRepository
 from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome
 from app.indicators.engine import IndicatorEngine
+from app.market_regime import MarketRegimeEngine, to_legacy_regime_snapshot
 from app.signals.regime import RegimeSnapshot, direction_allowed_by_regime, log_regime_degraded, regime_from_indicators
 from app.signals.retest_entry import (
     RetestArmResult,
@@ -209,6 +210,7 @@ class PaperTradingService:
         self._notifier = notifier
         self._notify_enabled = True
         self._last_skip_reason: str | None = None
+        self._regime_engine = MarketRegimeEngine(self._settings)
 
     @property
     def _scale_out_fractions(self) -> tuple[Decimal, Decimal, Decimal]:
@@ -312,6 +314,8 @@ class PaperTradingService:
     ) -> bool:
         if not self._settings.regime_filter_enabled:
             return False
+        if not self._settings.market_regime_hard_veto:
+            return False
         if regime_snapshot is None or not regime_snapshot.available:
             if regime_snapshot is not None and regime_snapshot.detail:
                 log_regime_degraded(regime_snapshot.detail)
@@ -385,8 +389,18 @@ class PaperTradingService:
         return True
 
     async def _fetch_regime_snapshot(self, provider) -> RegimeSnapshot:
-        if not self._settings.regime_filter_enabled:
+        if not self._settings.regime_filter_enabled and not self._settings.market_regime_enabled:
             return RegimeSnapshot(None, "regime_filter_disabled", False)
+        if self._settings.market_regime_enabled:
+            try:
+                market = await self._regime_engine.resolve(provider, refresh=True)
+                legacy = to_legacy_regime_snapshot(market)
+                if not legacy.available:
+                    log_regime_degraded(legacy.detail)
+                return legacy
+            except Exception as exc:
+                log_regime_degraded(str(exc))
+                return RegimeSnapshot(None, f"btc_regime_error: {exc}", False)
         symbol = self._settings.regime_btc_symbol.upper()
         timeframe = self._settings.regime_timeframe
         try:
@@ -408,6 +422,10 @@ class PaperTradingService:
         except Exception as exc:
             log_regime_degraded(str(exc))
             return RegimeSnapshot(None, f"btc_regime_error: {exc}", False)
+
+    def _market_context_for(self, result: SignalResult) -> dict | None:
+        ctx = getattr(result, "market_context", None)
+        return dict(ctx) if isinstance(ctx, dict) else None
 
     def _size_position(self, entry: Decimal, stop: Decimal) -> PositionSizing | None:
         """Stueckzahl aus Risikobetrag und Stop-Abstand statt aus fixer Margin.
@@ -655,6 +673,7 @@ class PaperTradingService:
             opened_at=now,
             expires_at=result.expires_at,
             peak_price=entry,
+            market_context=self._market_context_for(result),
         )
         await repo.add_position(position)
         await repo.add_fill(
@@ -739,6 +758,7 @@ class PaperTradingService:
                 f"zone={self._settings.paper_retest_zone_near}-"
                 f"{self._settings.paper_retest_zone_far}ATR"
             ),
+            market_context=self._market_context_for(result),
         )
         await repo.add_position(position)
         logger.info(

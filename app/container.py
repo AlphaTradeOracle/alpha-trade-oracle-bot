@@ -56,6 +56,7 @@ class ApplicationContainer:
         for name, closer in (
             ("coingecko", self.coingecko.close),
             ("sentiment_service", self.sentiment_service.close),
+            ("market_regime", self.analysis_service._regime_engine.close),
             ("redis", close_redis),
             ("database", dispose_engine),
         ):

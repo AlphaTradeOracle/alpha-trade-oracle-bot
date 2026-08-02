@@ -71,6 +71,8 @@ class Signal(Base, TimestampMixin):
 
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     is_dispatched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: Global market regime context at signal creation.
+    market_context: Mapped[dict[str, Any] | None] = mapped_column(JSON_COLUMN, nullable=True)
 
     score_components: Mapped[list[SignalScoreComponent]] = relationship(
         back_populates="signal", cascade="all, delete-orphan", lazy="selectin"

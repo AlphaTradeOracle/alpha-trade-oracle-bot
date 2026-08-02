@@ -14,6 +14,29 @@ class DeskTakeProfit(BaseModel):
     hit: bool = False
 
 
+class DeskMarketRegime(BaseModel):
+    """Live global market regime card payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bias: str
+    biasLabel: str
+    btcTrend: str | None = None
+    btcBias: str | None = None
+    btcD: float | None = None
+    btcDTrend: str | None = None
+    usdtD: float | None = None
+    usdtRiskMode: str | None = None
+    fundingStatus: str | None = None
+    fearGreed: int | None = None
+    fearGreedBand: str | None = None
+    liquidityScore: float | None = None
+    liquidityVenues: list[str] = Field(default_factory=list)
+    globalScore: float | None = None
+    available: bool = False
+    capturedAt: str | None = None
+
+
 class DeskTrade(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -40,6 +63,7 @@ class DeskTrade(BaseModel):
     leverage: float | None = None
     fees: float | None = None
     notes: str | None = None
+    marketContext: dict | None = None
 
 
 class DeskPortfolio(BaseModel):
@@ -87,3 +111,4 @@ class DeskSnapshot(BaseModel):
     trades: list[DeskTrade]
     equity: list[DeskEquityPoint]
     generatedAt: str
+    marketRegime: DeskMarketRegime | None = None
