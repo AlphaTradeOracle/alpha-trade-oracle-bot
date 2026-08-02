@@ -20,6 +20,9 @@ from app.core.logging import get_logger
 from app.indicators.engine import IndicatorEngine, IndicatorSet
 from app.llm.schemas import LLMAnalysisResponse, LLMCallResult
 from app.llm.service import LLMService
+from app.market.analyzers.bitcoin import BitcoinAnalyzer
+from app.market.engine import MarketRegimeEngine
+from app.market.types import MarketContext
 from app.market_data.base import MarketDataProvider
 from app.market_data.types import CandleSeries
 from app.repositories.asset_repository import AssetRepository
@@ -77,13 +80,80 @@ class AnalysisService:
             min_candles=self._settings.min_candles_required
         )
         self._regime_cache: RegimeSnapshot | None = None
+        self._market_context_cache: MarketContext | None = None
+        self._market_engine = MarketRegimeEngine(
+            bitcoin=BitcoinAnalyzer(
+                timeframes=tuple(
+                    tf.strip()
+                    for tf in self._settings.market_btc_timeframes.split(",")
+                    if tf.strip()
+                )
+            )
+        )
+
+    async def resolve_market_context(self, *, refresh: bool = False) -> MarketContext | None:
+        """Full multi-TF market snapshot (BTC + ETH + stubs), cached per scan."""
+        if self._market_context_cache is not None and not refresh:
+            return self._market_context_cache
+
+        btc_symbol = self._settings.regime_btc_symbol.upper()
+        eth_symbol = self._settings.market_eth_symbol.upper()
+        btc_tfs = [
+            tf.strip()
+            for tf in self._settings.market_btc_timeframes.split(",")
+            if tf.strip() and tf.strip() != "1w"
+        ]
+        # Always ensure regime TF is loaded even if not listed.
+        if self._settings.regime_timeframe not in btc_tfs:
+            btc_tfs.append(self._settings.regime_timeframe)
+
+        btc_frames: dict = {}
+        eth_frames: dict = {}
+        try:
+            btc_series = await self._provider.get_multi_timeframe_candles(
+                btc_symbol, btc_tfs, limit=self._settings.candle_limit
+            )
+            for tf, series in btc_series.items():
+                if series is not None and not series.is_empty:
+                    btc_frames[tf] = series.to_dataframe()
+        except Exception as exc:
+            logger.warning("market_context_btc_load_failed", error=str(exc))
+
+        try:
+            eth_series = await self._provider.get_candles(
+                eth_symbol, "4h", limit=self._settings.candle_limit
+            )
+            if eth_series is not None and not eth_series.is_empty:
+                eth_frames["4h"] = eth_series.to_dataframe()
+        except Exception as exc:
+            logger.warning("market_context_eth_load_failed", error=str(exc))
+
+        context = self._market_engine.analyze(
+            btc_frames=btc_frames or None,
+            eth_frames=eth_frames or None,
+        )
+        self._market_context_cache = context
+        return context
 
     async def resolve_market_regime(self, *, refresh: bool = False) -> RegimeSnapshot:
-        """BTC-Regime fuer den aktuellen Scan-Zyklus (gecacht)."""
+        """BTC-Regime fuer den aktuellen Scan-Zyklus (gecacht).
+
+        Wenn der Market-Regime-Score aktiv ist, wird das Legacy-Gate aus dem
+        Multi-TF MarketContext abgeleitet; sonst bleibt der einfache 4h-Pfad.
+        """
         if not self._settings.regime_filter_enabled:
             return RegimeSnapshot(None, "regime_filter_disabled", False)
         if self._regime_cache is not None and not refresh:
             return self._regime_cache
+
+        if self._settings.market_regime_score_enabled:
+            context = await self.resolve_market_context(refresh=refresh)
+            if context is not None:
+                snapshot = self._market_engine.to_legacy_regime(context)
+                if not snapshot.available:
+                    log_regime_degraded(snapshot.detail)
+                self._regime_cache = snapshot
+                return snapshot
 
         symbol = self._settings.regime_btc_symbol.upper()
         timeframe = self._settings.regime_timeframe
@@ -112,6 +182,7 @@ class AnalysisService:
 
     def clear_regime_cache(self) -> None:
         self._regime_cache = None
+        self._market_context_cache = None
 
     @property
     def provider(self) -> MarketDataProvider:
@@ -198,6 +269,10 @@ class AnalysisService:
         engine = self._build_engine(effective_weights)
         sentiment_score = await self._load_sentiment(normalized)
 
+        market_context = None
+        if self._settings.market_regime_score_enabled:
+            market_context = await self.resolve_market_context()
+
         regime_snapshot = await self.resolve_market_regime()
         market_regime = (
             regime_snapshot.regime
@@ -211,6 +286,7 @@ class AnalysisService:
             data_quality=data_quality,
             sentiment_score=sentiment_score,
             market_regime=market_regime,
+            market_context=market_context,
         )
 
         logger.info(

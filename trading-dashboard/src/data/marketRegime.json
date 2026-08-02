@@ -1,0 +1,14 @@
+{
+  "asof": "2026-08-01T12:00:00Z",
+  "status": "bearish",
+  "marketScore": -38.5,
+  "available": true,
+  "detail": "bitcoin=-42 | ethereum=-28",
+  "btcTrend": "BEARISH",
+  "btcBias": "bearish",
+  "btcScore": -42.0,
+  "btcDominance": null,
+  "usdtDominance": null,
+  "fundingStatus": "pending_feed",
+  "fearGreed": null
+}

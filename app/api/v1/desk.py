@@ -14,7 +14,9 @@ from app.core.time import ms_to_datetime
 from app.market_data.base import MarketDataProvider
 from app.repositories.paper_repository import PaperRepository
 from app.scheduler.jobs import _collect_prices
-from app.schemas.desk import DeskCandle, DeskSnapshot
+from app.market.engine import desk_regime_payload
+from app.schemas.desk import DeskCandle, DeskMarketRegime, DeskSnapshot
+from app.services.analysis_service import AnalysisService
 from app.services.desk_service import DeskService
 
 logger = get_logger(__name__)
@@ -55,7 +57,18 @@ async def desk_snapshot(
     if symbols:
         prices = await _collect_prices(provider, symbols, providers=providers)
 
-    return await DeskService(paper).snapshot(session, prices=prices)
+    market_regime: DeskMarketRegime | None = None
+    try:
+        analysis = AnalysisService(provider)
+        context = await analysis.resolve_market_context(refresh=True)
+        if context is not None:
+            market_regime = DeskMarketRegime.model_validate(desk_regime_payload(context))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("desk_market_regime_failed", error=str(exc))
+
+    return await DeskService(paper).snapshot(
+        session, prices=prices, market_regime=market_regime
+    )
 
 
 @router.get(

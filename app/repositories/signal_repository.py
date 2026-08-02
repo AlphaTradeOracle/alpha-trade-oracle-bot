@@ -59,6 +59,8 @@ class SignalRepository:
             counter_arguments=result.counter_arguments,
             indicators_used=result.indicators_used,
             llm_summary=llm_summary,
+            market_context=result.market_context,
+            coin_score=result.coin_score,
             fingerprint=result.fingerprint,
             is_dispatched=False,
         )

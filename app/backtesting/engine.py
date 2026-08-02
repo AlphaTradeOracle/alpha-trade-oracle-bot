@@ -28,6 +28,8 @@ from app.core.errors import BacktestError
 from app.core.logging import get_logger
 from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta
 from app.indicators.engine import IndicatorEngine
+from app.market.engine import MarketRegimeEngine
+from app.market.types import MarketContext
 from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
 from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
@@ -85,6 +87,15 @@ class BacktestConfig:
     retest_zone_far: float = 1.0
     retest_pending_multiplier: int = 4
     weights: StrategyWeights = DEFAULT_WEIGHTS
+    #: Blend coin score with global market regime (BTC MTF etc.).
+    market_regime_score_enabled: bool = False
+    market_score_coin_weight: float = 0.60
+    market_score_market_weight: float = 0.25
+    market_score_funding_weight: float = 0.05
+    market_score_open_interest_weight: float = 0.05
+    market_score_liquidations_weight: float = 0.05
+    short_min_score: float = 18.0
+    regime_filter_enabled: bool = True
 
     @classmethod
     def from_settings(
@@ -118,6 +129,14 @@ class BacktestConfig:
             "retest_zone_far": settings.paper_retest_zone_far,
             "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
             "weights": weights,
+            "market_regime_score_enabled": settings.market_regime_score_enabled,
+            "market_score_coin_weight": settings.market_score_coin_weight,
+            "market_score_market_weight": settings.market_score_market_weight,
+            "market_score_funding_weight": settings.market_score_funding_weight,
+            "market_score_open_interest_weight": settings.market_score_open_interest_weight,
+            "market_score_liquidations_weight": settings.market_score_liquidations_weight,
+            "short_min_score": settings.signal_short_min_score,
+            "regime_filter_enabled": settings.regime_filter_enabled,
         }
         params.update(overrides)
         return cls(**params)  # type: ignore[arg-type]
@@ -224,7 +243,15 @@ class BacktestEngine:
             min_adx=config.min_adx,
             rsi_long_max=config.rsi_long_max,
             rsi_short_min=config.rsi_short_min,
+            short_min_score=config.short_min_score,
+            regime_filter_enabled=config.regime_filter_enabled,
             strategy_version_label="backtest:1",
+            market_regime_score_enabled=config.market_regime_score_enabled,
+            market_score_coin_weight=config.market_score_coin_weight,
+            market_score_market_weight=config.market_score_market_weight,
+            market_score_funding_weight=config.market_score_funding_weight,
+            market_score_open_interest_weight=config.market_score_open_interest_weight,
+            market_score_liquidations_weight=config.market_score_liquidations_weight,
         )
         self._signal_engine = SignalEngine(
             engine_config,
@@ -237,14 +264,23 @@ class BacktestEngine:
                 )
             ),
         )
+        self._market_engine = MarketRegimeEngine()
+        self._btc_frames: dict[str, pd.DataFrame] | None = None
+        self._eth_frames: dict[str, pd.DataFrame] | None = None
+        self._market_context_cache: dict[datetime, MarketContext] = {}
 
     def run(
         self,
         df: pd.DataFrame | None = None,
         *,
         mtf_frames: dict[str, pd.DataFrame] | None = None,
+        btc_frames: dict[str, pd.DataFrame] | None = None,
+        eth_frames: dict[str, pd.DataFrame] | None = None,
     ) -> BacktestOutcome:
         """Backtest auf historischen OHLCV-Daten ausfuehren."""
+        self._btc_frames = btc_frames
+        self._eth_frames = eth_frames
+        self._market_context_cache.clear()
         if mtf_frames is not None:
             return self._run_mtf(mtf_frames)
         if df is None:
@@ -253,6 +289,34 @@ class BacktestEngine:
                 detail="run(df=...) oder run(mtf_frames={...}) verwenden",
             )
         return self._run_single(df)
+
+    def _market_context_at(self, cutoff: datetime) -> MarketContext | None:
+        if not self._config.market_regime_score_enabled:
+            return None
+        if not self._btc_frames:
+            return None
+        cached = self._market_context_cache.get(cutoff)
+        if cached is not None:
+            return cached
+        sliced: dict[str, pd.DataFrame] = {}
+        for tf, frame in self._btc_frames.items():
+            window = frame.loc[frame.index <= cutoff]
+            if len(window) >= WARMUP_CANDLES:
+                sliced[tf] = window
+        eth_sliced: dict[str, pd.DataFrame] = {}
+        if self._eth_frames:
+            for tf, frame in self._eth_frames.items():
+                window = frame.loc[frame.index <= cutoff]
+                if len(window) >= WARMUP_CANDLES:
+                    eth_sliced[tf] = window
+        context = self._market_engine.analyze(
+            asof=cutoff,
+            btc_frames=sliced or None,
+            eth_frames=eth_sliced or None,
+            symbol=self._config.symbol,
+        )
+        self._market_context_cache[cutoff] = context
+        return context
 
     def _run_single(self, df: pd.DataFrame) -> BacktestOutcome:
         """Backtest auf einem OHLCV-DataFrame ausfuehren.
@@ -468,11 +532,18 @@ class BacktestEngine:
                 window, self._config.timeframe, symbol=self._config.symbol, strict=False
             )
             candle_time = ensure_utc(_index_time(window, len(window) - 1))
+            market_context = self._market_context_at(candle_time)
+            market_regime = None
+            if market_context is not None and self._config.regime_filter_enabled:
+                snap = self._market_engine.to_legacy_regime(market_context)
+                market_regime = snap.regime if snap.available else None
             return self._signal_engine.generate(
                 self._config.symbol,
                 {self._config.timeframe: indicators},
                 data_quality=100.0,
                 now=candle_time,
+                market_regime=market_regime,
+                market_context=market_context,
             )
         except Exception as exc:
             logger.debug("backtest_signal_skipped", index=index, error=str(exc))
@@ -505,11 +576,18 @@ class BacktestEngine:
 
             coverage = len(indicator_sets) / max(len(requested), 1)
             data_quality = 100.0 * coverage
+            market_context = self._market_context_at(cutoff)
+            market_regime = None
+            if market_context is not None and self._config.regime_filter_enabled:
+                snap = self._market_engine.to_legacy_regime(market_context)
+                market_regime = snap.regime if snap.available else None
             return self._signal_engine.generate(
                 self._config.symbol,
                 indicator_sets,  # type: ignore[arg-type]
                 data_quality=data_quality,
                 now=cutoff,
+                market_regime=market_regime,
+                market_context=market_context,
             )
         except Exception as exc:
             logger.debug("backtest_mtf_signal_skipped", index=index, error=str(exc))

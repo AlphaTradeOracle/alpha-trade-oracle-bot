@@ -14,6 +14,47 @@ class DeskTakeProfit(BaseModel):
     hit: bool = False
 
 
+class DeskMarketContext(BaseModel):
+    """Market snapshot at trade entry (desk Trade Detail)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    asof: str | None = None
+    overallBias: str | None = None
+    marketScore: float | None = None
+    btcPrice: float | None = None
+    btcBias: str | None = None
+    btcTrend: str | None = None
+    btcRsi: float | None = None
+    btcEmaStatus: str | None = None
+    btcVolatility: float | None = None
+    btcDominance: float | None = None
+    usdtDominance: float | None = None
+    fearGreed: str | None = None
+    fundingRate: float | None = None
+    openInterest: float | None = None
+    liquidations: dict | None = None
+
+
+class DeskMarketRegime(BaseModel):
+    """Live / last-known global market regime for the dashboard card."""
+
+    model_config = ConfigDict(extra="allow")
+
+    asof: str | None = None
+    status: str
+    marketScore: float | None = None
+    available: bool = False
+    detail: str | None = None
+    btcTrend: str | None = None
+    btcBias: str | None = None
+    btcScore: float | None = None
+    btcDominance: float | None = None
+    usdtDominance: float | None = None
+    fundingStatus: str | None = None
+    fearGreed: str | None = None
+
+
 class DeskTrade(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -40,6 +81,8 @@ class DeskTrade(BaseModel):
     leverage: float | None = None
     fees: float | None = None
     notes: str | None = None
+    marketContext: DeskMarketContext | None = None
+    coinScore: float | None = None
 
 
 class DeskPortfolio(BaseModel):
@@ -87,3 +130,4 @@ class DeskSnapshot(BaseModel):
     trades: list[DeskTrade]
     equity: list[DeskEquityPoint]
     generatedAt: str
+    marketRegime: DeskMarketRegime | None = None

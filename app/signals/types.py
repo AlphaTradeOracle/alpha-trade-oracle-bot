@@ -105,6 +105,10 @@ class SignalResult:
     llm_summary: str | None = None
     #: Falls die Engine NO_TRADE gesetzt hat: der Grund dafuer.
     no_trade_reason: str | None = None
+    #: Coin-only score before market blend (0..100).
+    coin_score: float | None = None
+    #: Serialized MarketContext at decision time (desk / persistence).
+    market_context: dict | None = None
 
     @property
     def is_actionable(self) -> bool:

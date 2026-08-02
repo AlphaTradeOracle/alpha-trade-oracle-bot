@@ -19,6 +19,8 @@ from app.core.enums import (
 )
 from app.core.time import timeframe_to_timedelta, utc_now
 from app.indicators.engine import IndicatorSet
+from app.market.final_score import FinalScoreCalculator
+from app.market.types import MarketContext, ScoreBlendWeights
 from app.signals.multi_timeframe import (
     aggregate_category,
     assess_timeframes,
@@ -68,6 +70,12 @@ class SignalEngineConfig:
     short_min_score: float = 18.0
     regime_filter_enabled: bool = True
     strategy_version_label: str = "default:1"
+    market_regime_score_enabled: bool = True
+    market_score_coin_weight: float = 0.60
+    market_score_market_weight: float = 0.25
+    market_score_funding_weight: float = 0.05
+    market_score_open_interest_weight: float = 0.05
+    market_score_liquidations_weight: float = 0.05
 
 
 def signal_engine_config_from_settings(
@@ -93,6 +101,12 @@ def signal_engine_config_from_settings(
         rsi_short_min=settings.signal_rsi_short_min,
         short_min_score=settings.signal_short_min_score,
         regime_filter_enabled=settings.regime_filter_enabled,
+        market_regime_score_enabled=settings.market_regime_score_enabled,
+        market_score_coin_weight=settings.market_score_coin_weight,
+        market_score_market_weight=settings.market_score_market_weight,
+        market_score_funding_weight=settings.market_score_funding_weight,
+        market_score_open_interest_weight=settings.market_score_open_interest_weight,
+        market_score_liquidations_weight=settings.market_score_liquidations_weight,
     )
 
 
@@ -114,6 +128,16 @@ class SignalEngine:
         self._risk_manager = risk_manager or RiskManager(
             RiskConfig(min_risk_reward_ratio=self._config.min_risk_reward_ratio)
         )
+        self._score_calc = FinalScoreCalculator(self._blend_weights())
+
+    def _blend_weights(self) -> ScoreBlendWeights:
+        return ScoreBlendWeights(
+            coin=float(self._config.market_score_coin_weight),
+            market=float(self._config.market_score_market_weight),
+            funding=float(self._config.market_score_funding_weight),
+            open_interest=float(self._config.market_score_open_interest_weight),
+            liquidations=float(self._config.market_score_liquidations_weight),
+        )
 
     @property
     def weights(self) -> StrategyWeights:
@@ -128,6 +152,7 @@ class SignalEngine:
         sentiment_score: float | None = None,
         now: datetime | None = None,
         market_regime: MarketRegime | None = None,
+        market_context: MarketContext | None = None,
     ) -> SignalResult:
         """Signal fuer ein Symbol erzeugen.
 
@@ -138,6 +163,7 @@ class SignalEngine:
             sentiment_score: Optionaler Wert in [-100, +100]. ``None`` bedeutet
                 „keine Daten" — es wird dann kein Wert erfunden.
             now: Referenzzeit, im Backtest der Zeitpunkt der Kerze.
+            market_context: Optionaler Global-Market-Snapshot fuer Score-Blend.
         """
         if not indicator_sets:
             raise ValueError("Es wurde kein Indikatorsatz uebergeben")
@@ -147,8 +173,28 @@ class SignalEngine:
         assessments = assess_timeframes(indicator_sets)
 
         components = self._build_components(assessments, sentiment_score)
-        score = self._weighted_score(components)
+        coin_score = self._weighted_score(components)
         agreement = self._agreement_value(components)
+
+        score = coin_score
+        blend_detail: str | None = None
+        if (
+            self._config.market_regime_score_enabled
+            and market_context is not None
+            and market_context.available
+        ):
+            blended = self._score_calc.blend(
+                coin_score,
+                market=market_context,
+                weights=self._blend_weights(),
+            )
+            score = blended.final_score
+            blend_detail = (
+                f"Market blend coin={blended.coin_score:.1f} "
+                f"mkt={blended.market_component:.1f} "
+                f"final={blended.final_score:.1f} "
+                f"bias={blended.overall_bias.value}"
+            )
 
         direction = self._determine_direction(score, agreement)
         primary_indicators = assessments[primary_timeframe].indicators
@@ -178,10 +224,32 @@ class SignalEngine:
         confidence = self._determine_confidence(score, agreement, data_quality)
         reasons, counter_arguments = self._build_arguments(direction, components, assessments, risk)
 
+        if (
+            self._config.market_regime_score_enabled
+            and market_context is not None
+            and market_context.available
+        ):
+            reasons.insert(
+                0,
+                f"Market regime: {market_context.bias.value} "
+                f"(score {market_context.market_score:+.0f})",
+            )
+            if blend_detail:
+                reasons.insert(1, blend_detail)
+
         expires_at = created_at + self._expiry_duration(primary_timeframe)
         indicators_used = sorted(
             {name for a in assessments.values() for name in a.indicators.indicators_used()}
         )
+
+        context_payload = None
+        if market_context is not None:
+            from app.market.engine import trade_market_context_payload
+
+            context_payload = {
+                **trade_market_context_payload(market_context),
+                "full": market_context.to_dict(),
+            }
 
         result = SignalResult(
             symbol=symbol.upper(),
@@ -202,6 +270,8 @@ class SignalEngine:
             counter_arguments=counter_arguments,
             indicators_used=indicators_used,
             no_trade_reason=no_trade_reason,
+            coin_score=round(coin_score, 2),
+            market_context=context_payload,
         )
         result.fingerprint = self._fingerprint(result)
         return result
