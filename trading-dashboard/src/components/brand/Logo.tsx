@@ -9,7 +9,7 @@ interface LogoProps {
 /**
  * Brand mark — SVG primary so edges stay sharp at any size.
  */
-export function Logo({ size = 80, className = '' }: LogoProps) {
+export function Logo({ size = 96, className = '' }: LogoProps) {
   return (
     <img
       src={branding.logoSrc}
