@@ -10,10 +10,10 @@ export const branding = {
   tagline: 'Live Dashboard',
   version: '0.1 Alpha',
   copyrightYear: 2026,
-  /** Full lockup (icon + wordmark) — matches Telegram / chart asset. */
-  logoSrc: '/brand/logo.png',
+  /** Full lockup (icon + wordmark) — transparent PNG on page navy. */
+  logoSrc: '/brand/logo.png?v=3',
   /** Optional alternate mark path. */
-  logoFallbackSrc: '/brand/logo.png',
+  logoFallbackSrc: '/brand/logo.png?v=3',
 } as const
 
 export type Branding = typeof branding

@@ -46,13 +46,14 @@
   body {
     margin: 0;
     font-family: var(--font-sans);
+    /* Solid page navy — same token as sidebar/logo so brand lockup has no plate seam */
     background: var(--color-bg);
     color: var(--color-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Subtle navy + gold atmosphere — no neon */
+  /* Soft atmosphere only — no full-bleed gradient plate that fights the logo */
   body::before {
     content: "";
     position: fixed;
@@ -60,9 +61,8 @@
     pointer-events: none;
     z-index: -1;
     background:
-      radial-gradient(900px 420px at 8% -8%, rgba(201, 162, 77, 0.07), transparent 55%),
-      radial-gradient(700px 380px at 92% 0%, rgba(90, 110, 140, 0.06), transparent 50%),
-      linear-gradient(180deg, #0e1a2c 0%, #0b1524 42%, #0a1320 100%);
+      radial-gradient(900px 420px at 8% -8%, rgba(201, 162, 77, 0.05), transparent 55%),
+      radial-gradient(700px 380px at 92% 0%, rgba(90, 110, 140, 0.04), transparent 50%);
   }
 
   ::selection {

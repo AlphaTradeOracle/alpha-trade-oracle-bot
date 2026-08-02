@@ -38,10 +38,7 @@ export function BrandLockup({
 
   return (
     <div className="flex w-full flex-col items-center gap-2 text-center">
-      <Logo
-        size={size}
-        className="drop-shadow-[0_6px_18px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]"
-      />
+      <Logo size={size} />
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
         {branding.tagline}
       </p>
