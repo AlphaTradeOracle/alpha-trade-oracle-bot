@@ -27,8 +27,8 @@ const REFRESH_MS = 60_000
 const DISPLAY_COUNT = 10
 const FETCH_LIMIT = 15
 
-/** Matches Sidebar nav item height (`py-2.5` + `text-sm` ≈ 40px). */
-const BANNER_H = 'h-10'
+/** ~20% taller than Sidebar nav (`h-10`) so type/icons can scale. */
+const BANNER_H = 'h-12'
 
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
@@ -68,15 +68,15 @@ function CoinIcon({ coin }: { coin: TopCoin }) {
 
   return (
     <span
-      className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)]"
+      className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)]"
       aria-hidden
     >
       {showImg ? (
         <img
           src={coin.imageUrl!}
           alt=""
-          width={20}
-          height={20}
+          width={24}
+          height={24}
           className="h-full w-full object-cover"
           loading="lazy"
           decoding="async"
@@ -84,7 +84,7 @@ function CoinIcon({ coin }: { coin: TopCoin }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="text-[8px] font-semibold uppercase text-[var(--color-text-muted)]">
+        <span className="text-[9px] font-semibold uppercase text-[var(--color-text-muted)]">
           {coin.symbol.slice(0, 2)}
         </span>
       )}
@@ -106,22 +106,22 @@ function CoinChip({ coin }: { coin: TopCoin }) {
 
   return (
     <div
-      className={`flex ${BANNER_H} min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2`}
+      className={`flex ${BANNER_H} min-w-0 flex-1 items-center gap-1.5 px-1 sm:gap-1.5 sm:px-1.5`}
       title={`${coin.name} · ${formatUsdPrice(coin.priceUsd)} · ${changeLabel} (24h)`}
     >
       <CoinIcon coin={coin} />
       <div className="min-w-0 flex-1 leading-none">
-        <div className="flex items-baseline gap-1">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
+        <p className="tabular truncate text-xs font-semibold tracking-tight text-[var(--color-text)] sm:text-[13px]">
+          {formatUsdPrice(coin.priceUsd)}
+        </p>
+        <div className="mt-0.5 flex min-w-0 items-baseline gap-1">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
             {coin.symbol}
           </span>
-          <span className={`tabular shrink-0 text-[10px] font-medium ${changeTone}`}>
+          <span className={`tabular truncate text-[11px] font-medium ${changeTone}`}>
             {changeLabel}
           </span>
         </div>
-        <p className="tabular truncate text-[11px] font-semibold tracking-tight text-[var(--color-text)] sm:text-xs">
-          {formatUsdPrice(coin.priceUsd)}
-        </p>
       </div>
     </div>
   )
@@ -171,13 +171,13 @@ export function TopCoinsBanner() {
   return (
     <section
       aria-label="Top 10 coins"
-      className="panel flex h-10 w-full items-stretch overflow-x-auto overflow-y-hidden"
+      className={`panel flex ${BANNER_H} w-full items-stretch overflow-x-auto overflow-y-hidden`}
     >
       {coins.map((coin, index) => (
         <div
           key={coin.id}
           className={[
-            'flex min-w-[6.75rem] flex-1 basis-0 items-stretch',
+            'flex min-w-[7.25rem] flex-1 basis-0 items-stretch',
             index < coins.length - 1 ? 'border-r border-[var(--color-border-subtle)]' : '',
           ].join(' ')}
         >
