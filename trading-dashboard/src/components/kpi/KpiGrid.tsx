@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
+import { getKpiTooltip } from '../../config/kpiTooltips'
 import type { EquityPoint, PortfolioSnapshot } from '../../types/trade'
 import { formatMoney, formatPct, formatSignedMoney } from '../../utils/format'
 import { KpiCard, type KpiTone } from './KpiCard'
@@ -106,6 +107,7 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
         <KpiCard
           key={item.title}
           {...item}
+          tooltip={getKpiTooltip(item.title)}
           onClick={onKpiClick ? () => onKpiClick(item.title) : undefined}
         />
       ))}

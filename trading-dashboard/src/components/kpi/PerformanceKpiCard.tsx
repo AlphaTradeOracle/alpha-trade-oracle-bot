@@ -1,10 +1,12 @@
 import { Gauge } from 'lucide-react'
+import { getKpiTooltip } from '../../config/kpiTooltips'
 import { formatPct } from '../../utils/format'
 import {
   computePerformanceWindows,
   type PerformanceWindow,
 } from '../../utils/performanceWindows'
 import type { EquityPoint } from '../../types/trade'
+import { Tooltip } from '../ui/Tooltip'
 
 interface PerformanceKpiCardProps {
   equity: EquityPoint[]
@@ -23,9 +25,10 @@ function formatWindowPct(pct: number | null): string {
 
 export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
   const windows: PerformanceWindow[] = computePerformanceWindows(equity)
+  const tip = getKpiTooltip('Performance')
 
-  return (
-    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center">
+  const card = (
+    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
       <span
         className="absolute right-3 top-3 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
         aria-hidden
@@ -49,4 +52,7 @@ export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
       </dl>
     </article>
   )
+
+  if (!tip) return card
+  return <Tooltip content={tip}>{card}</Tooltip>
 }

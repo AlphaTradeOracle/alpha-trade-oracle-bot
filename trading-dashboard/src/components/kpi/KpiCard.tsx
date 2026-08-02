@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { formatPct } from '../../utils/format'
+import { Tooltip } from '../ui/Tooltip'
 
 export type KpiTone = 'neutral' | 'positive' | 'negative' | 'accent'
 
@@ -12,6 +13,8 @@ interface KpiCardProps {
   hint?: string | null
   tone?: KpiTone
   onClick?: () => void
+  /** Hover / focus / tap help text from central KPI_TOOLTIPS config. */
+  tooltip?: string
 }
 
 const toneValue: Record<KpiTone, string> = {
@@ -36,6 +39,7 @@ export function KpiCard({
   hint,
   tone = 'neutral',
   onClick,
+  tooltip,
 }: KpiCardProps) {
   const className = [
     'panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]',
@@ -78,13 +82,18 @@ export function KpiCard({
     </>
   )
 
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        {body}
-      </button>
-    )
-  }
+  const card = onClick ? (
+    <button type="button" onClick={onClick} className={className}>
+      {body}
+    </button>
+  ) : (
+    <article className={className}>{body}</article>
+  )
 
-  return <article className={className}>{body}</article>
+  if (!tooltip) return card
+  return (
+    <Tooltip content={tooltip} keyboardFocus={!onClick}>
+      {card}
+    </Tooltip>
+  )
 }
