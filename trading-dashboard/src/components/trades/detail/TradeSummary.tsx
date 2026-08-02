@@ -50,12 +50,21 @@ export function TradeSummary({ trade }: TradeSummaryProps) {
         <DetailField label="Risk / Unit">{formatPrice(risk)}</DetailField>
         <DetailField label="Reward / Unit">{reward != null ? formatPrice(reward) : '—'}</DetailField>
 
-        <DetailField label="Position Size">
-          {trade.positionSize != null ? trade.positionSize.toLocaleString('en-US') : '—'}
+        <DetailField label="Notional">
+          {trade.notional != null
+            ? formatMoney(trade.notional)
+            : trade.positionSize != null && trade.entry > 0
+              ? formatMoney(trade.positionSize * trade.entry)
+              : '—'}
         </DetailField>
         <DetailField label="Margin">{formatMoney(trade.margin)}</DetailField>
         <DetailField label="Leverage">
           {trade.leverage != null ? `${trade.leverage}×` : '—'}
+        </DetailField>
+        <DetailField label="Quantity">
+          {trade.positionSize != null
+            ? trade.positionSize.toLocaleString('en-US', { maximumFractionDigits: 4 })
+            : '—'}
         </DetailField>
 
         <div className="min-w-0">

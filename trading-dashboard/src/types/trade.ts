@@ -65,8 +65,10 @@ export interface Trade {
   strategy?: string
   /** Take-profit ladder, ordered TP1..TP4 */
   takeProfits?: TakeProfit[]
-  /** Position size in base asset */
+  /** Position size in base asset (coins) */
   positionSize?: number
+  /** Entry notional in quote currency (margin × leverage) */
+  notional?: number
   /** Applied leverage multiplier */
   leverage?: number
   /** Trading fees paid in quote currency */
