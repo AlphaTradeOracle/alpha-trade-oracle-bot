@@ -44,12 +44,12 @@ function WindowCell({ win }: { win: PerformanceWindow }) {
   const tone = cellTone(win.pct)
   return (
     <div
-      className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1 ${tone.chip}`}
+      className={`flex h-full min-h-0 flex-col items-center justify-center gap-1 rounded-lg px-1.5 ${tone.chip}`}
     >
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
         {win.label}
       </dt>
-      <dd className={`tabular text-sm font-semibold leading-none tracking-tight ${tone.value}`}>
+      <dd className={`tabular text-[15px] font-semibold leading-none tracking-tight ${tone.value}`}>
         {formatWindowPct(win.pct)}
       </dd>
     </div>
@@ -68,17 +68,17 @@ export function PerformanceKpiCard({ equity, loading = false }: PerformanceKpiCa
   const tip = getKpiTooltip('Performance')
 
   const card = (
-    <article className="panel relative flex h-[108px] w-full flex-col items-center justify-center gap-1.5 px-2.5 pb-2.5 pt-2.5 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
+    <article className="panel relative flex h-[108px] w-full flex-col px-2.5 pb-2 pt-2 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
       <span
-        className="absolute right-2.5 top-2.5 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
+        className="absolute right-2.5 top-2 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
         aria-hidden
       >
         <Gauge size={15} strokeWidth={1.8} />
       </span>
-      <p className="w-full px-7 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+      <p className="w-full shrink-0 px-7 text-center text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Performance
       </p>
-      <dl className="grid w-full grid-cols-2 gap-1">
+      <dl className="mt-1.5 grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-1.5">
         {windows.map((win) => (
           <WindowCell key={win.label} win={win} />
         ))}
