@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiBase } from '../../services/deskApi'
 
 export interface TopCoin {
@@ -27,6 +27,10 @@ const REFRESH_MS = 60_000
 const DISPLAY_COUNT = 10
 /** Fetch a few extra so USDT/USDC (and other stables) can be skipped. */
 const FETCH_LIMIT = 15
+/** CoinGecko sparkline is hourly over 7d (~168 pts); last 24 ≈ 1D. */
+const SPARK_1D_POINTS = 24
+const SPARK_W = 72
+const SPARK_H = 36
 
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
@@ -60,6 +64,33 @@ async function fetchTopCoins(signal?: AbortSignal): Promise<TopCoin[]> {
     .slice(0, DISPLAY_COUNT)
 }
 
+/** Take the last ~24h from the hourly 7d sparkline. */
+function sparkline1d(values: number[]): number[] {
+  if (values.length <= SPARK_1D_POINTS) return values
+  return values.slice(-SPARK_1D_POINTS)
+}
+
+function sparkPath(values: number[], width: number, height: number): string {
+  if (values.length < 2) return ''
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = max - min || 1
+  const pad = 2
+  return values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * width
+      const y = height - pad - ((v - min) / span) * (height - pad * 2)
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .join(' ')
+}
+
+function sparkArea(values: number[], width: number, height: number): string {
+  const line = sparkPath(values, width, height)
+  if (!line) return ''
+  return `${line} L${width},${height} L0,${height} Z`
+}
+
 function CoinIcon({ coin }: { coin: TopCoin }) {
   const [failed, setFailed] = useState(false)
   const showImg = Boolean(coin.imageUrl) && !failed
@@ -90,6 +121,39 @@ function CoinIcon({ coin }: { coin: TopCoin }) {
   )
 }
 
+function Sparkline1d({ values, up, down }: { values: number[]; up: boolean; down: boolean }) {
+  const points = useMemo(() => sparkline1d(values), [values])
+  const path = sparkPath(points, SPARK_W, SPARK_H)
+  const area = sparkArea(points, SPARK_W, SPARK_H)
+  if (!path) return null
+
+  const stroke = down
+    ? 'var(--color-short)'
+    : up
+      ? 'var(--color-long)'
+      : 'var(--color-accent)'
+
+  return (
+    <svg
+      width={SPARK_W}
+      height={SPARK_H}
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      className="block shrink-0 opacity-95"
+      aria-hidden
+    >
+      <path d={area} fill={stroke} opacity={0.14} />
+      <path
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function CoinChip({ coin }: { coin: TopCoin }) {
   const change = coin.change24hPct
   const up = (change ?? 0) > 0
@@ -103,17 +167,20 @@ function CoinChip({ coin }: { coin: TopCoin }) {
     change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`
 
   return (
-    <div className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 px-2 py-2.5 text-center">
-      <div className="flex items-center justify-center gap-1.5">
-        <CoinIcon coin={coin} />
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-          {coin.symbol}
+    <div className="flex min-h-[78px] items-center gap-2 px-2.5 py-2.5 sm:gap-2.5 sm:px-3">
+      <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-1">
+        <div className="flex items-center gap-1.5">
+          <CoinIcon coin={coin} />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+            {coin.symbol}
+          </p>
+        </div>
+        <p className="tabular truncate text-sm font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[0.95rem]">
+          {formatUsdPrice(coin.priceUsd)}
         </p>
+        <p className={`tabular text-[11px] font-medium leading-none ${changeTone}`}>{changeLabel}</p>
       </div>
-      <p className="tabular truncate text-sm font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[0.95rem]">
-        {formatUsdPrice(coin.priceUsd)}
-      </p>
-      <p className={`tabular text-[11px] font-medium leading-none ${changeTone}`}>{changeLabel}</p>
+      <Sparkline1d values={coin.sparkline ?? []} up={up} down={down} />
     </div>
   )
 }
@@ -164,7 +231,6 @@ export function TopCoinsBanner() {
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
         Top 10 Coins
       </h2>
-      {/* Same gap / column rhythm as KpiGrid (2→3→4→5/6); 5×2 fills 10 majors. */}
       <div className="panel grid grid-cols-2 gap-px overflow-hidden bg-[var(--color-border)] sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5">
         {coins.map((coin) => (
           <div
