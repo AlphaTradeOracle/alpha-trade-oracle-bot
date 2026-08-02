@@ -13,7 +13,12 @@ import equityFallback from '../data/equity.json'
 import portfolioFallback from '../data/portfolio.json'
 import tradesFallback from '../data/trades.json'
 import { fetchDeskSnapshot } from '../services/deskApi'
-import type { EquityPoint, PortfolioSnapshot, Trade } from '../types/trade'
+import type {
+  EquityPoint,
+  MarketRegimeSnapshot,
+  PortfolioSnapshot,
+  Trade,
+} from '../types/trade'
 
 /** While the desk tab stays open, refresh in the background. */
 const POLL_MS = 60_000
@@ -55,6 +60,7 @@ interface DeskDataValue {
   portfolio: PortfolioSnapshot
   trades: Trade[]
   equity: EquityPoint[]
+  marketRegime: MarketRegimeSnapshot | null
   generatedAt: string | null
   loading: boolean
   error: string | null
@@ -70,6 +76,7 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
   const [equity, setEquity] = useState<EquityPoint[]>(
     () => equityFallback as EquityPoint[],
   )
+  const [marketRegime, setMarketRegime] = useState<MarketRegimeSnapshot | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,6 +99,7 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
       setPortfolio(snap.portfolio)
       setTrades((snap.trades ?? []).filter(isBookTrade))
       setEquity(snap.equity ?? [])
+      setMarketRegime(snap.marketRegime ?? null)
       setGeneratedAt(snap.generatedAt)
       setError(null)
     } catch (err) {
@@ -132,8 +140,17 @@ export function DeskDataProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   const value = useMemo(
-    () => ({ portfolio, trades, equity, generatedAt, loading, error, refresh }),
-    [portfolio, trades, equity, generatedAt, loading, error, refresh],
+    () => ({
+      portfolio,
+      trades,
+      equity,
+      marketRegime,
+      generatedAt,
+      loading,
+      error,
+      refresh,
+    }),
+    [portfolio, trades, equity, marketRegime, generatedAt, loading, error, refresh],
   )
 
   return <DeskDataContext.Provider value={value}>{children}</DeskDataContext.Provider>

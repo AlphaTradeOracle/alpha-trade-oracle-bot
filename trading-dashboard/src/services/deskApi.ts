@@ -1,10 +1,16 @@
-import type { EquityPoint, PortfolioSnapshot, Trade } from '../types/trade'
+import type {
+  EquityPoint,
+  MarketRegimeSnapshot,
+  PortfolioSnapshot,
+  Trade,
+} from '../types/trade'
 
 export interface DeskSnapshot {
   portfolio: PortfolioSnapshot
   trades: Trade[]
   equity: EquityPoint[]
   generatedAt: string
+  marketRegime?: MarketRegimeSnapshot | null
 }
 
 /** Same-origin in production (Nginx proxies `/api`). Override for local Vite. */

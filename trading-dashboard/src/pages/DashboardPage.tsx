@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EquityChart } from '../components/charts/EquityChart'
 import { EquityDetailsModal } from '../components/equity'
 import { KpiGrid } from '../components/kpi/KpiGrid'
+import { MarketRegimeCard } from '../components/market/MarketRegimeCard'
 import { ClosedTradesTable } from '../components/trades/ClosedTradesTable'
 import { OpenTradesTable } from '../components/trades/OpenTradesTable'
 import { PendingTradesTable } from '../components/trades/PendingTradesTable'
@@ -9,6 +10,7 @@ import { TradeDetailsModal } from '../components/trades/detail'
 import { TradeFilters } from '../components/trades/TradeFilters'
 import { DeskActions } from '../components/ui/DeskActions'
 import { PageHeader } from '../components/ui/PageHeader'
+import { useDeskData } from '../context/DeskDataContext'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useTradeFilters } from '../hooks/useTradeFilters'
 import { useTrades } from '../hooks/useTrades'
@@ -16,6 +18,7 @@ import type { Trade } from '../types/trade'
 
 export function DashboardPage() {
   const { portfolio, equity } = usePortfolio()
+  const { marketRegime } = useDeskData()
   const { trades: open } = useTrades('OPEN')
   const { trades: pending } = useTrades('PENDING')
   const { trades: closed } = useTrades('CLOSED')
@@ -36,6 +39,8 @@ export function DashboardPage() {
       />
 
       <KpiGrid portfolio={portfolio} equity={equity} />
+
+      <MarketRegimeCard regime={marketRegime} />
 
       <EquityChart data={equity} onOpenDetails={() => setEquityOpen(true)} />
 

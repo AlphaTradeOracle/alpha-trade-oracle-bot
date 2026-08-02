@@ -2,6 +2,7 @@ import { TradeChart } from '../../charts/trade'
 import { Button } from '../../ui/Button'
 import { Modal } from '../../ui/Modal'
 import type { Trade } from '../../../types/trade'
+import { TradeMarketContext } from './TradeMarketContext'
 import { TradePerformance } from './TradePerformance'
 import { TradeSummary } from './TradeSummary'
 import { TradeTimeline } from './TradeTimeline'
@@ -39,6 +40,7 @@ export function TradeDetailsModal({ trade, onClose }: TradeDetailsModalProps) {
           </div>
           <div className="space-y-4">
             <TradePerformance trade={trade} />
+            <TradeMarketContext trade={trade} />
             <TradeTimeline trade={trade} />
           </div>
         </div>
