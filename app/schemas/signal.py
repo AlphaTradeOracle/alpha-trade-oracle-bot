@@ -163,6 +163,8 @@ class SignalResponse(BaseModel):
             counter_arguments=_get(signal, "counter_arguments") or [],  # type: ignore[arg-type]
             indicators_used=_get(signal, "indicators_used") or [],  # type: ignore[arg-type]
             llm_summary=_get(signal, "llm_summary"),  # type: ignore[arg-type]
+            no_trade_reason=_get(signal, "no_trade_reason")
+            or _get(signal, "invalidation_note"),
             is_dispatched=bool(_get(signal, "is_dispatched")),
         )
 

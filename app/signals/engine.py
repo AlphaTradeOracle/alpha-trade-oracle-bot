@@ -63,6 +63,10 @@ class SignalEngineConfig:
     enable_sentiment: bool = False
     block_range_market: bool = True
     min_adx: float = 30.0
+    min_adx_soft: float = 20.0
+    #: Dispatch-band thresholds — high-conviction setups use soft ADX/range gates.
+    min_score: float = 75.0
+    short_max_score: float = 25.0
     rsi_long_max: float = 75.0
     rsi_short_min: float = 33.0
     short_min_score: float = 18.0
@@ -89,6 +93,9 @@ def signal_engine_config_from_settings(
         ),
         block_range_market=settings.signal_block_range_market,
         min_adx=settings.signal_min_adx,
+        min_adx_soft=settings.signal_min_adx_soft,
+        min_score=settings.signal_min_score,
+        short_max_score=settings.signal_short_max_score,
         rsi_long_max=settings.signal_rsi_long_max,
         rsi_short_min=settings.signal_rsi_short_min,
         short_min_score=settings.signal_short_min_score,
@@ -362,18 +369,27 @@ class SignalEngine:
                 f"of {MIN_DATA_QUALITY:.0f}"
             )
 
-        if self._config.block_range_market and market_phase is MarketPhase.RANGE:
-            adx_text = (
-                f" (ADX {indicators.adx_14:.1f})"
-                if indicators.adx_14 is not None
-                else ""
-            )
-            return f"Range market without trend strength{adx_text} — no clear setup"
+        high_conviction = self._is_high_conviction(direction, score)
+        adx_floor = (
+            self._config.min_adx_soft if high_conviction else self._config.min_adx
+        )
 
-        if indicators.adx_14 is not None and indicators.adx_14 < self._config.min_adx:
+        if self._config.block_range_market and market_phase is MarketPhase.RANGE:
+            # High-conviction band may trade mild ranges if ADX clears the soft floor.
+            if not high_conviction or (
+                indicators.adx_14 is not None and indicators.adx_14 < adx_floor
+            ):
+                adx_text = (
+                    f" (ADX {indicators.adx_14:.1f})"
+                    if indicators.adx_14 is not None
+                    else ""
+                )
+                return f"Range market without trend strength{adx_text} — no clear setup"
+
+        if indicators.adx_14 is not None and indicators.adx_14 < adx_floor:
             return (
                 f"Trend strength too low (ADX {indicators.adx_14:.1f} "
-                f"below minimum {self._config.min_adx:.1f})"
+                f"below minimum {adx_floor:.1f})"
             )
 
         if indicators.rsi_14 is not None:
@@ -408,6 +424,14 @@ class SignalEngine:
             )
 
         return None
+
+    def _is_high_conviction(self, direction: SignalDirection, score: float) -> bool:
+        """True when score is already in the dispatch band (long≥min / short≤max)."""
+        if direction.is_long and score >= self._config.min_score:
+            return True
+        if direction.is_short and score <= self._config.short_max_score:
+            return True
+        return False
 
     @staticmethod
     def _determine_confidence(score: float, agreement: float, data_quality: float) -> Confidence:

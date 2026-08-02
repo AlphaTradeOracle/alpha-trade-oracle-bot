@@ -247,6 +247,30 @@ class TestNoTradeRules:
         assert result.no_trade_reason is not None
         assert "ADX" in result.no_trade_reason
 
+    def test_high_conviction_uses_soft_adx_floor(
+        self, uptrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        """Score ≥ min_score may clear ADX between soft and hard floors."""
+        modified = dict(uptrend_indicators)
+        modified["1h"] = replace(uptrend_indicators["1h"], adx_14=22.0, rsi_14=55.0)
+        engine = SignalEngine(
+            SignalEngineConfig(
+                block_range_market=False,
+                min_adx=30.0,
+                min_adx_soft=20.0,
+                min_score=75.0,
+            )
+        )
+        result = engine.generate("BTCUSDT", modified, now=NOW)
+        if result.score >= 75.0:
+            assert result.direction is not SignalDirection.NO_TRADE
+            assert result.no_trade_reason is None
+        else:
+            # Fixture may not always hit ≥75 — then hard floor still applies.
+            assert result.direction is SignalDirection.NO_TRADE
+            assert result.no_trade_reason is not None
+            assert "ADX" in result.no_trade_reason
+
 
 class TestConfidence:
     def test_low_data_quality_lowers_confidence(

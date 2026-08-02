@@ -64,6 +64,8 @@ class Signal(Base, TimestampMixin):
 
     data_quality: Mapped[float] = mapped_column(SCORE, nullable=False, default=100.0)
     invalidation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Engine/orchestrator NO_TRADE gate text (persisted for audit; may also be in invalidation_note).
+    no_trade_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     reasons: Mapped[list[str] | None] = mapped_column(JSON_COLUMN, nullable=True)
     counter_arguments: Mapped[list[str] | None] = mapped_column(JSON_COLUMN, nullable=True)
     indicators_used: Mapped[list[str] | None] = mapped_column(JSON_COLUMN, nullable=True)

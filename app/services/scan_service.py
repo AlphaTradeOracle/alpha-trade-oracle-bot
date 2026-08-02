@@ -6,6 +6,7 @@ nicht abbricht: jedes Symbol wird einzeln behandelt und protokolliert.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.core.enums import DeliveryStatus, EventSeverity, SuppressionReason
 from app.core.errors import AlphaTradeOracleError
 from app.core.logging import get_logger, set_correlation_id
 from app.core.time import utc_now
+from app.database.session import session_scope
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import EventRepository
@@ -40,7 +42,7 @@ class ScanResult:
     suppression_details: list[tuple[str, str]] = field(default_factory=list)
     universe_mode: bool = False
 
-    def as_summary(self) -> dict[str, int]:
+    def as_summary(self) -> dict[str, int | float]:
         return {
             "symbols_scanned": self.symbols_scanned,
             "signals_created": self.signals_created,
@@ -94,6 +96,7 @@ class ScanService:
     ) -> ScanResult:
         """Relevante Symbole analysieren und passende Signale zustellen."""
         set_correlation_id()
+        started = utc_now()
         result = ScanResult()
 
         universe_mode = self._should_use_universe(symbols, use_universe)
@@ -106,10 +109,12 @@ class ScanService:
             logger.info("scan_no_targets")
             return result
 
+        concurrency = max(1, int(self._settings.scan_concurrency))
         logger.info(
             "scan_started",
             symbol_count=len(targets),
             universe_mode=universe_mode,
+            concurrency=concurrency,
             symbols=targets[:20],
         )
 
@@ -126,10 +131,9 @@ class ScanService:
                 detail=regime_snapshot.detail,
             )
 
-        for symbol in targets:
-            result.symbols_scanned += 1
-            try:
-                await self._scan_symbol(
+        if concurrency <= 1:
+            for symbol in targets:
+                await self._scan_symbol_safe(
                     session,
                     symbol,
                     result,
@@ -137,26 +141,110 @@ class ScanService:
                     universe_mode=universe_mode,
                     regime_snapshot=regime_snapshot,
                 )
-            except AlphaTradeOracleError as exc:
-                result.failures.append((symbol, str(exc)))
-                logger.warning("scan_symbol_failed", symbol=symbol, error=str(exc))
-            except Exception as exc:
-                result.failures.append((symbol, str(exc)))
-                logger.error("scan_symbol_error", symbol=symbol, error=str(exc), exc_info=True)
-            finally:
-                if universe_mode:
-                    await AssetRepository(session).mark_scanned(symbol)
+        else:
+            await self._scan_targets_concurrent(
+                targets,
+                result,
+                dispatch=dispatch,
+                universe_mode=universe_mode,
+                regime_snapshot=regime_snapshot,
+                concurrency=concurrency,
+            )
 
-        await EventRepository(session).record(
+        duration_s = (utc_now() - started).total_seconds()
+        summary = result.as_summary()
+        summary["duration_seconds"] = round(duration_s, 1)
+        summary["concurrency"] = concurrency
+
+        event = await EventRepository(session).record(
             "market_scan_completed",
             f"Scan abgeschlossen: {result.signals_dispatched} von "
             f"{result.signals_created} Signalen versendet.",
             severity=EventSeverity.INFO if not result.failures else EventSeverity.WARNING,
-            payload=result.as_summary(),
+            payload=summary,
         )
+        # PG ``now()`` is transaction-start; stamp wall clock for cadence audits.
+        event.created_at = utc_now()
 
-        logger.info("scan_completed", **result.as_summary())
+        logger.info("scan_completed", **summary)
         return result
+
+    async def _scan_targets_concurrent(
+        self,
+        targets: list[str],
+        result: ScanResult,
+        *,
+        dispatch: bool,
+        universe_mode: bool,
+        regime_snapshot: RegimeSnapshot | None,
+        concurrency: int,
+    ) -> None:
+        """Analyse Symbole parallel — je Worker eigene DB-Session (AsyncSession nicht shareable)."""
+        sem = asyncio.Semaphore(concurrency)
+        lock = asyncio.Lock()
+
+        async def run_one(symbol: str) -> None:
+            async with sem:
+                try:
+                    async with session_scope() as sym_session:
+                        local = ScanResult(universe_mode=universe_mode)
+                        await self._scan_symbol_safe(
+                            sym_session,
+                            symbol,
+                            local,
+                            dispatch=dispatch,
+                            universe_mode=universe_mode,
+                            regime_snapshot=regime_snapshot,
+                        )
+                        async with lock:
+                            result.symbols_scanned += local.symbols_scanned
+                            result.signals_created += local.signals_created
+                            result.signals_dispatched += local.signals_dispatched
+                            result.signals_suppressed += local.signals_suppressed
+                            result.failures.extend(local.failures)
+                            result.suppression_details.extend(local.suppression_details)
+                except Exception as exc:
+                    async with lock:
+                        result.symbols_scanned += 1
+                        result.failures.append((symbol, str(exc)))
+                    logger.error(
+                        "scan_symbol_error",
+                        symbol=symbol,
+                        error=str(exc),
+                        exc_info=True,
+                    )
+
+        await asyncio.gather(*(run_one(symbol) for symbol in targets))
+
+    async def _scan_symbol_safe(
+        self,
+        session: AsyncSession,
+        symbol: str,
+        result: ScanResult,
+        *,
+        dispatch: bool,
+        universe_mode: bool,
+        regime_snapshot: RegimeSnapshot | None,
+    ) -> None:
+        result.symbols_scanned += 1
+        try:
+            await self._scan_symbol(
+                session,
+                symbol,
+                result,
+                dispatch=dispatch,
+                universe_mode=universe_mode,
+                regime_snapshot=regime_snapshot,
+            )
+        except AlphaTradeOracleError as exc:
+            result.failures.append((symbol, str(exc)))
+            logger.warning("scan_symbol_failed", symbol=symbol, error=str(exc))
+        except Exception as exc:
+            result.failures.append((symbol, str(exc)))
+            logger.error("scan_symbol_error", symbol=symbol, error=str(exc), exc_info=True)
+        finally:
+            if universe_mode:
+                await AssetRepository(session).mark_scanned(symbol)
 
     def _should_use_universe(
         self, symbols: list[str] | None, use_universe: bool | None

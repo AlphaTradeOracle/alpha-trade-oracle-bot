@@ -54,7 +54,9 @@ class SignalRepository:
             risk_percent=risk.risk_percent if risk else None,
             suggested_position_size=_dec(risk.suggested_position_size) if risk else None,
             data_quality=result.data_quality,
-            invalidation_note=risk.invalidation_note if risk else result.no_trade_reason,
+            invalidation_note=result.no_trade_reason
+            or (risk.invalidation_note if risk else None),
+            no_trade_reason=result.no_trade_reason,
             reasons=result.reasons,
             counter_arguments=result.counter_arguments,
             indicators_used=result.indicators_used,

@@ -124,12 +124,15 @@ class SchedulerRunner:
                 if disabled:
                     logger.info("scheduler_jobs_disabled", job_keys=disabled)
 
+        # Grace covers a full scan overrun so the next 15m tick still fires
+        # immediately after the running instance finishes (max_instances=1).
+        scan_grace = max(900, self._settings.scan_interval_minutes * 60)
         self._add_interval_job(
             run_market_scan,
             scan_definition,
             args=[self._scan_service, scan_definition.key],
             next_run_time=next_runs[scan_definition.key],
-            misfire_grace_time=300,
+            misfire_grace_time=scan_grace,
         )
 
         if self._universe_service is not None and self._settings.enable_universe_scan:

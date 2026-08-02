@@ -99,6 +99,9 @@ class Settings(BaseSettings):
     signal_short_min_score: float = 18.0
     signal_block_range_market: bool = True
     signal_min_adx: float = 30.0
+    #: Soft ADX floor for high-conviction scores (long ≥ min_score / short ≤ short_max).
+    #: Lets strong setups through mild chop without disabling the hard ADX gate entirely.
+    signal_min_adx_soft: float = 20.0
     atr_multiplier: float = 1.5
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
@@ -161,6 +164,8 @@ class Settings(BaseSettings):
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 15
+    #: Parallel symbol workers per market scan (1 = sequential). Speeds 15m cadence.
+    scan_concurrency: int = 10
     candle_limit: int = 500
     min_candles_required: int = 210
     universe_size: int = 1500
