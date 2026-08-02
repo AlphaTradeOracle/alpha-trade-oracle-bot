@@ -12,10 +12,26 @@ interface PerformanceKpiCardProps {
   equity: EquityPoint[]
 }
 
-function toneClass(pct: number | null): string {
-  if (pct == null || pct === 0) return 'text-[var(--color-text-muted)]'
-  if (pct > 0) return 'text-[var(--color-long)]'
-  return 'text-[var(--color-short)]'
+function cellTone(pct: number | null): {
+  value: string
+  chip: string
+} {
+  if (pct == null || pct === 0) {
+    return {
+      value: 'text-[var(--color-text-secondary)]',
+      chip: 'bg-[var(--color-surface-hover)]/70',
+    }
+  }
+  if (pct > 0) {
+    return {
+      value: 'text-[var(--color-long)]',
+      chip: 'bg-[var(--color-long-soft)]',
+    }
+  }
+  return {
+    value: 'text-[var(--color-short)]',
+    chip: 'bg-[var(--color-short-soft)]',
+  }
 }
 
 function formatWindowPct(pct: number | null): string {
@@ -23,31 +39,40 @@ function formatWindowPct(pct: number | null): string {
   return formatPct(pct)
 }
 
+function WindowCell({ win }: { win: PerformanceWindow }) {
+  const tone = cellTone(win.pct)
+  return (
+    <div
+      className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1 ${tone.chip}`}
+    >
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+        {win.label}
+      </dt>
+      <dd className={`tabular text-sm font-semibold leading-none tracking-tight ${tone.value}`}>
+        {formatWindowPct(win.pct)}
+      </dd>
+    </div>
+  )
+}
+
 export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
   const windows: PerformanceWindow[] = computePerformanceWindows(equity)
   const tip = getKpiTooltip('Performance')
 
   const card = (
-    <article className="panel relative flex h-[108px] w-full flex-col items-center justify-center gap-1 px-3 pb-2.5 pt-3 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
+    <article className="panel relative flex h-[108px] w-full flex-col items-center justify-center gap-1.5 px-2.5 pb-2.5 pt-2.5 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
       <span
-        className="absolute right-3 top-3 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
+        className="absolute right-2.5 top-2.5 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
         aria-hidden
       >
         <Gauge size={15} strokeWidth={1.8} />
       </span>
-      <p className="w-full px-6 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+      <p className="w-full px-7 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Performance
       </p>
-      <dl className="grid w-full grid-cols-2 gap-x-2 gap-y-0.5">
+      <dl className="grid w-full grid-cols-2 gap-1">
         {windows.map((win) => (
-          <div key={win.label} className="flex items-baseline justify-center gap-1 leading-none">
-            <dt className="text-[9px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
-              {win.label}
-            </dt>
-            <dd className={`tabular text-[11px] font-semibold ${toneClass(win.pct)}`}>
-              {formatWindowPct(win.pct)}
-            </dd>
-          </div>
+          <WindowCell key={win.label} win={win} />
         ))}
       </dl>
     </article>
