@@ -11,7 +11,7 @@ interface BrandLockupProps {
 
 /** Logo + wordmark used in the sidebar and mobile header. */
 export function BrandLockup({
-  size = 96,
+  size = 80,
   compact = false,
   stacked = true,
 }: BrandLockupProps) {
@@ -37,10 +37,10 @@ export function BrandLockup({
     <div className="flex flex-col items-center gap-3 text-center">
       <Logo size={size} className="drop-shadow-[0_6px_18px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]" />
       <div className="min-w-0 space-y-1">
-        <p className="text-base font-semibold leading-tight tracking-tight text-[var(--color-text)]">
+        <p className="text-[15px] font-semibold leading-tight tracking-tight text-[var(--color-text)]">
           {branding.projectName}
         </p>
-        <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
           {branding.tagline}
         </p>
       </div>
