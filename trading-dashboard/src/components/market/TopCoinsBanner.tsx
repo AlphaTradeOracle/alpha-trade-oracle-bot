@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiBase } from '../../services/deskApi'
 
 export interface TopCoin {
@@ -25,12 +25,10 @@ interface TopCoinsResponse {
 const STABLES = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'USDE', 'USDS', 'TUSD', 'USDD'])
 const REFRESH_MS = 60_000
 const DISPLAY_COUNT = 10
-/** Fetch a few extra so USDT/USDC (and other stables) can be skipped. */
 const FETCH_LIMIT = 15
-/** CoinGecko sparkline is hourly over 7d (~168 pts); last 24 ≈ 1D. */
-const SPARK_1D_POINTS = 24
-const SPARK_W = 120
-const SPARK_H = 52
+
+/** Matches Sidebar nav item height (`py-2.5` + `text-sm` ≈ 40px). */
+const BANNER_H = 'h-10'
 
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
@@ -64,48 +62,21 @@ async function fetchTopCoins(signal?: AbortSignal): Promise<TopCoin[]> {
     .slice(0, DISPLAY_COUNT)
 }
 
-/** Take the last ~24h from the hourly 7d sparkline. */
-function sparkline1d(values: number[]): number[] {
-  if (values.length <= SPARK_1D_POINTS) return values
-  return values.slice(-SPARK_1D_POINTS)
-}
-
-function sparkPath(values: number[], width: number, height: number): string {
-  if (values.length < 2) return ''
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = max - min || 1
-  const pad = 2
-  return values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * width
-      const y = height - pad - ((v - min) / span) * (height - pad * 2)
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
-    })
-    .join(' ')
-}
-
-function sparkArea(values: number[], width: number, height: number): string {
-  const line = sparkPath(values, width, height)
-  if (!line) return ''
-  return `${line} L${width},${height} L0,${height} Z`
-}
-
 function CoinIcon({ coin }: { coin: TopCoin }) {
   const [failed, setFailed] = useState(false)
   const showImg = Boolean(coin.imageUrl) && !failed
 
   return (
     <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)] sm:h-10 sm:w-10"
+      className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)]"
       aria-hidden
     >
       {showImg ? (
         <img
           src={coin.imageUrl!}
           alt=""
-          width={40}
-          height={40}
+          width={20}
+          height={20}
           className="h-full w-full object-cover"
           loading="lazy"
           decoding="async"
@@ -113,44 +84,11 @@ function CoinIcon({ coin }: { coin: TopCoin }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+        <span className="text-[8px] font-semibold uppercase text-[var(--color-text-muted)]">
           {coin.symbol.slice(0, 2)}
         </span>
       )}
     </span>
-  )
-}
-
-function Sparkline1d({ values, up, down }: { values: number[]; up: boolean; down: boolean }) {
-  const points = useMemo(() => sparkline1d(values), [values])
-  const path = sparkPath(points, SPARK_W, SPARK_H)
-  const area = sparkArea(points, SPARK_W, SPARK_H)
-  if (!path) return null
-
-  const stroke = down
-    ? 'var(--color-short)'
-    : up
-      ? 'var(--color-long)'
-      : 'var(--color-accent)'
-
-  return (
-    <svg
-      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
-      preserveAspectRatio="none"
-      className="block h-[52px] w-[46%] max-w-[140px] min-w-[72px] shrink-0 opacity-95 sm:h-[58px] sm:max-w-[160px]"
-      aria-hidden
-    >
-      <path d={area} fill={stroke} opacity={0.16} />
-      <path
-        d={path}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
   )
 }
 
@@ -167,27 +105,29 @@ function CoinChip({ coin }: { coin: TopCoin }) {
     change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`
 
   return (
-    <div className="flex h-full min-h-[108px] items-center gap-2.5 px-3 py-3 sm:gap-3 sm:px-3.5">
-      <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-1.5">
-        <div className="flex items-center gap-2">
-          <CoinIcon coin={coin} />
-          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)] sm:text-[13px]">
+    <div
+      className={`flex ${BANNER_H} min-w-0 flex-1 items-center gap-1.5 px-1.5 sm:gap-2 sm:px-2`}
+      title={`${coin.name} · ${formatUsdPrice(coin.priceUsd)} · ${changeLabel} (24h)`}
+    >
+      <CoinIcon coin={coin} />
+      <div className="min-w-0 flex-1 leading-none">
+        <div className="flex items-baseline gap-1">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
             {coin.symbol}
-          </p>
+          </span>
+          <span className={`tabular shrink-0 text-[10px] font-medium ${changeTone}`}>
+            {changeLabel}
+          </span>
         </div>
-        <p className="tabular w-full truncate text-lg font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-xl">
+        <p className="tabular truncate text-[11px] font-semibold tracking-tight text-[var(--color-text)] sm:text-xs">
           {formatUsdPrice(coin.priceUsd)}
         </p>
-        <p className={`tabular text-xs font-medium leading-none sm:text-[13px] ${changeTone}`}>
-          {changeLabel}
-        </p>
       </div>
-      <Sparkline1d values={coin.sparkline ?? []} up={up} down={down} />
     </div>
   )
 }
 
-/** Compact top-10 majors banner (no stables) — full-width strip aligned with KPI grid. */
+/** Slim top banner — one row of 10 majors, height matches Sidebar nav items. */
 export function TopCoinsBanner() {
   const [coins, setCoins] = useState<TopCoin[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -222,27 +162,28 @@ export function TopCoinsBanner() {
   }
   if (coins.length === 0) {
     return (
-      <div className="panel flex min-h-[108px] items-center justify-center px-4">
-        <p className="text-xs text-[var(--color-text-muted)]">Loading top markets…</p>
+      <div className={`panel flex ${BANNER_H} items-center justify-center px-3`}>
+        <p className="text-[10px] text-[var(--color-text-muted)]">Loading markets…</p>
       </div>
     )
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-        Top 10 Coins
-      </h2>
-      <div className="panel grid grid-cols-2 gap-px overflow-hidden bg-[var(--color-border)] sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5">
-        {coins.map((coin) => (
-          <div
-            key={coin.id}
-            className="bg-[var(--color-surface)] transition-colors hover:bg-[var(--color-surface-hover)]"
-          >
-            <CoinChip coin={coin} />
-          </div>
-        ))}
-      </div>
+    <section
+      aria-label="Top 10 coins"
+      className="panel flex h-10 w-full items-stretch overflow-x-auto overflow-y-hidden"
+    >
+      {coins.map((coin, index) => (
+        <div
+          key={coin.id}
+          className={[
+            'flex min-w-[6.75rem] flex-1 basis-0 items-stretch',
+            index < coins.length - 1 ? 'border-r border-[var(--color-border-subtle)]' : '',
+          ].join(' ')}
+        >
+          <CoinChip coin={coin} />
+        </div>
+      ))}
     </section>
   )
 }
