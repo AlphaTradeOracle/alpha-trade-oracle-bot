@@ -124,9 +124,16 @@ async def run(*, since: datetime, dry_run: bool = False) -> dict:
     deltas: list[float] = []
 
     async with session_scope() as session:
+        actionable = (
+            SignalDirection.LONG.value,
+            SignalDirection.SHORT.value,
+            SignalDirection.STRONG_LONG.value,
+            SignalDirection.STRONG_SHORT.value,
+        )
         result = await session.execute(
             select(Signal)
             .where(Signal.created_at >= since)
+            .where(Signal.direction.in_(actionable))
             .order_by(Signal.created_at.asc())
         )
         signals = list(result.scalars().all())
@@ -144,7 +151,28 @@ async def run(*, since: datetime, dry_run: bool = False) -> dict:
             logger.info("rescore_regime_btc_bars", timeframe=tf, bars=len(df))
 
         short_max = float(settings.signal_short_max_score)
-        for signal in signals:
+        # Cache regime snapshots per 1h bucket — full MTF recompute per signal is too slow.
+        regime_cache: dict[datetime, object] = {}
+        stats["regime_cache_hits"] = 0
+        stats["regime_cache_misses"] = 0
+
+        def _regime_at(cutoff: datetime):
+            bucket = cutoff.replace(minute=0, second=0, microsecond=0)
+            cached = regime_cache.get(bucket)
+            if cached is not None:
+                stats["regime_cache_hits"] += 1
+                return cached
+            sliced = {
+                tf: df.loc[df.index <= bucket]
+                for tf, df in frames.items()
+                if len(df.loc[df.index <= bucket]) >= 50
+            }
+            snap = engine.resolve_from_btc_frames(sliced)
+            regime_cache[bucket] = snap
+            stats["regime_cache_misses"] += 1
+            return snap
+
+        for i, signal in enumerate(signals, start=1):
             try:
                 direction = SignalDirection(signal.direction)
             except ValueError:
@@ -155,12 +183,7 @@ async def run(*, since: datetime, dry_run: bool = False) -> dict:
                 continue
 
             cutoff = ensure_utc(signal.created_at)
-            sliced = {
-                tf: df.loc[df.index <= cutoff]
-                for tf, df in frames.items()
-                if len(df.loc[df.index <= cutoff]) >= 50
-            }
-            snap = engine.resolve_from_btc_frames(sliced)
+            snap = _regime_at(cutoff)
             coin = _coin_score(signal)
             blended = calc.blend(coin, direction, snap)
             old = float(signal.score)
@@ -198,6 +221,15 @@ async def run(*, since: datetime, dry_run: bool = False) -> dict:
             signal.score = new
             signal.market_context = ctx
             flag_modified(signal, "market_context")
+
+            if i % 500 == 0:
+                logger.info(
+                    "rescore_regime_blend_progress",
+                    done=i,
+                    total=len(signals),
+                    updated=stats["updated"],
+                    cache_misses=stats["regime_cache_misses"],
+                )
 
         if deltas:
             stats["avg_delta"] = round(sum(deltas) / len(deltas), 3)
