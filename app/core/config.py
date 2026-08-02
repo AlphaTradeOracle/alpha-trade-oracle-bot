@@ -224,7 +224,8 @@ class Settings(BaseSettings):
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
     #: Stuendlicher Paper-Performance-Digest an TELEGRAM_ALLOWED_CHAT_IDS.
-    paper_hourly_digest_enabled: bool = True
+    #: Hourly Telegram digest off by default — desk website is the status surface.
+    paper_hourly_digest_enabled: bool = False
     paper_digest_interval_minutes: int = 60
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
     paper_retest_entry_enabled: bool = True
