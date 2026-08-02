@@ -200,18 +200,18 @@ class Settings(BaseSettings):
     # --- Paper-Trading -----------------------------------------------------
     enable_paper_trading: bool = True
     paper_initial_balance: float = 5_000.0
-    paper_margin_per_trade: float = 100.0
+    paper_margin_per_trade: float = 200.0
     paper_leverage: float = 10.0
     #: Risikobetrag je Trade in USD. Die Stueckzahl folgt daraus und dem
     #: Stop-Abstand, damit ein Stop-Treffer immer gleich viel kostet.
     #: 0 = altes Verhalten (fixe Margin x Hebel, Risiko haengt am Stop-Abstand).
-    paper_risk_per_trade_usd: float = 50.0
+    paper_risk_per_trade_usd: float = 100.0
     #: Obergrenze fuer das Nominal, damit sehr enge Stops keinen absurden Hebel
     #: erzeugen (0 = keine Grenze).
-    paper_max_notional_usd: float = 1_500.0
+    paper_max_notional_usd: float = 3_000.0
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
-    #: Im Ledger standen bis zu 32 Positionen gleichzeitig offen — mit 50 USD je
-    #: Trade waeren das 32% des Kontos in einem Zug (0 = keine Grenze).
+    #: Im Ledger standen bis zu 32 Positionen gleichzeitig offen — mit 100 USD je
+    #: Trade waeren das 64% des Kontos in einem Zug (0 = keine Grenze).
     paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
     paper_max_open_positions: int = 20
