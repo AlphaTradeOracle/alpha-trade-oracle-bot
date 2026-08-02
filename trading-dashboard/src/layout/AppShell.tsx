@@ -40,7 +40,7 @@ export function AppShell() {
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <BrandLockup size={28} />
+          <BrandLockup size={36} stacked={false} />
         </header>
 
         {/*
