@@ -50,6 +50,8 @@ class IndicatorSet:
 
     rsi_14: float | None = None
     rsi_previous: float | None = None
+    #: Lowest RSI over the recent lookback window (short bounce / exhaustion).
+    rsi_recent_low: float | None = None
     macd: float | None = None
     macd_signal: float | None = None
     macd_histogram: float | None = None
@@ -124,6 +126,7 @@ class IndicatorSet:
             "sma_50": self.sma_50,
             "sma_200": self.sma_200,
             "rsi_14": self.rsi_14,
+            "rsi_recent_low": self.rsi_recent_low,
             "macd": self.macd,
             "macd_signal": self.macd_signal,
             "macd_histogram": self.macd_histogram,
@@ -215,6 +218,11 @@ class IndicatorEngine:
         if rsi_series is not None:
             result.rsi_14 = _last(rsi_series)
             result.rsi_previous = _last(rsi_series, offset=-2)
+            # Recent trough for bounce-from-extreme short filter (OP-style late shorts).
+            lookback = min(16, len(rsi_series))
+            recent = rsi_series.iloc[-lookback:].dropna()
+            if not recent.empty:
+                result.rsi_recent_low = float(recent.min())
             computed += result.rsi_14 is not None
 
         possible += 1

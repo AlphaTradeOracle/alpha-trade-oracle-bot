@@ -66,6 +66,10 @@ class SignalEngineConfig:
     rsi_long_max: float = 75.0
     rsi_short_min: float = 33.0
     short_min_score: float = 18.0
+    short_bounce_block_enabled: bool = True
+    short_rsi_extreme: float = 30.0
+    short_rsi_bounce_points: float = 12.0
+    short_min_volume_ratio: float = 0.5
     regime_filter_enabled: bool = True
     strategy_version_label: str = "default:1"
 
@@ -92,6 +96,10 @@ def signal_engine_config_from_settings(
         rsi_long_max=settings.signal_rsi_long_max,
         rsi_short_min=settings.signal_rsi_short_min,
         short_min_score=settings.signal_short_min_score,
+        short_bounce_block_enabled=settings.signal_short_bounce_block_enabled,
+        short_rsi_extreme=settings.signal_short_rsi_extreme,
+        short_rsi_bounce_points=settings.signal_short_rsi_bounce_points,
+        short_min_volume_ratio=settings.signal_short_min_volume_ratio,
         regime_filter_enabled=settings.regime_filter_enabled,
     )
 
@@ -388,6 +396,11 @@ class SignalEngine:
                     f"(short minimum: {self._config.rsi_short_min:.0f})"
                 )
 
+        if direction.is_short and self._config.short_bounce_block_enabled:
+            bounce_reason = self._short_bounce_block_reason(indicators)
+            if bounce_reason is not None:
+                return bounce_reason
+
         if (
             indicators.atr_percent is not None
             and indicators.atr_percent > self._config.max_atr_percent
@@ -407,6 +420,38 @@ class SignalEngine:
                 f"of {self._config.min_risk_reward_ratio:.2f}"
             )
 
+        return None
+
+    def _short_bounce_block_reason(self, indicators: IndicatorSet) -> str | None:
+        """Block late shorts after RSI bounce from extreme and/or thin volume.
+
+        Catches OPUSDT-style continuation shorts that only become legal once RSI
+        recovers above ``rsi_short_min``, i.e. after mean-reversion has started.
+        """
+        rsi = indicators.rsi_14
+        recent_low = indicators.rsi_recent_low
+        if (
+            rsi is not None
+            and recent_low is not None
+            and recent_low <= self._config.short_rsi_extreme
+        ):
+            bounce = rsi - recent_low
+            if bounce >= self._config.short_rsi_bounce_points:
+                return (
+                    f"Short blocked: RSI bounced {bounce:.1f} pts from extreme "
+                    f"low {recent_low:.1f} to {rsi:.1f} "
+                    f"(limit {self._config.short_rsi_bounce_points:.0f} pts) — "
+                    f"mean-reversion already running"
+                )
+
+        vol_ratio = indicators.volume_ratio
+        min_vol = self._config.short_min_volume_ratio
+        if vol_ratio is not None and min_vol > 0 and vol_ratio < min_vol:
+            return (
+                f"Short blocked: thin volume "
+                f"({vol_ratio:.2f}x below minimum {min_vol:.2f}x) — "
+                f"weak downtrend continuation"
+            )
         return None
 
     @staticmethod

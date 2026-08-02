@@ -229,6 +229,64 @@ class TestNoTradeRules:
         assert result.no_trade_reason is not None
         assert "RSI" in result.no_trade_reason
 
+    def test_short_bounce_from_rsi_extreme_blocks(
+        self, downtrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        """OP-style: RSI recovered from <30 by >=12 pts → late short NO_TRADE."""
+        modified = dict(downtrend_indicators)
+        modified["1h"] = replace(
+            downtrend_indicators["1h"],
+            rsi_14=36.1,
+            rsi_recent_low=20.9,
+            rsi_previous=34.0,
+            volume_ratio=1.2,  # isolate bounce gate from thin-volume gate
+            adx_14=39.0,
+        )
+        result = SignalEngine().generate("BTCUSDT", modified, now=NOW)
+        assert result.direction is SignalDirection.NO_TRADE
+        assert result.no_trade_reason is not None
+        assert "bounced" in result.no_trade_reason.lower()
+
+    def test_thin_volume_blocks_short(
+        self, downtrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        modified = dict(downtrend_indicators)
+        # Keep RSI away from bounce/exhaustion floors so only volume gate fires.
+        modified["1h"] = replace(
+            downtrend_indicators["1h"],
+            rsi_14=40.0,
+            rsi_recent_low=38.0,
+            volume_ratio=0.2,
+            adx_14=39.0,
+        )
+        result = SignalEngine().generate("BTCUSDT", modified, now=NOW)
+        assert result.direction is SignalDirection.NO_TRADE
+        assert result.no_trade_reason is not None
+        assert "thin volume" in result.no_trade_reason.lower()
+
+    def test_short_bounce_block_can_be_disabled(
+        self, downtrend_indicators: dict[str, IndicatorSet]
+    ) -> None:
+        modified = dict(downtrend_indicators)
+        modified["1h"] = replace(
+            downtrend_indicators["1h"],
+            rsi_14=36.1,
+            rsi_recent_low=20.9,
+            volume_ratio=0.2,
+            adx_14=39.0,
+        )
+        engine = SignalEngine(
+            SignalEngineConfig(
+                short_bounce_block_enabled=False,
+                short_min_volume_ratio=0.0,
+            )
+        )
+        result = engine.generate("BTCUSDT", modified, now=NOW)
+        assert result.direction.is_short or result.direction is SignalDirection.NO_TRADE
+        if result.no_trade_reason:
+            assert "bounced" not in result.no_trade_reason.lower()
+            assert "thin volume" not in result.no_trade_reason.lower()
+
     def test_range_market_blocks_trade(
         self, sideways_indicators: dict[str, IndicatorSet]
     ) -> None:
