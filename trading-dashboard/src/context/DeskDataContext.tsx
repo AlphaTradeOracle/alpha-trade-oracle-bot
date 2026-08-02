@@ -8,9 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import equityFallback from '../data/equity.json'
-import portfolioFallback from '../data/portfolio.json'
-import tradesFallback from '../data/trades.json'
 import { fetchDeskSnapshot } from '../services/deskApi'
 import type {
   EquityPoint,
@@ -22,32 +19,26 @@ import type {
 /** While the desk tab stays open, refresh in the background. */
 const POLL_MS = 60_000
 
+/** Neutral book until the first live `/desk/snapshot` lands — never flash demo JSON. */
+function emptyPortfolio(): PortfolioSnapshot {
+  return {
+    totalCapital: 0,
+    equity: 0,
+    cash: 0,
+    marginLocked: 0,
+    realizedPnl: 0,
+    openUpnl: 0,
+    openR: 0,
+    totalReturnPct: 0,
+    openPositions: 0,
+    pendingOrders: 0,
+    closedTrades: 0,
+  }
+}
+
 function isBookTrade(trade: Trade): boolean {
   if (trade.status !== 'CLOSED') return true
   return trade.exit != null
-}
-
-/**
- * Static JSON is only an offline/demo seed. Never show OPEN/PENDING from it —
- * those go stale (e.g. cancelled KAVA) and flash on every hard refresh until
- * `/desk/snapshot` replaces the book.
- */
-function seedTrades(): Trade[] {
-  return (tradesFallback as Trade[])
-    .filter((t) => t.status === 'CLOSED')
-    .filter(isBookTrade)
-}
-
-function seedPortfolio(): PortfolioSnapshot {
-  const base = portfolioFallback as PortfolioSnapshot
-  return {
-    ...base,
-    openPositions: 0,
-    pendingOrders: 0,
-    openUpnl: 0,
-    openR: 0,
-    marginLocked: 0,
-  }
 }
 
 interface RefreshOptions {
@@ -72,11 +63,9 @@ interface DeskDataValue {
 const DeskDataContext = createContext<DeskDataValue | null>(null)
 
 export function DeskDataProvider({ children }: { children: ReactNode }) {
-  const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(seedPortfolio)
-  const [trades, setTrades] = useState<Trade[]>(seedTrades)
-  const [equity, setEquity] = useState<EquityPoint[]>(
-    () => equityFallback as EquityPoint[],
-  )
+  const [portfolio, setPortfolio] = useState<PortfolioSnapshot>(emptyPortfolio)
+  const [trades, setTrades] = useState<Trade[]>([])
+  const [equity, setEquity] = useState<EquityPoint[]>([])
   const [marketRegime, setMarketRegime] = useState<MarketRegimeSnapshot | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

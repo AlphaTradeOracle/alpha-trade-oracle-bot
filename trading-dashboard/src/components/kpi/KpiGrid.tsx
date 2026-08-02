@@ -25,77 +25,87 @@ function toneFromNumber(n: number): KpiTone {
 interface KpiGridProps {
   portfolio: PortfolioSnapshot
   equity?: EquityPoint[]
+  /** Hide live-looking numbers until the first desk snapshot arrives. */
+  loading?: boolean
   onKpiClick?: (title: string) => void
 }
 
-export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps) {
+export function KpiGrid({
+  portfolio: p,
+  equity = [],
+  loading = false,
+  onKpiClick,
+}: KpiGridProps) {
   const totalRealized =
     p.accountRealizedPnl ?? p.realizedPnl + (p.openRealizedPnl ?? 0)
+  const dash = '—'
   const items = [
     {
       title: 'Startkapital',
-      value: formatMoney(p.totalCapital),
+      value: loading ? dash : formatMoney(p.totalCapital),
       icon: Briefcase,
       tone: 'neutral' as KpiTone,
     },
     {
       title: 'Equity',
-      value: formatMoney(p.equity),
+      value: loading ? dash : formatMoney(p.equity),
       icon: TrendingUp,
-      tone: toneFromNumber(p.equity - p.totalCapital),
+      tone: loading ? ('neutral' as KpiTone) : toneFromNumber(p.equity - p.totalCapital),
     },
     {
       title: 'Cash',
-      value: formatMoney(p.cash),
+      value: loading ? dash : formatMoney(p.cash),
       icon: Wallet,
-      tone: 'accent' as KpiTone,
+      tone: loading ? ('neutral' as KpiTone) : ('accent' as KpiTone),
     },
     {
       title: 'Realized PnL',
-      value: formatSignedMoney(totalRealized),
+      value: loading ? dash : formatSignedMoney(totalRealized),
       icon: CircleDollarSign,
-      tone: toneFromNumber(totalRealized),
+      tone: loading ? ('neutral' as KpiTone) : toneFromNumber(totalRealized),
     },
     {
       title: 'Total Return',
-      value: formatPct(p.totalReturnPct),
+      value: loading ? dash : formatPct(p.totalReturnPct),
       icon: Percent,
-      tone: toneFromNumber(p.totalReturnPct),
+      tone: loading ? ('neutral' as KpiTone) : toneFromNumber(p.totalReturnPct),
     },
     {
       title: 'Open uPnL',
-      value: formatSignedMoney(p.openUpnl),
+      value: loading ? dash : formatSignedMoney(p.openUpnl),
       icon: Activity,
-      tone: toneFromNumber(p.openUpnl),
+      tone: loading ? ('neutral' as KpiTone) : toneFromNumber(p.openUpnl),
     },
     {
       title: 'Winrate',
-      value: p.winRatePct != null ? `${Number(p.winRatePct).toFixed(1)}%` : '—',
+      value: loading || p.winRatePct == null ? dash : `${Number(p.winRatePct).toFixed(1)}%`,
       icon: Percent,
       tone:
-        p.winRatePct != null ? toneFromNumber(p.winRatePct - 50) : ('neutral' as KpiTone),
+        loading || p.winRatePct == null
+          ? ('neutral' as KpiTone)
+          : toneFromNumber(p.winRatePct - 50),
     },
     {
       title: 'Margin Locked',
-      value: formatMoney(p.marginLocked),
+      value: loading ? dash : formatMoney(p.marginLocked),
       icon: Lock,
       tone: 'neutral' as KpiTone,
     },
     {
       title: 'Open Positions',
-      value: String(p.openPositions),
+      value: loading ? dash : String(p.openPositions),
       icon: Layers3,
       tone: 'neutral' as KpiTone,
     },
     {
       title: 'Pending Orders',
-      value: String(p.pendingOrders),
+      value: loading ? dash : String(p.pendingOrders),
       icon: Clock3,
       tone: 'neutral' as KpiTone,
     },
     {
       title: 'Closed Trades',
-      value: String(p.closedTrades),
+      value: loading ? dash : String(p.closedTrades),
       icon: Banknote,
       tone: 'neutral' as KpiTone,
     },
@@ -111,7 +121,7 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
           onClick={onKpiClick ? () => onKpiClick(item.title) : undefined}
         />
       ))}
-      <PerformanceKpiCard equity={equity} />
+      <PerformanceKpiCard equity={equity} loading={loading} />
     </div>
   )
 }

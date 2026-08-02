@@ -18,7 +18,7 @@ import { useTrades } from '../hooks/useTrades'
 import type { Trade } from '../types/trade'
 
 export function DashboardPage() {
-  const { portfolio, equity } = usePortfolio()
+  const { portfolio, equity, loading } = usePortfolio()
   const { marketRegime } = useDeskData()
   const { trades: open } = useTrades('OPEN')
   const { trades: pending } = useTrades('PENDING')
@@ -46,7 +46,7 @@ export function DashboardPage() {
         actions={<DeskActions />}
       />
 
-      <KpiGrid portfolio={portfolio} equity={equity} />
+      <KpiGrid portfolio={portfolio} equity={equity} loading={loading} />
 
       <MarketRegimeCard regime={marketRegime} />
 

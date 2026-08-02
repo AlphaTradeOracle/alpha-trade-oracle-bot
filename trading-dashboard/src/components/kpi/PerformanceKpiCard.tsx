@@ -10,6 +10,7 @@ import { Tooltip } from '../ui/Tooltip'
 
 interface PerformanceKpiCardProps {
   equity: EquityPoint[]
+  loading?: boolean
 }
 
 function cellTone(pct: number | null): {
@@ -55,8 +56,15 @@ function WindowCell({ win }: { win: PerformanceWindow }) {
   )
 }
 
-export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
-  const windows: PerformanceWindow[] = computePerformanceWindows(equity)
+export function PerformanceKpiCard({ equity, loading = false }: PerformanceKpiCardProps) {
+  const windows: PerformanceWindow[] = loading
+    ? [
+        { label: '1h', pct: null },
+        { label: '24h', pct: null },
+        { label: '7D', pct: null },
+        { label: '30D', pct: null },
+      ]
+    : computePerformanceWindows(equity)
   const tip = getKpiTooltip('Performance')
 
   const card = (
