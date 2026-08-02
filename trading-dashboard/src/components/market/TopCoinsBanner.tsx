@@ -173,16 +173,8 @@ export function TopCoinsBanner() {
       aria-label="Top 10 coins"
       className={`flex ${BANNER_H} w-full items-stretch overflow-x-auto overflow-y-hidden bg-transparent`}
     >
-      {coins.map((coin, index) => (
-        <div
-          key={coin.id}
-          className={[
-            'flex min-w-[7.25rem] flex-1 basis-0 items-stretch',
-            index < coins.length - 1
-              ? 'border-r border-[color-mix(in_srgb,var(--color-border)_55%,transparent)]'
-              : '',
-          ].join(' ')}
-        >
+      {coins.map((coin) => (
+        <div key={coin.id} className="flex min-w-[7.25rem] flex-1 basis-0 items-stretch">
           <CoinChip coin={coin} />
         </div>
       ))}
