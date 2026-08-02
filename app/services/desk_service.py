@@ -207,7 +207,8 @@ def map_position_to_desk_trade(
         score = _f(position.get("signal_score"), 0.0)
         leverage = _f(position.get("leverage"), 1.0)
         fees = _f(position.get("fees"))
-        qty = _f(position.get("initial_quantity") or position.get("remaining_quantity"))
+        initial_qty = _f(position.get("initial_quantity") or position.get("remaining_quantity"))
+        remaining_qty = _f(position.get("remaining_quantity") or initial_qty)
         opened_at = position.get("opened_at")
         closed_at = position.get("closed_at")
         notes = position.get("notes")
@@ -227,7 +228,8 @@ def map_position_to_desk_trade(
         score = _f(position.signal_score, 0.0)
         leverage = _f(position.leverage, 1.0)
         fees = _f(position.fees)
-        qty = _f(position.initial_quantity or position.remaining_quantity)
+        initial_qty = _f(position.initial_quantity or position.remaining_quantity)
+        remaining_qty = _f(position.remaining_quantity or initial_qty)
         opened_at = position.opened_at
         closed_at = position.closed_at
         notes = position.notes
@@ -243,29 +245,42 @@ def map_position_to_desk_trade(
     if desk_status == "CLOSED" and exit_px is None:
         return None
 
-    if notional <= 0 and qty > 0 and entry > 0:
-        notional = qty * entry
+    if notional <= 0 and initial_qty > 0 and entry > 0:
+        notional = initial_qty * entry
+    initial_notional = notional
     lev = leverage if leverage > 0 else 1.0
-    initial_margin = notional / lev if notional > 0 else 0.0
+    initial_margin = initial_notional / lev if initial_notional > 0 else 0.0
     # Closed rows zero ``margin_used`` in the ledger — restore entry margin for desk UI.
     margin_out = margin if margin > 0 else initial_margin
-    # Risk/Unit should use the original SL; current_stop is often BE (= entry) after TP1.
-    stop_out = orig_stop if desk_status == "CLOSED" and orig_stop > 0 else current_stop
+
+    # Risk/Unit always uses original SL; currentStop may be fee-aware BE after TP1.
+    stop_out = orig_stop if orig_stop > 0 else current_stop
+
+    display_qty = remaining_qty if desk_status == "OPEN" else initial_qty
+    if desk_status == "OPEN" and initial_qty > 0 and remaining_qty >= 0:
+        share = min(1.0, remaining_qty / initial_qty)
+        display_notional = initial_notional * share
+    else:
+        display_notional = initial_notional
 
     r_mult: float | None = None
     if desk_status == "CLOSED" and risk > 0:
         r_mult = round(realized / risk, 2)
+    elif desk_status == "OPEN" and risk > 0 and initial_qty > 0 and remaining_qty >= 0:
+        risk_remaining = risk * min(1.0, remaining_qty / initial_qty)
+        if risk_remaining > 0:
+            # Open R later filled from uPnL in snapshot; store None here.
+            r_mult = None
 
     upnl: float | None = None
     mark_out = mark
     if desk_status == "OPEN" and mark is not None:
         direction_sign = 1.0 if side == "LONG" else -1.0
-        rem = _f(
-            position.remaining_quantity
-            if not isinstance(position, dict)
-            else position.get("remaining_quantity")
-        )
-        upnl = _round_money((mark - entry) * rem * direction_sign)
+        upnl = _round_money((mark - entry) * remaining_qty * direction_sign)
+        if risk > 0 and initial_qty > 0:
+            risk_remaining = risk * min(1.0, remaining_qty / initial_qty)
+            if risk_remaining > 0:
+                r_mult = round(upnl / risk_remaining, 2)
     elif desk_status == "PENDING":
         mark_out = mark if mark is not None else entry
     elif desk_status == "CLOSED":
@@ -280,6 +295,14 @@ def map_position_to_desk_trade(
     else:
         market_context = getattr(position, "market_context", None)
 
+    realized_out: float | None
+    if desk_status == "CLOSED":
+        realized_out = _round_money(realized)
+    elif desk_status == "OPEN" and abs(realized) > 1e-12:
+        realized_out = _round_money(realized)
+    else:
+        realized_out = None
+
     return DeskTrade(
         id=str(pos_id),
         symbol=symbol.upper(),
@@ -288,8 +311,9 @@ def map_position_to_desk_trade(
         mark=mark_out,
         exit=exit_px,
         stop=stop_out,
+        currentStop=current_stop if current_stop > 0 else None,
         upnl=upnl,
-        realized=_round_money(realized) if desk_status == "CLOSED" else None,
+        realized=realized_out,
         r=r_mult,
         margin=_round_money(margin_out),
         score=round(score, 1),
@@ -302,8 +326,9 @@ def map_position_to_desk_trade(
         takeProfits=_take_profits(
             position, exit_price=exit_px, side=side, scale_out=scale_out
         ),
-        positionSize=qty if qty else None,
-        notional=_round_money(notional) if notional > 0 else None,
+        positionSize=display_qty if display_qty else None,
+        notional=_round_money(display_notional) if display_notional > 0 else None,
+        initialNotional=_round_money(initial_notional) if initial_notional > 0 else None,
         leverage=leverage,
         fees=_round_money(fees),
         notes=_notes_for(position, desk_status),
@@ -335,9 +360,12 @@ def build_equity_curve(
         else:
             fill_rows.append((fill.filled_at, _f(fill.pnl), _f(fill.fee)))
 
-    curve_start = start_at or now
-    if fill_rows and fill_rows[0][0] < curve_start:
+    # Prefer first fill so pre-reset flat pads (account.created_at ≪ activity) disappear.
+    fill_rows.sort(key=lambda row: row[0])
+    if fill_rows:
         curve_start = fill_rows[0][0]
+    else:
+        curve_start = start_at or now
     live = float(live_equity) if live_equity is not None else float(initial_balance)
     points = build_equity_curve_points(
         initial=float(initial_balance),
@@ -375,6 +403,8 @@ class DeskService:
         trades: list[DeskTrade] = []
         open_upnl = 0.0
         open_r = 0.0
+        closed_realized = 0.0
+        open_realized = 0.0
         for pos in positions:
             trade = map_position_to_desk_trade(
                 pos,
@@ -387,19 +417,27 @@ class DeskService:
                 open_upnl += trade.upnl
             if trade.status == "OPEN" and trade.r is not None:
                 open_r += trade.r
-            elif trade.status == "OPEN" and float(pos.risk_amount) > 0 and trade.upnl is not None:
-                open_r += trade.upnl / float(pos.risk_amount)
+            if trade.status == "CLOSED" and trade.realized is not None:
+                closed_realized += trade.realized
+            elif trade.status == "OPEN" and trade.realized is not None:
+                open_realized += trade.realized
 
         trades.sort(key=lambda t: t.openedAt, reverse=True)
 
         initial = float(account.initial_balance)
         equity = float(summary.equity)
+        account_realized = float(account.realized_pnl)
+        # Equity curve: start at first fill when present (avoid flat pre-reset pad).
+        fill_times = [f.filled_at for f in fills if getattr(f, "filled_at", None) is not None]
+        start_at = min(fill_times) if fill_times else (getattr(account, "created_at", None) or utc_now())
         portfolio = DeskPortfolio(
             totalCapital=_round_money(initial),
             equity=_round_money(equity),
             cash=_round_money(float(account.cash_balance)),
             marginLocked=_round_money(float(summary.open_margin)),
-            realizedPnl=_round_money(float(account.realized_pnl)),
+            realizedPnl=_round_money(closed_realized),
+            openRealizedPnl=_round_money(open_realized),
+            accountRealizedPnl=_round_money(account_realized),
             openUpnl=_round_money(open_upnl),
             openR=round(open_r, 2),
             totalReturnPct=round(((equity - initial) / initial) * 100.0, 2) if initial else 0.0,
@@ -410,7 +448,6 @@ class DeskService:
             equityChangePct=0.0,
             realizedChangePct=0.0,
         )
-        start_at = getattr(account, "created_at", None) or utc_now()
         regime_out: DeskMarketRegime | None = None
         if isinstance(market_regime, DeskMarketRegime):
             regime_out = market_regime

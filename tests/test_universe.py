@@ -75,6 +75,29 @@ def _cg_market(
     }
 
 
+def _cg_live_market(
+    coin_id: str,
+    symbol: str,
+    rank: int,
+    *,
+    price: float = 100.0,
+    change: float = 1.5,
+) -> dict[str, object]:
+    return {
+        "id": coin_id,
+        "symbol": symbol,
+        "name": coin_id.title(),
+        "market_cap": 1_000_000.0,
+        "market_cap_rank": rank,
+        "current_price": price,
+        "price_change_percentage_24h": change,
+        "total_volume": 50_000.0,
+        "circulating_supply": 21_000_000.0,
+        "image": f"https://example.com/{symbol}.png",
+        "sparkline_in_7d": {"price": [price * 0.9, price, price * 1.05]},
+    }
+
+
 class TestCoinGeckoClient:
     @pytest.mark.asyncio
     async def test_fetches_paginated_top_markets(self) -> None:
@@ -114,6 +137,37 @@ class TestCoinGeckoClient:
 
         assert [m.symbol for m in markets] == ["BTC", "ETH", "SOL"]
         assert pages == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_fetches_live_markets_with_sparkline(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.params.get("sparkline") == "true"
+            return httpx.Response(
+                200,
+                json=[
+                    _cg_live_market("bitcoin", "btc", 1, price=65000.0, change=-1.2),
+                    _cg_live_market("tether", "usdt", 3, price=1.0, change=0.01),
+                ],
+            )
+
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.coingecko.com/api/v3",
+        )
+        gecko = CoinGeckoClient(NO_RETRY, client=client)
+        gecko._owns_client = True
+        try:
+            markets = await gecko.fetch_live_markets(limit=10)
+        finally:
+            await gecko.close()
+
+        assert len(markets) == 2
+        assert markets[0].symbol == "BTC"
+        assert markets[0].price_usd == 65000.0
+        assert markets[0].change_24h_pct == pytest.approx(-1.2)
+        assert markets[0].sparkline == (65000.0 * 0.9, 65000.0, 65000.0 * 1.05)
+        assert markets[1].image_url is not None
+        assert markets[1].image_url.endswith("usdt.png")
 
     @pytest.mark.asyncio
     async def test_raises_on_http_error(self) -> None:

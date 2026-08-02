@@ -62,7 +62,7 @@ class SignalEngineConfig:
     expiry_multiplier: int = 4
     enable_sentiment: bool = False
     block_range_market: bool = True
-    min_adx: float = 20.0
+    min_adx: float = 30.0
     rsi_long_max: float = 75.0
     rsi_short_min: float = 33.0
     short_min_score: float = 18.0

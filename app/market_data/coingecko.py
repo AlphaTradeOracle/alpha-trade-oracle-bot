@@ -45,6 +45,23 @@ class CoinGeckoMarket:
 
 
 @dataclass(frozen=True, slots=True)
+class CoinGeckoLiveMarket:
+    """Top-Coin mit Live-Preis, 24h-Change und 7d-Sparkline (Desk-Banner)."""
+
+    id: str
+    symbol: str
+    name: str
+    market_cap_rank: int
+    price_usd: float
+    change_24h_pct: float | None
+    market_cap_usd: float | None
+    volume_24h_usd: float | None
+    circulating_supply: float | None
+    image_url: str | None
+    sparkline: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CoinGeckoTicker:
     """Ein Boersen-Ticker aus ``/coins/{id}/tickers``."""
 
@@ -101,6 +118,55 @@ class CoinGeckoClient:
         markets = collected[:limit]
         logger.info("coingecko_top_markets_loaded", requested=limit, received=len(markets))
         return markets
+
+    async def fetch_live_markets(self, limit: int = 10) -> list[CoinGeckoLiveMarket]:
+        """Top-N Markets inkl. Preis, 24h-Change und 7d-Sparkline fuer das Desk-Banner."""
+        if limit <= 0:
+            return []
+        per_page = min(MAX_PER_PAGE, limit)
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "per_page": per_page,
+            "page": 1,
+            "sparkline": "true",
+            "price_change_percentage": "24h",
+        }
+        await self._rate_limiter.acquire()
+        response = await request_with_retry(
+            self._client,
+            "GET",
+            "/coins/markets",
+            max_retries=self._settings.http_max_retries,
+            params=params,
+        )
+        if response.status_code >= 400:
+            raise MarketDataError(
+                f"CoinGecko-Fehler HTTP {response.status_code} bei /coins/markets (live).",
+                detail=response.text[:200],
+            )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MarketDataError(
+                "Antwort von CoinGecko war kein gueltiges JSON.",
+                detail=response.text[:200],
+            ) from exc
+        if not isinstance(payload, list):
+            raise MarketDataError(
+                "Unerwartete Antwort von CoinGecko /coins/markets (live).",
+                detail=str(payload)[:200],
+            )
+
+        markets: list[CoinGeckoLiveMarket] = []
+        for item in payload:
+            parsed = _parse_live_market(item)
+            if parsed is not None:
+                markets.append(parsed)
+            if len(markets) >= limit:
+                break
+        logger.info("coingecko_live_markets_loaded", requested=limit, received=len(markets))
+        return markets[:limit]
 
     async def fetch_coin_tickers(self, coin_id: str, *, max_pages: int = 2) -> list[CoinGeckoTicker]:
         """Boersen-Ticker eines Coins laden — fuer das Mapping auf CEX-Symbole."""
@@ -261,6 +327,73 @@ def _parse_market(item: Any) -> CoinGeckoMarket | None:
         name=str(item.get("name") or symbol),
         market_cap=market_cap,
         market_cap_rank=rank,
+    )
+
+
+def _parse_live_market(item: Any) -> CoinGeckoLiveMarket | None:
+    if not isinstance(item, dict):
+        return None
+    coin_id = str(item.get("id") or "").strip()
+    symbol = str(item.get("symbol") or "").strip().upper()
+    if not coin_id or not symbol:
+        return None
+    rank_raw = item.get("market_cap_rank")
+    price_raw = item.get("current_price")
+    if rank_raw is None or price_raw is None:
+        return None
+    try:
+        rank = int(rank_raw)
+        price = float(price_raw)
+    except (TypeError, ValueError):
+        return None
+    if price <= 0:
+        return None
+
+    change_raw = item.get("price_change_percentage_24h")
+    if change_raw is None:
+        change_raw = item.get("price_change_percentage_24h_in_currency")
+    try:
+        change = float(change_raw) if change_raw is not None else None
+    except (TypeError, ValueError):
+        change = None
+
+    def _opt_float(key: str) -> float | None:
+        raw = item.get(key)
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    spark_raw = item.get("sparkline_in_7d")
+    spark_prices: list[float] = []
+    if isinstance(spark_raw, dict):
+        series = spark_raw.get("price")
+        if isinstance(series, list):
+            for point in series:
+                try:
+                    spark_prices.append(float(point))
+                except (TypeError, ValueError):
+                    continue
+
+    image = item.get("image")
+    image_url = str(image).strip() if image else None
+    if image_url == "":
+        image_url = None
+
+    return CoinGeckoLiveMarket(
+        id=coin_id,
+        symbol=symbol,
+        name=str(item.get("name") or symbol),
+        market_cap_rank=rank,
+        price_usd=price,
+        change_24h_pct=change,
+        market_cap_usd=_opt_float("market_cap"),
+        volume_24h_usd=_opt_float("total_volume"),
+        circulating_supply=_opt_float("circulating_supply"),
+        image_url=image_url,
+        sparkline=tuple(spark_prices),
     )
 
 

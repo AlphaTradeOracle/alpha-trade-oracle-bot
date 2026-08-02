@@ -13,12 +13,19 @@ from app.api.deps import PaperTradingDep, ProviderDep, SessionDep, UniverseProvi
 from app.core.config import get_settings
 from app.core.errors import MarketDataError, SymbolNotFoundError
 from app.core.logging import get_logger
-from app.core.time import ms_to_datetime
+from app.core.time import ms_to_datetime, utc_now
 from app.market_data.base import MarketDataProvider
+from app.market_data.coingecko import CoinGeckoClient
 from app.market_regime import MarketRegimeEngine
 from app.repositories.paper_repository import PaperRepository
 from app.scheduler.jobs import _collect_prices
-from app.schemas.desk import DeskCandle, DeskMarketRegime, DeskSnapshot
+from app.schemas.desk import (
+    DeskCandle,
+    DeskMarketRegime,
+    DeskSnapshot,
+    DeskTopCoin,
+    DeskTopCoinsResponse,
+)
 from app.services.desk_service import DeskService
 
 logger = get_logger(__name__)
@@ -34,6 +41,12 @@ _REGIME_TTL_SECONDS = 90.0
 _regime_cache: DeskMarketRegime | None = None
 _regime_cache_at: float = 0.0
 _regime_lock = asyncio.Lock()
+
+# Top-coins banner cache (CoinGecko markets + sparkline).
+_TOP_COINS_TTL_SECONDS = 60.0
+_top_coins_cache: DeskTopCoinsResponse | None = None
+_top_coins_cache_at: float = 0.0
+_top_coins_lock = asyncio.Lock()
 
 
 async def _cached_desk_regime(provider: MarketDataProvider) -> DeskMarketRegime | None:
@@ -56,7 +69,10 @@ async def _cached_desk_regime(provider: MarketDataProvider) -> DeskMarketRegime 
         engine = MarketRegimeEngine(settings)
         try:
             snap = await engine.resolve(provider, refresh=True)
-            regime = DeskMarketRegime.model_validate(snap.to_desk_dict())
+            payload = snap.to_desk_dict()
+            payload["hardVeto"] = bool(settings.market_regime_hard_veto)
+            payload["scoreBlend"] = True
+            regime = DeskMarketRegime.model_validate(payload)
             _regime_cache = regime
             _regime_cache_at = time.monotonic()
             return regime
@@ -106,6 +122,94 @@ async def desk_snapshot(
     return await DeskService(paper).snapshot(
         session, prices=prices, market_regime=market_regime
     )
+
+
+@router.get(
+    "/top-coins",
+    response_model=DeskTopCoinsResponse,
+    summary="Top market-cap coins with live price and 7d sparkline",
+)
+async def desk_top_coins(
+    limit: Annotated[int, Query(ge=1, le=25)] = 10,
+) -> DeskTopCoinsResponse:
+    """Public banner feed — CoinGecko top markets, cached ~60s."""
+    global _top_coins_cache, _top_coins_cache_at
+
+    now = time.monotonic()
+    if (
+        _top_coins_cache is not None
+        and (now - _top_coins_cache_at) < _TOP_COINS_TTL_SECONDS
+        and len(_top_coins_cache.coins) >= limit
+    ):
+        if len(_top_coins_cache.coins) == limit:
+            return _top_coins_cache
+        return DeskTopCoinsResponse(
+            coins=_top_coins_cache.coins[:limit],
+            generatedAt=_top_coins_cache.generatedAt,
+            source=_top_coins_cache.source,
+        )
+
+    async with _top_coins_lock:
+        now = time.monotonic()
+        if (
+            _top_coins_cache is not None
+            and (now - _top_coins_cache_at) < _TOP_COINS_TTL_SECONDS
+            and len(_top_coins_cache.coins) >= limit
+        ):
+            if len(_top_coins_cache.coins) == limit:
+                return _top_coins_cache
+            return DeskTopCoinsResponse(
+                coins=_top_coins_cache.coins[:limit],
+                generatedAt=_top_coins_cache.generatedAt,
+                source=_top_coins_cache.source,
+            )
+
+        client = CoinGeckoClient(get_settings())
+        try:
+            markets = await client.fetch_live_markets(limit)
+        except MarketDataError as exc:
+            logger.warning("desk_top_coins_failed", error=str(exc))
+            if _top_coins_cache is not None:
+                return _top_coins_cache
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Top-Coins Feed nicht erreichbar: {exc}",
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("desk_top_coins_failed", error=str(exc))
+            if _top_coins_cache is not None:
+                return _top_coins_cache
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Top-Coins Feed fehlgeschlagen.",
+            ) from exc
+        finally:
+            await client.close()
+
+        coins = [
+            DeskTopCoin(
+                id=m.id,
+                symbol=m.symbol,
+                name=m.name,
+                rank=m.market_cap_rank,
+                priceUsd=m.price_usd,
+                change24hPct=m.change_24h_pct,
+                marketCapUsd=m.market_cap_usd,
+                volume24hUsd=m.volume_24h_usd,
+                circulatingSupply=m.circulating_supply,
+                imageUrl=m.image_url,
+                sparkline=list(m.sparkline),
+            )
+            for m in markets
+        ]
+        payload = DeskTopCoinsResponse(
+            coins=coins,
+            generatedAt=utc_now().isoformat().replace("+00:00", "Z"),
+            source="coingecko",
+        )
+        _top_coins_cache = payload
+        _top_coins_cache_at = time.monotonic()
+        return payload
 
 
 @router.get(
