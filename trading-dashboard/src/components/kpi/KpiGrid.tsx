@@ -60,6 +60,12 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       value: formatR(p.openR),
       icon: Scale,
       tone: toneFromNumber(p.openR),
+      hint:
+        p.winRatePct != null
+          ? `WR ${Number(p.winRatePct).toLocaleString('de-DE', {
+              maximumFractionDigits: 1,
+            })}%`
+          : undefined,
     },
     {
       title: 'Cash',

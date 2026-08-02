@@ -191,6 +191,8 @@ export interface PortfolioSnapshot {
   openPositions: number
   pendingOrders: number
   closedTrades: number
+  /** Closed-trade win rate in percent (0–100) */
+  winRatePct?: number
   /** Optional day-over-day equity change (%) for KPI delta */
   equityChangePct?: number
   realizedChangePct?: number

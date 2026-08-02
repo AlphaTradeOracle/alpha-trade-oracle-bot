@@ -8,6 +8,8 @@ interface KpiCardProps {
   value: string
   icon: LucideIcon
   deltaPct?: number | null
+  /** Secondary line under the value (e.g. "WR 55%"). */
+  hint?: string | null
   tone?: KpiTone
   onClick?: () => void
 }
@@ -31,6 +33,7 @@ export function KpiCard({
   value,
   icon: Icon,
   deltaPct,
+  hint,
   tone = 'neutral',
   onClick,
 }: KpiCardProps) {
@@ -53,6 +56,9 @@ export function KpiCard({
         <p className={`tabular text-xl font-semibold tracking-tight sm:text-[1.35rem] ${toneValue[tone]}`}>
           {value}
         </p>
+        {hint ? (
+          <p className="mt-1 text-xs tabular text-[var(--color-text-muted)]">{hint}</p>
+        ) : null}
         {deltaPct != null ? (
           <p
             className={[
