@@ -60,6 +60,9 @@ class BacktestConfig:
     slippage_percent: float = 0.0
     initial_capital: float = 10_000.0
     min_score: float = 75.0
+    #: Optional Long-only floor (defaults to ``min_score``). Lets us raise the
+    #: long gate without tightening the short mirror ``(100-score) < min_score``.
+    long_min_score: float | None = None
     #: Optional: reject shorts with score above this (live SIGNAL_SHORT_MAX_SCORE).
     short_max_score: float | None = None
     #: Optional: reject shorts with score at/below this (live SIGNAL_SHORT_MIN_SCORE).
@@ -446,7 +449,12 @@ class BacktestEngine:
             outcome.signals_skipped_not_strong += 1
             return False
 
-        if signal.score < self._config.min_score and signal.direction.is_long:
+        long_floor = (
+            self._config.long_min_score
+            if self._config.long_min_score is not None
+            else self._config.min_score
+        )
+        if signal.direction.is_long and signal.score < long_floor:
             outcome.signals_skipped_below_score += 1
             return False
         if signal.direction.is_short and (100.0 - signal.score) < self._config.min_score:
