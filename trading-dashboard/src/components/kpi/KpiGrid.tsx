@@ -28,6 +28,8 @@ interface KpiGridProps {
 }
 
 export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps) {
+  const totalRealized =
+    p.accountRealizedPnl ?? p.realizedPnl + (p.openRealizedPnl ?? 0)
   const items = [
     {
       title: 'Startkapital',
@@ -49,13 +51,9 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
     },
     {
       title: 'Realized PnL',
-      value: formatSignedMoney(p.realizedPnl),
+      value: formatSignedMoney(totalRealized),
       icon: CircleDollarSign,
-      tone: toneFromNumber(p.realizedPnl),
-      hint:
-        p.openRealizedPnl != null && Math.abs(p.openRealizedPnl) > 0.005
-          ? `Open partials ${formatSignedMoney(p.openRealizedPnl)}`
-          : null,
+      tone: toneFromNumber(totalRealized),
     },
     {
       title: 'Total Return',
