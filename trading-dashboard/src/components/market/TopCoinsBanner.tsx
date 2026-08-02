@@ -60,6 +60,36 @@ async function fetchTopCoins(signal?: AbortSignal): Promise<TopCoin[]> {
     .slice(0, DISPLAY_COUNT)
 }
 
+function CoinIcon({ coin }: { coin: TopCoin }) {
+  const [failed, setFailed] = useState(false)
+  const showImg = Boolean(coin.imageUrl) && !failed
+
+  return (
+    <span
+      className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-bg-elevated)] ring-1 ring-[var(--color-border-subtle)]"
+      aria-hidden
+    >
+      {showImg ? (
+        <img
+          src={coin.imageUrl!}
+          alt=""
+          width={28}
+          height={28}
+          className="h-7 w-7 object-cover"
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+          {coin.symbol.slice(0, 2)}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function CoinChip({ coin }: { coin: TopCoin }) {
   const change = coin.change24hPct
   const up = (change ?? 0) > 0
@@ -73,10 +103,13 @@ function CoinChip({ coin }: { coin: TopCoin }) {
     change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`
 
   return (
-    <div className="flex min-h-[72px] flex-col items-center justify-center gap-1 px-2 py-2.5 text-center">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
-        {coin.symbol}
-      </p>
+    <div className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 px-2 py-2.5 text-center">
+      <div className="flex items-center justify-center gap-1.5">
+        <CoinIcon coin={coin} />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+          {coin.symbol}
+        </p>
+      </div>
       <p className="tabular truncate text-sm font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[0.95rem]">
         {formatUsdPrice(coin.priceUsd)}
       </p>
