@@ -25,25 +25,6 @@ interface TopCoinsResponse {
 const STABLES = new Set(['USDT', 'USDC', 'DAI', 'FDUSD', 'USDE', 'USDS'])
 const REFRESH_MS = 60_000
 
-const ACCENT: Record<string, string> = {
-  BTC: '#f7931a',
-  ETH: '#627eea',
-  USDT: '#26a17b',
-  BNB: '#f3ba2f',
-  SOL: '#9945ff',
-  XRP: '#23292f',
-  USDC: '#2775ca',
-  DOGE: '#c2a633',
-  ADA: '#0033ad',
-  TRX: '#ff0013',
-  TON: '#0098ea',
-  AVAX: '#e84142',
-  LINK: '#2a5ada',
-  DOT: '#e6007a',
-  SHIB: '#ffa409',
-  HYPE: '#97fce4',
-}
-
 function formatUsdPrice(price: number): string {
   if (price >= 1000) {
     return `$${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -76,7 +57,7 @@ function sparkPath(values: number[], width: number, height: number): string {
   return values
     .map((v, i) => {
       const x = (i / (values.length - 1)) * width
-      const y = height - ((v - min) / span) * (height - 6) - 3
+      const y = height - ((v - min) / span) * (height - 4) - 2
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
     })
     .join(' ')
@@ -88,7 +69,7 @@ function sparkArea(values: number[], width: number, height: number): string {
   return `${line} L${width},${height} L0,${height} Z`
 }
 
-function downsample(values: number[], maxPoints = 56): number[] {
+function downsample(values: number[], maxPoints = 40): number[] {
   if (values.length <= maxPoints) return values
   const step = (values.length - 1) / (maxPoints - 1)
   const out: number[] = []
@@ -116,76 +97,64 @@ function CoinTile({ coin }: { coin: TopCoin }) {
   const change = coin.change24hPct
   const up = (change ?? 0) > 0
   const down = (change ?? 0) < 0
-  const accent = ACCENT[coin.symbol] ?? 'var(--color-accent)'
-  const stroke = down ? 'var(--color-short)' : up ? 'var(--color-long)' : accent
+  const stroke = down ? 'var(--color-short)' : up ? 'var(--color-long)' : 'var(--color-accent)'
   const points = useMemo(() => downsample(coin.sparkline ?? []), [coin.sparkline])
-  const w = 220
-  const h = 44
+  const w = 160
+  const h = 22
   const path = sparkPath(points, w, h)
   const area = sparkArea(points, w, h)
   const isStable = STABLES.has(coin.symbol)
+  const arrowTone = up
+    ? 'bg-[var(--color-long-soft)] text-[var(--color-long)]'
+    : down
+      ? 'bg-[var(--color-short-soft)] text-[var(--color-short)]'
+      : 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]'
+  const changeTone = up
+    ? 'text-[var(--color-long)]'
+    : down
+      ? 'text-[var(--color-short)]'
+      : 'text-[var(--color-text-muted)]'
 
   return (
-    <article className="relative min-w-0 overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-3 sm:px-3.5 sm:py-3.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {coin.imageUrl ? (
-            <img
-              src={coin.imageUrl}
-              alt=""
-              width={28}
-              height={28}
-              className="h-7 w-7 shrink-0 rounded-full"
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
-              style={{ background: accent }}
-            >
-              {coin.symbol.slice(0, 1)}
-            </span>
-          )}
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold leading-tight text-[var(--color-text)]">
-              {coin.name}
-            </p>
-            <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-              {coin.symbol}
-            </p>
-          </div>
-        </div>
+    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
+      <span className={`absolute right-3 top-3 rounded-lg p-1.5 ${arrowTone}`} aria-hidden>
         {up ? (
-          <ArrowUpRight size={16} className="shrink-0 text-[var(--color-long)]" />
+          <ArrowUpRight size={15} strokeWidth={1.8} />
         ) : down ? (
-          <ArrowDownRight size={16} className="shrink-0 text-[var(--color-short)]" />
+          <ArrowDownRight size={15} strokeWidth={1.8} />
+        ) : (
+          <ArrowUpRight size={15} strokeWidth={1.8} className="opacity-40" />
+        )}
+      </span>
+
+      <div className="flex w-full items-center justify-center gap-1.5 px-6">
+        {coin.imageUrl ? (
+          <img
+            src={coin.imageUrl}
+            alt=""
+            width={16}
+            height={16}
+            className="h-4 w-4 shrink-0 rounded-full"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
         ) : null}
+        <p className="truncate text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+          {coin.symbol}
+        </p>
       </div>
 
-      <div className="mt-2.5 flex items-end justify-between gap-2">
-        <p className="min-w-0 truncate text-[20px] font-semibold tabular leading-none tracking-tight text-[var(--color-text)] lg:text-[22px]">
-          {formatUsdPrice(coin.priceUsd)}
-        </p>
-        {isStable ? (
-          <p className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">
-            Circ. {formatCompactUsd(coin.circulatingSupply)}
-          </p>
-        ) : (
-          <p
-            className={[
-              'shrink-0 text-[13px] font-semibold tabular',
-              up
-                ? 'text-[var(--color-long)]'
-                : down
-                  ? 'text-[var(--color-short)]'
-                  : 'text-[var(--color-text-muted)]',
-            ].join(' ')}
-          >
-            {change == null ? '—' : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`}
-          </p>
-        )}
-      </div>
+      <p className="tabular w-full truncate px-2 text-xl font-semibold leading-none tracking-tight text-[var(--color-text)] sm:text-[1.35rem]">
+        {formatUsdPrice(coin.priceUsd)}
+      </p>
+
+      <p className={`tabular text-xs font-medium ${changeTone}`}>
+        {isStable
+          ? `Circ. ${formatCompactUsd(coin.circulatingSupply)}`
+          : change == null
+            ? '—'
+            : `${change > 0 ? '+' : ''}${change.toFixed(2)}%`}
+      </p>
 
       {path ? (
         <svg
@@ -193,7 +162,7 @@ function CoinTile({ coin }: { coin: TopCoin }) {
           height={h}
           viewBox={`0 0 ${w} ${h}`}
           preserveAspectRatio="none"
-          className="mt-2.5 block w-full opacity-95"
+          className="mt-0.5 block h-[22px] w-full max-w-[140px] opacity-90"
           aria-hidden
         >
           <path d={area} fill={stroke} opacity={0.14} />
@@ -201,7 +170,7 @@ function CoinTile({ coin }: { coin: TopCoin }) {
             d={path}
             fill="none"
             stroke={stroke}
-            strokeWidth={2}
+            strokeWidth={1.5}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -211,7 +180,7 @@ function CoinTile({ coin }: { coin: TopCoin }) {
   )
 }
 
-/** Horizontal Top-10 market-cap banner with live CoinGecko prices. */
+/** Top-10 market-cap banner — tile chrome matches KPI cards. */
 export function TopCoinsBanner() {
   const [coins, setCoins] = useState<TopCoin[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -246,8 +215,8 @@ export function TopCoinsBanner() {
   }
   if (coins.length === 0) {
     return (
-      <div className="overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-4 py-4">
-        <p className="text-sm text-[var(--color-text-muted)]">Loading top markets…</p>
+      <div className="panel flex min-h-[108px] items-center justify-center px-4">
+        <p className="text-xs text-[var(--color-text-muted)]">Loading top markets…</p>
       </div>
     )
   }
@@ -255,12 +224,12 @@ export function TopCoinsBanner() {
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
           Top 10 Coins
         </h2>
-        <span className="text-xs text-[var(--color-text-muted)]">Live · 7d sparkline</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]">Live · 7d</span>
       </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {coins.map((coin) => (
           <CoinTile key={coin.id} coin={coin} />
         ))}
