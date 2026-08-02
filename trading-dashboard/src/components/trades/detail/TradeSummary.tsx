@@ -56,7 +56,7 @@ export function TradeSummary({ trade }: TradeSummaryProps) {
         <DetailField label="Risk / Unit">{formatPrice(risk)}</DetailField>
         <DetailField label="Reward / Unit">{reward != null ? formatPrice(reward) : '—'}</DetailField>
 
-        <DetailField label="Notional">
+        <DetailField label="Position size">
           {trade.notional != null
             ? formatMoney(trade.notional)
             : trade.positionSize != null && trade.entry > 0
