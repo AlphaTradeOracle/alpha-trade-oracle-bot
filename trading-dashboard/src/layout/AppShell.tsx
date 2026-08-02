@@ -31,7 +31,7 @@ export function AppShell() {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3 md:hidden">
+        <header className="flex items-center gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg)] px-4 py-3 md:hidden">
           <button
             type="button"
             className="rounded-lg border border-[var(--color-border)] p-2 text-[var(--color-text-secondary)]"

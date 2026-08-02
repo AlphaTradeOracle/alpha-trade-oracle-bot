@@ -20,8 +20,8 @@ interface SidebarProps {
 
 export function Sidebar({ onNavigate }: SidebarProps) {
   return (
-    <aside className="flex h-full w-[240px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)]/90 backdrop-blur">
-      <div className="border-b border-[color-mix(in_srgb,var(--color-accent)_35%,var(--color-border-subtle))] px-3 py-5">
+    <aside className="flex h-full w-[240px] flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-bg)]">
+      <div className="border-b border-[color-mix(in_srgb,var(--color-accent)_35%,var(--color-border-subtle))] bg-[var(--color-bg)] px-3 py-5">
         <BrandLockup size={168} />
       </div>
 
