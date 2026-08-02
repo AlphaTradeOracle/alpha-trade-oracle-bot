@@ -31,6 +31,8 @@ def main() -> int:
     generated = data["generated_at"].replace("T", " ")[:19]
 
     order = ["1-300", "301-500", "1-500"]
+    if "universe-top" in buckets:
+        order.append("universe-top")
     table_rows = []
     for name in order:
         b = buckets[name]
@@ -56,6 +58,7 @@ def main() -> int:
         {"label": name, "value": round(float(buckets[name]["expectancy_usd"]), 2)}
         for name in order
     ]
+    b_uni = buckets.get("universe-top")
 
     # Top/bottom incremental symbols in 301-500
     mid_syms = [
@@ -137,11 +140,14 @@ const REASONS = {reasons_js} as const;
 const NET_300 = {float(b300['total_net_profit'])};
 const NET_MID = {float(bmid['total_net_profit'])};
 const NET_500 = {float(b500['total_net_profit'])};
+const NET_UNI = {float(b_uni['total_net_profit']) if b_uni else float('nan')};
 const EXP_300 = {float(b300['expectancy_usd'])};
 const EXP_MID = {float(bmid['expectancy_usd'])};
 const PF_300 = {float(b300['avg_profit_factor'])};
 const PF_MID = {float(bmid['avg_profit_factor'])};
+const PF_UNI = {float(b_uni['avg_profit_factor']) if b_uni else float('nan')};
 const TRADES_MID = {int(bmid['total_trades'])};
+const HAS_UNI = {json.dumps(b_uni is not None)};
 
 export default function Universe300Vs500() {{
   const tone = REC_DECISION === "consider_500" ? "success" : "warning";
@@ -150,17 +156,27 @@ export default function Universe300Vs500() {{
       <Stack gap={{6}}>
         <H1>Universe 300 vs 500</H1>
         <Text tone="secondary">
-          Baseline live gates · {{TF}} · {{DAYS}}d · {{RANGE}} · by market_cap_rank (no in_universe) ·
+          Baseline live gates · {{TF}} · {{DAYS}}d · {{RANGE}} · in_universe top-N by rank (fill-down) ·
           {{WORKERS}} workers · {{ELAPSED_MIN}} min · {{GENERATED}} UTC
         </Text>
       </Stack>
 
       <Grid columns={{{{ sm: 2, md: 4 }}}} gap={{12}}>
-        <Stat value={{String(REQUESTED)}} label="Ranks requested" />
+        <Stat value={{String(REQUESTED)}} label="Symbols loaded" />
         <Stat value={{String(WITH_CANDLES)}} label="With 1h candles" />
         <Stat value={{usd(NET_300)}} label="Net 1-300" tone={{NET_300 >= 0 ? "success" : "danger"}} />
         <Stat value={{usd(NET_MID)}} label="Net 301-500" tone={{NET_MID >= 0 ? "success" : "danger"}} />
       </Grid>
+      {{HAS_UNI && Number.isFinite(NET_UNI) ? (
+        <Grid columns={{{{ sm: 2, md: 2 }}}} gap={{12}}>
+          <Stat value={{usd(NET_500)}} label="Net rank ≤500" tone={{NET_500 >= 0 ? "success" : "danger"}} />
+          <Stat
+            value={{usd(NET_UNI)}}
+            label={{`Full universe-top (PF ${{PF_UNI.toFixed(2)}})`}}
+            tone={{NET_UNI >= 0 ? "success" : "danger"}}
+          />
+        </Grid>
+      ) : null}}
 
       <Callout tone={{tone}}>
         {{REC_HEADLINE}}. Incremental 301-500: {{usd(NET_MID)}} net · Exp {{EXP_MID >= 0 ? "+" : ""}}{{EXP_MID.toFixed(2)}}$/trade ·
@@ -225,8 +241,9 @@ export default function Universe300Vs500() {{
       </Grid>
 
       <Text tone="secondary" size="small">
-        Ops note: UNIVERSE_SCAN_BATCH_SIZE=300 → full coverage of 500 needs ~2 scan cycles (~30m).
-        Combined 1-500 net {{usd(NET_500)}}.
+        Rank buckets use market_cap_rank ranges. universe-top = all loaded in_universe symbols
+        (ranks may exceed 500 via fill-down). Combined rank≤500 net {{usd(NET_500)}}.
+        VPS now: UNIVERSE_TARGET_COUNT=500.
       </Text>
     </Stack>
   );

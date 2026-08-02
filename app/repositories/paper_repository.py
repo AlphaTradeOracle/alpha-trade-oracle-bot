@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.paper import PaperAccount, PaperFill, PaperPosition
+from app.models.signal import Signal
 
 
 class PaperRepository:
@@ -126,6 +127,37 @@ class PaperRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def is_symbol_busy_at(
+        self, account_id: int, symbol: str, at: datetime
+    ) -> bool:
+        """True wenn das Symbol zum Zeitpunkt ``at`` schon einen Trade hatte.
+
+        Start = Signalzeit (``signals.created_at``), Fallback ``opened_at``.
+        Nach Retest-Fill wird ``opened_at`` auf die Fill-Zeit gesetzt — ohne
+        Signalzeit wuerde ein zweites Signal zwischen Arm und Fill durchrutschen.
+        Ende = ``closed_at`` bzw. offen bei open/pending.
+        """
+        start_at = func.coalesce(Signal.created_at, PaperPosition.opened_at)
+        result = await self._session.execute(
+            select(PaperPosition.id)
+            .outerjoin(Signal, Signal.id == PaperPosition.signal_id)
+            .where(
+                PaperPosition.account_id == account_id,
+                PaperPosition.symbol == symbol.upper(),
+                start_at <= at,
+                or_(
+                    PaperPosition.status.in_(("open", "pending")),
+                    and_(
+                        PaperPosition.status.in_(("closed", "cancelled")),
+                        PaperPosition.closed_at.is_not(None),
+                        PaperPosition.closed_at > at,
+                    ),
+                ),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def list_recent_closed_by_symbol(
         self, account_id: int, symbol: str, *, limit: int = 2

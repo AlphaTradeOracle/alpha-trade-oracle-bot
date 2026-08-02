@@ -73,9 +73,14 @@ def _metrics_for(trades: list[SimulatedTrade], outcome: BacktestOutcome) -> dict
     average_win = gross_profit / len(wins) if wins else 0.0
     average_loss = gross_loss / len(losses) if losses else 0.0
 
-    # Profit Factor ist ohne Verluste unendlich; das wird als 0 ausgegeben,
-    # damit nachgelagerte Vergleiche nicht mit inf rechnen muessen.
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0.0
+    # Ohne Verluste waere PF unendlich — Sentinel 99 wie Paper-Summary,
+    # damit Rankings All-Win-Symbole nicht als PF=0 verwerfen.
+    if gross_loss > 0:
+        profit_factor = gross_profit / gross_loss
+    elif gross_profit > 0:
+        profit_factor = 99.0
+    else:
+        profit_factor = 0.0
 
     # Expectancy: erwarteter Gewinn pro Trade.
     expectancy = win_rate * average_win - (1.0 - win_rate) * average_loss

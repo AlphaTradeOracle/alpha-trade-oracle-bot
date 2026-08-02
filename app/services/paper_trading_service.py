@@ -580,7 +580,14 @@ class PaperTradingService:
             )
 
         leverage = Decimal(str(self._settings.paper_leverage))
-        entry = Decimal(str(result.risk.entry_mid or result.reference_price))
+        # Fill at the same reference RiskManager used for SL/TP/RR (zone edge),
+        # not mid — otherwise stop distance widens at fill and gated R:R lies.
+        if result.direction.is_long and result.risk.entry_low is not None:
+            entry = Decimal(str(result.risk.entry_low))
+        elif (not result.direction.is_long) and result.risk.entry_high is not None:
+            entry = Decimal(str(result.risk.entry_high))
+        else:
+            entry = Decimal(str(result.risk.entry_mid or result.reference_price))
         stop = Decimal(str(result.risk.stop_loss))
         sizing = self._size_position(entry, stop)
         if sizing is None:
@@ -603,22 +610,23 @@ class PaperTradingService:
             )
             return None
 
-        margin = sizing.margin
-        if account.cash_balance < margin:
-            self._last_skip_reason = "skipped_cash"
-            logger.warning(
-                "paper_insufficient_cash",
-                cash=float(account.cash_balance),
-                needed=float(margin),
-            )
-            return None
-
         notional = sizing.notional
         quantity = sizing.quantity
         fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
         entry_fee = notional * fee_rate
+        margin = sizing.margin
+        cash_needed = margin + entry_fee
+        if account.cash_balance < cash_needed:
+            self._last_skip_reason = "skipped_cash"
+            logger.warning(
+                "paper_insufficient_cash",
+                cash=float(account.cash_balance),
+                needed=float(cash_needed),
+            )
+            return None
 
-        account.cash_balance -= margin + entry_fee
+        account.cash_balance -= cash_needed
+        account.realized_pnl -= entry_fee
         now = opened_at or utc_now()
 
         position = PaperPosition(
@@ -641,6 +649,7 @@ class PaperTradingService:
             notional=notional,
             leverage=float(leverage),
             fees=entry_fee,
+            realized_pnl=-entry_fee,
             risk_amount=sizing.risk_amount,
             signal_score=result.score,
             opened_at=now,
@@ -655,11 +664,10 @@ class PaperTradingService:
                 price=entry,
                 quantity=quantity,
                 fee=entry_fee,
-                pnl=Decimal("0"),
+                pnl=-entry_fee,
                 filled_at=now,
             )
         )
-        account.realized_pnl -= entry_fee
 
         logger.info(
             "paper_position_opened",
@@ -903,13 +911,18 @@ class PaperTradingService:
             )
             return False
 
+        notional = sizing.notional
+        quantity = sizing.quantity
+        fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
+        entry_fee = notional * fee_rate
         margin = sizing.margin
-        if account.cash_balance < margin:
+        cash_needed = margin + entry_fee
+        if account.cash_balance < cash_needed:
             logger.warning(
                 "paper_retest_activate_insufficient_cash",
                 symbol=position.symbol,
                 cash=float(account.cash_balance),
-                needed=float(margin),
+                needed=float(cash_needed),
             )
             await self._cancel_pending_retest(
                 session,
@@ -923,10 +936,6 @@ class PaperTradingService:
             )
             return False
 
-        notional = sizing.notional
-        quantity = sizing.quantity
-        fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
-        entry_fee = notional * fee_rate
         fill_time = ensure_utc(arm.fill_time)
         tf = position.timeframe or "1h"
         mult = int(self._settings.signal_expiry_multiplier)
@@ -934,7 +943,7 @@ class PaperTradingService:
         # einen Teil der Haltedauer und der Trade laeuft frueher aus.
         signal_expiry = fill_time + mult * timeframe_to_timedelta(tf)
 
-        account.cash_balance -= margin + entry_fee
+        account.cash_balance -= cash_needed
         account.realized_pnl -= entry_fee
 
         position.status = "open"
@@ -949,6 +958,7 @@ class PaperTradingService:
         position.margin_used = margin
         position.notional = notional
         position.fees = entry_fee
+        position.realized_pnl = -entry_fee
         position.risk_amount = sizing.risk_amount
         position.opened_at = fill_time
         position.expires_at = signal_expiry
@@ -967,7 +977,7 @@ class PaperTradingService:
                 price=entry,
                 quantity=quantity,
                 fee=entry_fee,
-                pnl=Decimal("0"),
+                pnl=-entry_fee,
                 filled_at=fill_time,
             )
         )
@@ -989,6 +999,8 @@ class PaperTradingService:
             if signal is not None and signal.reasons:
                 reasons = list(signal.reasons)
         await self._notify_open(position, retest_fill=True, reasons=reasons)
+        if position.signal_id is not None:
+            await SignalRepository(session).mark_dispatched(position.signal_id)
         return True
 
     async def _cancel_pending_retest(
@@ -1322,8 +1334,10 @@ class PaperTradingService:
                 backfill.skipped_filters += 1
                 continue
 
-            existing = await PaperRepository(session).get_active_by_symbol(account.id, symbol)
-            if existing is not None:
+            repo = PaperRepository(session)
+            if await repo.is_symbol_busy_at(
+                account.id, symbol, ensure_utc(signal.created_at)
+            ):
                 backfill.skipped_existing += 1
                 continue
 
@@ -1887,7 +1901,8 @@ class PaperTradingService:
         if quantity <= 0 or position.remaining_quantity <= 0:
             return
 
-        qty = min(quantity, position.remaining_quantity)
+        remaining_before = position.remaining_quantity
+        qty = min(quantity, remaining_before)
         direction = Decimal("1") if SignalDirection(position.direction).is_long else Decimal("-1")
         exit_price = Decimal(str(price))
         gross = (exit_price - position.entry_price) * qty * direction
@@ -1895,8 +1910,13 @@ class PaperTradingService:
         fee = exit_price * qty * fee_rate
         net = gross - fee
 
-        share = qty / position.initial_quantity if position.initial_quantity else Decimal("0")
-        margin_release = position.margin_used * share
+        # Margin proportional to closed share of *remaining* size — not of initial.
+        # ``margin_used * qty/initial`` under-releases after prior scale-outs and
+        # leaks cash when the last slice zeroes ``margin_used`` without payout.
+        if remaining_before > 0 and position.margin_used > 0:
+            margin_release = position.margin_used * (qty / remaining_before)
+        else:
+            margin_release = Decimal("0")
 
         position.remaining_quantity -= qty
         position.margin_used = max(Decimal("0"), position.margin_used - margin_release)
@@ -1920,10 +1940,13 @@ class PaperTradingService:
         )
 
         if position.remaining_quantity <= Decimal("0.00000001"):
+            # Any dust margin must return to cash before zeroing the lock.
+            if position.margin_used > 0:
+                account.cash_balance += position.margin_used
+                position.margin_used = Decimal("0")
             position.remaining_quantity = Decimal("0")
             position.status = "closed"
             position.closed_at = when
-            position.margin_used = Decimal("0")
             logger.info(
                 "paper_position_closed",
                 symbol=position.symbol,

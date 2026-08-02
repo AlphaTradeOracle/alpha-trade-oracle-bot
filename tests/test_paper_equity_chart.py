@@ -19,8 +19,8 @@ def test_equity_curve_tracks_fills_and_live_mtm() -> None:
         initial=5000.0,
         start_at=start,
         fills=[
-            (t1, 0.0, 1.5),  # entry fee
-            (t2, 40.0, 1.2),  # close with pnl
+            (t1, -1.5, 1.5),  # entry: pnl = -fee
+            (t2, 38.8, 1.2),  # exit: pnl already net of fee (gross 40 − 1.2)
         ],
         as_of=as_of,
         live_equity=5050.0,
@@ -29,6 +29,33 @@ def test_equity_curve_tracks_fills_and_live_mtm() -> None:
     assert points[1] == (t1, 4998.5)
     assert points[2] == (t2, 5037.3)
     assert points[-1] == (as_of, 5050.0)
+
+
+def test_equity_curve_legacy_entry_pnl_zero_still_subtracts_fee() -> None:
+    start = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
+    t1 = start + timedelta(hours=1)
+    points = build_equity_curve_points(
+        initial=5000.0,
+        start_at=start,
+        fills=[(t1, 0.0, 1.5)],
+        as_of=t1 + timedelta(hours=1),
+        live_equity=4998.5,
+    )
+    assert points[1] == (t1, 4998.5)
+
+
+def test_equity_curve_does_not_double_count_exit_fee() -> None:
+    """Exit fill pnl is net; subtracting fee again would understate equity."""
+    start = datetime(2026, 7, 31, 10, 0, tzinfo=UTC)
+    t1 = start + timedelta(hours=1)
+    points = build_equity_curve_points(
+        initial=5000.0,
+        start_at=start,
+        fills=[(t1, 10.0, 2.0)],
+        as_of=t1 + timedelta(hours=1),
+        live_equity=5010.0,
+    )
+    assert points[1] == (t1, 5010.0)
 
 
 def test_equity_chart_renders_png() -> None:

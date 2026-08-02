@@ -123,15 +123,109 @@ def _catalog() -> list[Variant]:
         ),
         Variant(
             "tp_tight",
-            "TP 1.5/2.5/4.0R",
+            "TP 1.5/2.5/4.0R (live)",
             "exits",
             {"tp_multipliers": (1.5, 2.5, 4.0)},
         ),
         Variant(
+            "tp_123",
+            "TP 1/2/3R (enger)",
+            "exits",
+            {"tp_multipliers": (1.0, 2.0, 3.0)},
+        ),
+        # --- Profit stack (paper autopsy) ---------------------------------
+        Variant(
+            "A_base",
+            "Profit-stack baseline (live defaults)",
+            "profit",
+            {},
+        ),
+        Variant(
+            "B_tp1",
+            "TP 1.0/2.0/3.5R",
+            "profit",
+            {"tp_multipliers": (1.0, 2.0, 3.5)},
+        ),
+        Variant(
+            "C_tp_scratch",
+            "TP 0.8/1.5/3R + BE after TP1",
+            "profit",
+            {
+                "tp_multipliers": (0.8, 1.5, 3.0),
+                "move_stop_to_breakeven_after_tp1": True,
+            },
+        ),
+        Variant(
+            "D_short_gate",
+            "Short max score 22 + ADX 35",
+            "profit",
+            {"short_max_score": 22.0, "min_adx": 35.0},
+        ),
+        Variant(
+            "E_retest_deep",
+            "Retest near 0.75 + 2 bars in zone",
+            "profit",
+            {"retest_zone_near": 0.75, "retest_min_bars_in_zone": 2},
+        ),
+        Variant(
+            "F_stack",
+            "TP1.0/2/3.5 + short22/ADX35 + deep retest",
+            "profit",
+            {
+                "tp_multipliers": (1.0, 2.0, 3.5),
+                "short_max_score": 22.0,
+                "min_adx": 35.0,
+                "retest_zone_near": 0.75,
+                "retest_min_bars_in_zone": 2,
+            },
+        ),
+        Variant(
+            "tp_246",
+            "TP 2/4/6R (hoeher)",
+            "exits",
+            {"tp_multipliers": (2.0, 4.0, 6.0)},
+        ),
+        Variant(
             "tp_wide",
-            "TP 2.5/5.0/8.0R",
+            "TP 2.5/5.0/8.0R (hoeher)",
             "exits",
             {"tp_multipliers": (2.5, 5.0, 8.0)},
+        ),
+        Variant(
+            "tp_358",
+            "TP 3/5/8R (hoeher)",
+            "exits",
+            {"tp_multipliers": (3.0, 5.0, 8.0)},
+        ),
+        Variant(
+            "tp_4812",
+            "TP 4/8/12R (sehr weit)",
+            "exits",
+            {"tp_multipliers": (4.0, 8.0, 12.0)},
+        ),
+        Variant(
+            "tp_246_equal",
+            "TP 2/4/6R + Scale 33/33/34",
+            "exits",
+            {
+                "tp_multipliers": (2.0, 4.0, 6.0),
+                "scale_out_fractions": (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0),
+            },
+        ),
+        Variant(
+            "tp_wide_no_be",
+            "TP 2.5/5/8R ohne BE nach TP1",
+            "exits",
+            {
+                "tp_multipliers": (2.5, 5.0, 8.0),
+                "move_stop_to_breakeven_after_tp1": False,
+            },
+        ),
+        Variant(
+            "tp_wide_exp48",
+            "TP 2.5/5/8R + Expiry ×48",
+            "exits",
+            {"tp_multipliers": (2.5, 5.0, 8.0), "expiry_multiplier": 48},
         ),
         Variant("scale_off", "No scale-out", "exits", {"scale_out_enabled": False}),
         Variant(
@@ -248,6 +342,45 @@ def _catalog() -> list[Variant]:
                 "min_risk_reward_ratio": 2.5,
                 "weights": _shift_weight(baseline_w, boost=ScoreCategory.MOMENTUM, delta=0.08),
             },
+        ),
+        # --- Hoehere TPs + angepasste Gates (Top400 Sweep) ---
+        Variant(
+            "combo_adx30_wide",
+            "ADX30 + TP 2.5/5/8R",
+            "combo",
+            {"min_adx": 30.0, "tp_multipliers": (2.5, 5.0, 8.0)},
+        ),
+        Variant(
+            "combo_adx30_wide_rr",
+            "ADX30 + TP 2.5/5/8R + RR2.5",
+            "combo",
+            {
+                "min_adx": 30.0,
+                "tp_multipliers": (2.5, 5.0, 8.0),
+                "min_risk_reward_ratio": 2.5,
+            },
+        ),
+        Variant(
+            "combo_adx25_246_exp48",
+            "ADX25 + TP 2/4/6R + Expiry ×48",
+            "combo",
+            {
+                "min_adx": 25.0,
+                "tp_multipliers": (2.0, 4.0, 6.0),
+                "expiry_multiplier": 48,
+            },
+        ),
+        Variant(
+            "combo_score78_wide",
+            "Score78 + TP 2.5/5/8R",
+            "combo",
+            {"min_score": 78.0, "tp_multipliers": (2.5, 5.0, 8.0)},
+        ),
+        Variant(
+            "combo_adx30_4812",
+            "ADX30 + TP 4/8/12R",
+            "combo",
+            {"min_adx": 30.0, "tp_multipliers": (4.0, 8.0, 12.0)},
         ),
     ]
 
@@ -529,30 +662,47 @@ async def main() -> int:
 
     print(f"Running {len(jobs)} symbols × {len(variants)} variants ...", file=sys.stderr, flush=True)
     done = 0
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(_run_symbol_job, job): job["symbol"] for job in jobs}
-        for fut in as_completed(futures):
-            symbol = futures[fut]
-            done += 1
-            try:
-                payload = fut.result()
-                for key, row in payload["results"].items():
-                    per_variant_rows[key].append(row)
-            except Exception as exc:
-                for v in variants:
-                    per_variant_rows[v.key].append(
-                        {"symbol": symbol, "market_cap_rank": 0, "error": str(exc)}
-                    )
-            if done % 10 == 0 or done == len(jobs):
-                elapsed = time.time() - t0
-                rate = done / elapsed if elapsed else 0
-                eta = (len(jobs) - done) / rate if rate else 0
-                print(
-                    f"[{done}/{len(jobs)}] last={symbol}  "
-                    f"{elapsed / 60:.1f}m elapsed  ETA {eta / 60:.1f}m",
-                    file=sys.stderr,
-                    flush=True,
+
+    def _consume(symbol: str, payload: dict[str, Any] | None, exc: BaseException | None) -> None:
+        nonlocal done
+        done += 1
+        if exc is not None:
+            for v in variants:
+                per_variant_rows[v.key].append(
+                    {"symbol": symbol, "market_cap_rank": 0, "error": str(exc)}
                 )
+        elif payload is not None:
+            for key, row in payload["results"].items():
+                per_variant_rows[key].append(row)
+        if done % 10 == 0 or done == len(jobs):
+            elapsed = time.time() - t0
+            rate = done / elapsed if elapsed else 0
+            eta = (len(jobs) - done) / rate if rate else 0
+            print(
+                f"[{done}/{len(jobs)}] last={symbol}  "
+                f"{elapsed / 60:.1f}m elapsed  ETA {eta / 60:.1f}m",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    if args.workers <= 1:
+        # In-process: avoids ProcessPool fork doubling candle RAM (OOM on 8GB hosts).
+        print("mode=sequential (workers<=1)", file=sys.stderr, flush=True)
+        for job in jobs:
+            symbol = job["symbol"]
+            try:
+                _consume(symbol, _run_symbol_job(job), None)
+            except Exception as exc:
+                _consume(symbol, None, exc)
+    else:
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            futures = {pool.submit(_run_symbol_job, job): job["symbol"] for job in jobs}
+            for fut in as_completed(futures):
+                symbol = futures[fut]
+                try:
+                    _consume(symbol, fut.result(), None)
+                except Exception as exc:
+                    _consume(symbol, None, exc)
 
     baseline_summary = (
         _aggregate(per_variant_rows["baseline"]) if "baseline" in per_variant_rows else {}

@@ -318,6 +318,21 @@ class RiskManager:
             return 0.0
         return risk_amount / stop_distance
 
+    @staticmethod
+    def fee_aware_breakeven(
+        entry: float,
+        *,
+        is_long: bool,
+        fee_percent: float,
+    ) -> float:
+        """Break-even-Stop inkl. Round-Trip-Fee (Entry + Exit)."""
+        rate = max(float(fee_percent), 0.0) / 100.0
+        if entry <= 0:
+            return entry
+        if is_long:
+            return entry * (1.0 + 2.0 * rate)
+        return entry * (1.0 - 2.0 * rate)
+
     def _position_size(self, stop_distance: float) -> float:
         """Informative Positionsgroesse bezogen auf das Referenzkapital.
 

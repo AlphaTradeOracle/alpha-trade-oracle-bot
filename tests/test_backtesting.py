@@ -269,12 +269,13 @@ class TestLookAheadFreedom:
 
         assert engine._try_close(trade, df, 1, 60) is False
         assert trade.tp1_filled is True
-        assert trade.current_stop == pytest.approx(100.0)
-        assert trade.remaining_quantity == pytest.approx(2.0)
+        assert trade.current_stop == pytest.approx(100.0)  # fee=0 → BE = entry
+        assert trade.remaining_quantity == pytest.approx(1.5)  # 50% scale-out
 
         assert engine._try_close(trade, df, 2, 60) is True
         assert trade.exit_reason is ExitReason.STOP_LOSS
-        assert trade.net_pnl == pytest.approx(10.0)  # 1 unit @ +10 from TP1; rest @ BE
+        # 1.5 @ +10 (TP1) + 1.5 @ 0 (BE stop)
+        assert trade.net_pnl == pytest.approx(15.0)
 
 
     def test_cooldown_reduces_trade_count(self, uptrend_df: pd.DataFrame) -> None:
@@ -351,10 +352,10 @@ class TestLookAheadFreedom:
         )["overall"]
         assert overall["profit_factor"] == pytest.approx(3.0)
 
-    def test_profit_factor_is_zero_without_losses(self) -> None:
-        """Ohne Verluste waere der Profit Factor unendlich."""
+    def test_profit_factor_sentinel_without_losses(self) -> None:
+        """Ohne Verluste: Sentinel 99 (wie Paper), nicht 0."""
         overall = self.metrics_for([self.make_trade(30.0, SignalDirection.LONG)])["overall"]
-        assert overall["profit_factor"] == 0.0
+        assert overall["profit_factor"] == pytest.approx(99.0)
 
     def test_average_win_and_loss(self) -> None:
         overall = self.metrics_for(

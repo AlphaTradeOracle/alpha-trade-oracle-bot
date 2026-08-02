@@ -30,6 +30,7 @@ from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta
 from app.indicators.engine import IndicatorEngine
 from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
+from app.signals.regime import regime_from_indicators
 from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
 from app.signals.types import SignalResult
@@ -54,9 +55,12 @@ class BacktestConfig:
     symbol: str
     timeframe: str
     fee_percent: float = 0.1
-    slippage_percent: float = 0.05
+    #: 0 = Paper-Paritaet (nur Fee). Explizit setzen fuer Stress-Tests.
+    slippage_percent: float = 0.0
     initial_capital: float = 10_000.0
     min_score: float = 75.0
+    #: Optional: reject shorts with score above this (live SIGNAL_SHORT_MAX_SCORE).
+    short_max_score: float | None = None
     min_risk_reward_ratio: float = 2.0
     atr_multiplier: float = 1.5
     max_atr_percent: float = 12.0
@@ -69,6 +73,7 @@ class BacktestConfig:
     min_adx: float = 20.0
     rsi_long_max: float = 75.0
     rsi_short_min: float = 25.0
+    regime_filter_enabled: bool = True
     #: Nur ein Trade gleichzeitig — ohne Positionsverwaltung waere die
     #: Kapitalkurve nicht interpretierbar.
     allow_concurrent_trades: bool = False
@@ -81,9 +86,10 @@ class BacktestConfig:
     tp_multipliers: tuple[float, float, float] = (1.5, 2.5, 4.0)
     #: Retest/Pullback-Entry statt naechster Primary-Open (IST).
     retest_entry_enabled: bool = True
-    retest_zone_near: float = 0.35
+    retest_zone_near: float = 0.55
     retest_zone_far: float = 1.0
-    retest_pending_multiplier: int = 4
+    retest_pending_multiplier: int = 6
+    retest_min_bars_in_zone: int = 1
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -100,6 +106,8 @@ class BacktestConfig:
         params: dict[str, object] = {
             "symbol": symbol,
             "timeframe": timeframe,
+            "fee_percent": settings.paper_fee_percent,
+            "slippage_percent": 0.0,
             "min_score": settings.signal_min_score,
             "min_risk_reward_ratio": settings.min_risk_reward_ratio,
             "atr_multiplier": settings.atr_multiplier,
@@ -113,10 +121,16 @@ class BacktestConfig:
             "min_adx": settings.signal_min_adx,
             "rsi_long_max": settings.signal_rsi_long_max,
             "rsi_short_min": settings.signal_rsi_short_min,
+            "regime_filter_enabled": settings.regime_filter_enabled,
+            "scale_out_fractions": tuple(settings.parsed_scale_out_fractions),
+            "move_stop_to_breakeven_after_tp1": settings.paper_move_stop_to_breakeven,
+            "tp_multipliers": tuple(settings.parsed_tp_multipliers),
             "retest_entry_enabled": settings.backtest_retest_entry_enabled,
             "retest_zone_near": settings.paper_retest_zone_near,
             "retest_zone_far": settings.paper_retest_zone_far,
             "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
+            "retest_min_bars_in_zone": settings.paper_retest_min_bars_in_zone,
+            "short_max_score": settings.signal_short_max_score,
             "weights": weights,
         }
         params.update(overrides)
@@ -224,6 +238,7 @@ class BacktestEngine:
             min_adx=config.min_adx,
             rsi_long_max=config.rsi_long_max,
             rsi_short_min=config.rsi_short_min,
+            regime_filter_enabled=config.regime_filter_enabled,
             strategy_version_label="backtest:1",
         )
         self._signal_engine = SignalEngine(
@@ -416,6 +431,13 @@ class BacktestEngine:
         if signal.direction.is_short and (100.0 - signal.score) < self._config.min_score:
             outcome.signals_skipped_below_score += 1
             return False
+        if (
+            signal.direction.is_short
+            and self._config.short_max_score is not None
+            and signal.score > self._config.short_max_score
+        ):
+            outcome.signals_skipped_below_score += 1
+            return False
 
         if signal.risk is None:
             return False
@@ -468,11 +490,16 @@ class BacktestEngine:
                 window, self._config.timeframe, symbol=self._config.symbol, strict=False
             )
             candle_time = ensure_utc(_index_time(window, len(window) - 1))
+            market_regime = None
+            if self._config.regime_filter_enabled:
+                # Approximation: Symbol-Regime (Live nutzt BTC 4h). Besser als kein Filter.
+                market_regime = regime_from_indicators(indicators).regime
             return self._signal_engine.generate(
                 self._config.symbol,
                 {self._config.timeframe: indicators},
                 data_quality=100.0,
                 now=candle_time,
+                market_regime=market_regime,
             )
         except Exception as exc:
             logger.debug("backtest_signal_skipped", index=index, error=str(exc))
@@ -505,15 +532,28 @@ class BacktestEngine:
 
             coverage = len(indicator_sets) / max(len(requested), 1)
             data_quality = 100.0 * coverage
+            market_regime = None
+            if self._config.regime_filter_enabled:
+                # Prefer 4h if present (closer to live BTC-regime TF), else primary.
+                regime_tf = "4h" if "4h" in indicator_sets else self._config.timeframe
+                regime_ind = indicator_sets.get(regime_tf) or next(iter(indicator_sets.values()))
+                market_regime = regime_from_indicators(regime_ind).regime  # type: ignore[arg-type]
             return self._signal_engine.generate(
                 self._config.symbol,
                 indicator_sets,  # type: ignore[arg-type]
                 data_quality=data_quality,
                 now=cutoff,
+                market_regime=market_regime,
             )
         except Exception as exc:
             logger.debug("backtest_mtf_signal_skipped", index=index, error=str(exc))
             return None
+
+    def _hold_expires_at(self, entry_at: datetime) -> datetime:
+        """Management-Fenster ab Fill — wie Paper nach Retest-Activate."""
+        return ensure_utc(entry_at) + self._config.expiry_multiplier * timeframe_to_timedelta(
+            self._config.timeframe
+        )
 
     def _open_trade(
         self,
@@ -537,9 +577,18 @@ class BacktestEngine:
         if risk is None:
             return None
 
-        stop_distance = abs(entry_price - risk.stop_loss)
+        stop = float(risk.stop_loss)
+        stop_distance = abs(entry_price - stop)
         if stop_distance <= 0:
             return None
+
+        # TPs am Fill neu verankern (reine R-Leiter) — Signal-TPs waren am Zone-Edge.
+        tp1, tp2, tp3 = levels_from_entry_sl(
+            Decimal(str(entry_price)),
+            Decimal(str(stop)),
+            is_long=signal.direction.is_long,
+            multipliers=tuple(Decimal(str(m)) for m in self._config.tp_multipliers),
+        )
 
         # Positionsgroesse aus dem Risiko je Trade, begrenzt durch das Kapital.
         risk_amount = equity * (risk.risk_percent / 100.0)
@@ -549,22 +598,23 @@ class BacktestEngine:
         if quantity <= 0:
             return None
 
+        entry_at = ensure_utc(_index_time(df, entry_index))
         return SimulatedTrade(
             symbol=self._config.symbol,
             timeframe=self._config.timeframe,
             direction=signal.direction,
-            entry_at=ensure_utc(_index_time(df, entry_index)),
+            entry_at=entry_at,
             entry_price=entry_price,
-            stop_loss=risk.stop_loss,
-            take_profit_1=risk.take_profit_1,
-            take_profit_2=risk.take_profit_2,
-            take_profit_3=risk.take_profit_3,
+            stop_loss=stop,
+            take_profit_1=float(tp1),
+            take_profit_2=float(tp2),
+            take_profit_3=float(tp3),
             quantity=quantity,
             remaining_quantity=quantity,
-            current_stop=risk.stop_loss,
-            risk_reward_planned=risk.risk_reward_ratio,
+            current_stop=stop,
+            risk_reward_planned=abs(float(tp2) - entry_price) / stop_distance,
             signal_score=signal.score,
-            expires_at=signal.expires_at,
+            expires_at=self._hold_expires_at(entry_at),
         )
 
     def _open_trade_retest(
@@ -592,6 +642,7 @@ class BacktestEngine:
                 zone_near=Decimal(str(self._config.retest_zone_near)),
                 zone_far=Decimal(str(self._config.retest_zone_far)),
                 pending_multiplier=self._config.retest_pending_multiplier,
+                min_bars_in_zone=int(self._config.retest_min_bars_in_zone),
             ),
         )
         if not arm.filled or arm.fill_price is None or arm.fill_time is None or arm.stop is None:
@@ -632,7 +683,7 @@ class BacktestEngine:
             current_stop=stop,
             risk_reward_planned=abs(float(tp2) - entry_price) / stop_distance,
             signal_score=signal.score,
-            expires_at=signal.expires_at,
+            expires_at=self._hold_expires_at(ensure_utc(arm.fill_time)),
         )
 
     def _process_open_trade(
@@ -755,7 +806,11 @@ class BacktestEngine:
             if level == 1:
                 trade.tp1_filled = True
                 if self._config.move_stop_to_breakeven_after_tp1:
-                    trade.current_stop = trade.entry_price
+                    trade.current_stop = RiskManager.fee_aware_breakeven(
+                        trade.entry_price,
+                        is_long=is_long,
+                        fee_percent=self._config.fee_percent,
+                    )
             elif level == 2:
                 trade.tp2_filled = True
             else:

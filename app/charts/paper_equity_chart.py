@@ -29,11 +29,23 @@ def build_equity_curve_points(
     as_of: datetime,
     live_equity: float,
 ) -> list[tuple[datetime, float]]:
-    """Equity-Punkte: Start → nach jedem Fill (pnl − fee) → Live-Equity (MTM)."""
+    """Equity-Punkte: Start → nach jedem Fill → Live-Equity (MTM).
+
+    ``pnl`` ist immer die Equity-Delta-Komponente (Entry: −fee; Exit: gross−fee).
+    Die ``fee``-Spalte ist nur Metadaten — erneut abziehen wuerde Exit-Fees
+    doppelt zaehlen (historischer Bug in Desk-/Digest-Fenstern).
+    Legacy-Entry-Fills mit ``pnl=0`` werden als −fee interpretiert.
+    """
     points: list[tuple[datetime, float]] = [(start_at, float(initial))]
     running = float(initial)
     for filled_at, pnl, fee in fills:
-        running += float(pnl) - float(fee)
+        pnl_f = float(pnl)
+        fee_f = float(fee)
+        # Legacy entry rows wrote pnl=0 and fee>0; new rows write pnl=-fee.
+        if abs(pnl_f) < 1e-12 and fee_f > 0:
+            running -= fee_f
+        else:
+            running += pnl_f
         if points and points[-1][0] == filled_at:
             points[-1] = (filled_at, running)
         else:

@@ -384,7 +384,9 @@ class TestPortfolioRiskLimits:
 
         # TP1 nimmt die Haelfte vom Tisch -> die Haelfte 1R wird wieder frei.
         await service.update_open_positions(session, {"BBB0USDT": 105.0})
-        assert float(opened[0].remaining_quantity) == pytest.approx(5.0)
+        assert float(opened[0].remaining_quantity) == pytest.approx(
+            float(opened[0].initial_quantity) * 0.5
+        )
         assert await self._open(service, session, "BBB4USDT") is not None
 
     @pytest.mark.asyncio
@@ -552,23 +554,31 @@ class TestPaperTrading:
 
         position = await service.open_from_signal(session, outcome)
         assert position is not None
-        # Stop 5 Punkte entfernt, 50 USD Risiko -> 10 Stueck, 1.000 USD Nominal.
-        assert float(position.notional) == pytest.approx(1000.0)
-        assert float(position.remaining_quantity) == pytest.approx(10.0)
+        # IST fill at zone edge (entry_low=99), stop 95 → R=4, $50 risk → 12.5 qty.
+        assert float(position.entry_price) == pytest.approx(99.0)
+        assert float(position.notional) == pytest.approx(1237.5)
+        assert float(position.remaining_quantity) == pytest.approx(12.5)
         assert float(position.risk_amount) == pytest.approx(50.0)
 
         account = await service.get_or_create_account(session)
-        assert float(account.cash_balance) == pytest.approx(1800.0)
+        # Margin = notional/leverage = 1237.5/5 = 247.5
+        assert float(account.cash_balance) == pytest.approx(1752.5)
 
         updated = await service.update_open_positions(session, {"BTCUSDT": 105.0})
         assert len(updated) == 1
         assert position.tp1_filled is True
-        assert float(position.current_stop) == pytest.approx(100.0)
-        assert float(position.remaining_quantity) < 10.0
+        assert float(position.current_stop) == pytest.approx(99.0)
+        assert float(position.remaining_quantity) < 12.5
 
-        await service.update_open_positions(session, {"BTCUSDT": 99.0})
+        await service.update_open_positions(session, {"BTCUSDT": 98.0})
         assert position.status == "closed"
         assert position.exit_reason == ExitReason.STOP_LOSS.value
+        assert float(position.margin_used) == pytest.approx(0.0)
+        # Full close must return all margin — no cash leak after scale-out.
+        assert float(account.cash_balance) == pytest.approx(
+            2000.0 + float(position.realized_pnl),
+            abs=1e-6,
+        )
 
         summary = await service.summary(session)
         assert summary.closed_trades == 1
@@ -616,10 +626,14 @@ class TestPaperTrading:
             paper_retest_entry_enabled=False,
         )
         service = PaperTradingService(settings)
-        outcome = AnalysisOutcome(
-            result=make_result(direction=SignalDirection.LONG, score=80.0, entry_mid=50.0),
-            price_precision=2,
+        result = make_result(
+            direction=SignalDirection.LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="dup-symbol",
         )
+        result.risk = _tight_long_risk(100.0)
+        outcome = AnalysisOutcome(result=result, price_precision=2)
         first = await service.open_from_signal(session, outcome)
         second = await service.open_from_signal(session, outcome)
         assert first is not None
@@ -667,3 +681,64 @@ class TestPaperTrading:
         await service.update_open_positions(session, {"BTCUSDT": 99.0})
 
         assert events == [("open", "BTCUSDT")]
+
+
+class TestPaperMarginConservation:
+    @pytest.mark.asyncio
+    async def test_scale_out_then_full_close_returns_all_margin(
+        self, session: AsyncSession
+    ) -> None:
+        """Regression: margin must release vs remaining qty, not initial.
+
+        Old bug: ``margin_used * qty/initial`` after TP1 under-released, then
+        full close zeroed ``margin_used`` without paying the leftover to cash.
+        """
+        settings = Settings(
+            enable_paper_trading=True,
+            paper_initial_balance=5000.0,
+            paper_margin_per_trade=150.0,
+            paper_leverage=10.0,
+            paper_risk_per_trade_usd=50.0,
+            paper_fee_percent=0.04,
+            paper_move_stop_to_breakeven=True,
+            paper_retest_entry_enabled=False,
+            paper_scale_out_fractions="0.5,0.25,0.25",
+        )
+        service = PaperTradingService(settings)
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="margin-leak",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.risk = _tight_long_risk(100.0)
+        outcome = AnalysisOutcome(result=result, price_precision=2)
+
+        position = await service.open_from_signal(session, outcome)
+        assert position is not None
+        account = await service.get_or_create_account(session)
+        initial = 5000.0
+        locked = float(position.margin_used)
+        entry_fee = float(position.fees)
+        assert float(account.cash_balance) == pytest.approx(initial - locked - entry_fee)
+
+        await service.update_open_positions(session, {"BTCUSDT": 105.0})
+        assert position.tp1_filled is True
+        assert float(position.remaining_quantity) == pytest.approx(
+            float(position.initial_quantity) * 0.5
+        )
+        # After 50% scale-out, half the original margin should still be locked.
+        assert float(position.margin_used) == pytest.approx(locked * 0.5, rel=1e-6)
+
+        await service.update_open_positions(session, {"BTCUSDT": 98.0})
+        assert position.status == "closed"
+        assert float(position.margin_used) == pytest.approx(0.0)
+        assert float(account.cash_balance) == pytest.approx(
+            initial + float(account.realized_pnl),
+            abs=1e-4,
+        )
+        # Equity with no open positions = cash = initial + all realized (incl. fees).
+        summary = await service.summary(session)
+        assert summary.open_positions == 0
+        assert float(summary.equity) == pytest.approx(float(account.cash_balance))

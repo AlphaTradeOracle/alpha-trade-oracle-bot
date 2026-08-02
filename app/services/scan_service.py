@@ -220,12 +220,44 @@ class ScanService:
             await self._record_suppression(session, outcome, decision.reason)
             return
 
+        # Paper first: Telegram nur bei echtem Entry (IST-Open oder Retest-Fill).
+        # Pending-Retest ohne Fill → kein Alert (sonst Signal ohne Trade, z.B. KAVA).
+        paper_position = None
         if self._paper is not None and self._paper.enabled:
-            await self._paper.open_from_signal(
+            paper_position = await self._paper.open_from_signal(
                 session,
                 outcome,
                 regime_snapshot=regime_snapshot,
             )
+            if paper_position is None:
+                logger.info(
+                    "signal_telegram_skipped_no_paper_entry",
+                    symbol=symbol,
+                    score=outcome.result.score,
+                    reason=self._paper.last_skip_reason,
+                    universe_mode=universe_mode,
+                )
+                return
+            if paper_position.status == "pending":
+                logger.info(
+                    "signal_telegram_deferred_until_retest_fill",
+                    symbol=symbol,
+                    score=outcome.result.score,
+                    universe_mode=universe_mode,
+                )
+                return
+            # IST-Open: Paper-Notifier hat bereits Chart+Levels geschickt.
+            await self._dedup.record_dispatch(outcome.result)
+            if outcome.signal_id is not None:
+                await signals.mark_dispatched(outcome.signal_id)
+                result.signals_dispatched += 1
+            logger.info(
+                "signal_telegram_via_paper_open",
+                symbol=symbol,
+                score=outcome.result.score,
+                universe_mode=universe_mode,
+            )
+            return
 
         if not dispatch:
             logger.info(
