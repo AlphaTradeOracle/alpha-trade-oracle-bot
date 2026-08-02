@@ -162,7 +162,7 @@ export function TopCoinsBanner() {
   }
   if (coins.length === 0) {
     return (
-      <div className={`panel flex ${BANNER_H} items-center justify-center px-3`}>
+      <div className={`flex ${BANNER_H} items-center justify-center bg-transparent px-3`}>
         <p className="text-[10px] text-[var(--color-text-muted)]">Loading markets…</p>
       </div>
     )
@@ -171,7 +171,7 @@ export function TopCoinsBanner() {
   return (
     <section
       aria-label="Top 10 coins"
-      className={`panel flex ${BANNER_H} w-full items-stretch overflow-x-auto overflow-y-hidden`}
+      className={`flex ${BANNER_H} w-full items-stretch overflow-x-auto overflow-y-hidden bg-transparent`}
     >
       {coins.map((coin, index) => (
         <div
