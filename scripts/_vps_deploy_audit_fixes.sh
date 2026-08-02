@@ -3,10 +3,8 @@ set -euo pipefail
 cd /opt/alpha-trade-oracle-bot
 git fetch origin main cursor/trading-dashboard-efe9
 git reset --hard origin/main
-docker compose build app
-docker compose up -d --no-deps app
-# worker if present
-docker compose up -d --no-deps worker 2>/dev/null || true
+docker compose build app worker
+docker compose up -d --no-deps app worker
 
 # Wait for API
 for i in $(seq 1 25); do

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd /opt/alpha-trade-oracle-bot
-git fetch origin main
+git fetch origin main cursor/trading-dashboard-efe9
 git reset --hard origin/main
 docker compose build app
 docker compose up -d --no-deps app
@@ -10,26 +10,28 @@ curl -fsS http://127.0.0.1:8000/api/v1/desk/snapshot -o /tmp/desk.json
 python3 - <<'PY'
 import json
 d=json.load(open("/tmp/desk.json"))
-closed=d.get("closedTrades") or d.get("closed") or []
-# snapshot shape: may nest under keys
-for key in ("closedTrades","closed","trades"):
-    pass
-# desk snapshot typically has open/pending/closed lists
-for key in ("closed","closedTrades","recentClosed"):
-    rows=d.get(key)
-    if isinstance(rows, list) and rows:
-        t=rows[0]
-        print("sample", key, {k:t.get(k) for k in ("symbol","positionSize","notional","margin","stop","entry")})
-        break
-else:
-    # try nested
-    data=d.get("data") or d
-    for key in ("closed","closedTrades"):
-        rows=data.get(key) if isinstance(data, dict) else None
-        if isinstance(rows, list) and rows:
-            t=rows[0]
-            print("sample", key, {k:t.get(k) for k in ("symbol","positionSize","notional","margin","stop","entry")})
-            break
-    else:
-        print("keys", sorted(d.keys())[:40])
+closed=[t for t in d.get("trades") or [] if t.get("status")=="CLOSED"]
+npc=[t for t in closed if t.get("symbol")=="NPCUSDT"]
+sample=(npc or closed)[:1]
+for t in sample:
+    print({k:t.get(k) for k in ("symbol","status","positionSize","notional","margin","stop","entry","leverage")})
+if not sample:
+    print("no_closed")
 PY
+
+# dashboard static
+WEB_ROOT=/var/www/alpha-desk
+BRANCH=origin/cursor/trading-dashboard-efe9
+rm -rf /tmp/alpha-desk-src
+mkdir -p /tmp/alpha-desk-src
+git archive "$BRANCH" trading-dashboard | tar -x -C /tmp/alpha-desk-src
+cd /tmp/alpha-desk-src/trading-dashboard
+npm ci
+npm run build
+rm -rf "${WEB_ROOT:?}/"*
+cp -a dist/. "$WEB_ROOT/"
+chown -R www-data:www-data "$WEB_ROOT"
+nginx -t && systemctl reload nginx
+echo "dash=$(git -C /opt/alpha-trade-oracle-bot rev-parse --short origin/cursor/trading-dashboard-efe9)"
+curl -fsS -o /dev/null -w "site=%{http_code}\n" https://alpha-trade-oracle.com/
+echo DONE
