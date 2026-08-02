@@ -7,12 +7,11 @@ import {
   Layers3,
   Lock,
   Percent,
-  Scale,
   TrendingUp,
   Wallet,
 } from 'lucide-react'
 import type { EquityPoint, PortfolioSnapshot } from '../../types/trade'
-import { formatMoney, formatPct, formatR, formatSignedMoney } from '../../utils/format'
+import { formatMoney, formatPct, formatSignedMoney } from '../../utils/format'
 import { KpiCard, type KpiTone } from './KpiCard'
 import { PerformanceKpiCard } from './PerformanceKpiCard'
 
@@ -56,16 +55,16 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       tone: toneFromNumber(p.openUpnl),
     },
     {
-      title: 'Open R',
-      value: formatR(p.openR),
-      icon: Scale,
-      tone: toneFromNumber(p.openR),
-      hint:
+      title: 'Winrate',
+      value:
         p.winRatePct != null
-          ? `WR ${Number(p.winRatePct).toLocaleString('de-DE', {
+          ? `${Number(p.winRatePct).toLocaleString('de-DE', {
               maximumFractionDigits: 1,
             })}%`
-          : undefined,
+          : '—',
+      icon: Percent,
+      tone:
+        p.winRatePct != null ? toneFromNumber(p.winRatePct - 50) : ('neutral' as KpiTone),
     },
     {
       title: 'Cash',
