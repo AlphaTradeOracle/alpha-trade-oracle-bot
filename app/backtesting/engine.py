@@ -62,6 +62,8 @@ class BacktestConfig:
     min_score: float = 75.0
     #: Optional: reject shorts with score above this (live SIGNAL_SHORT_MAX_SCORE).
     short_max_score: float | None = None
+    #: Optional: reject shorts with score at/below this (live SIGNAL_SHORT_MIN_SCORE).
+    short_min_score: float | None = None
     min_risk_reward_ratio: float = 2.0
     atr_multiplier: float = 1.5
     max_atr_percent: float = 12.0
@@ -132,6 +134,7 @@ class BacktestConfig:
             "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
             "retest_min_bars_in_zone": settings.paper_retest_min_bars_in_zone,
             "short_max_score": settings.signal_short_max_score,
+            "short_min_score": settings.signal_short_min_score,
             "weights": weights,
         }
         params.update(overrides)
@@ -453,6 +456,13 @@ class BacktestEngine:
             signal.direction.is_short
             and self._config.short_max_score is not None
             and signal.score > self._config.short_max_score
+        ):
+            outcome.signals_skipped_below_score += 1
+            return False
+        if (
+            signal.direction.is_short
+            and self._config.short_min_score is not None
+            and signal.score <= self._config.short_min_score
         ):
             outcome.signals_skipped_below_score += 1
             return False
