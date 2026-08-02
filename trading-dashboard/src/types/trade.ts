@@ -169,6 +169,8 @@ export interface MarketRegimeSnapshot {
   globalScore?: number | null
   available?: boolean
   capturedAt?: string | null
+  hardVeto?: boolean | null
+  scoreBlend?: boolean | null
 }
 
 export interface EquityPoint {

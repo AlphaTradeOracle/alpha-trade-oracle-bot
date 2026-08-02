@@ -141,11 +141,23 @@ export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
         <h3 className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
           Market Sentiment
         </h3>
-        {!regime.available ? (
-          <span className="absolute right-0 rounded-md bg-[var(--color-surface-hover)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-            Degraded
-          </span>
-        ) : null}
+        <div className="absolute right-0 flex items-center gap-1.5">
+          {regime.hardVeto ? (
+            <span className="rounded-md bg-[var(--color-short-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-short)]">
+              Hard veto
+            </span>
+          ) : null}
+          {regime.scoreBlend ? (
+            <span className="rounded-md bg-[var(--color-accent-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-accent)]">
+              Soft blend
+            </span>
+          ) : null}
+          {!regime.available ? (
+            <span className="rounded-md bg-[var(--color-surface-hover)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+              Degraded
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div

@@ -52,6 +52,10 @@ export function KpiGrid({ portfolio: p, equity = [], onKpiClick }: KpiGridProps)
       value: formatSignedMoney(p.realizedPnl),
       icon: CircleDollarSign,
       tone: toneFromNumber(p.realizedPnl),
+      hint:
+        p.openRealizedPnl != null && Math.abs(p.openRealizedPnl) > 0.005
+          ? `Open partials ${formatSignedMoney(p.openRealizedPnl)}`
+          : null,
     },
     {
       title: 'Total Return',
