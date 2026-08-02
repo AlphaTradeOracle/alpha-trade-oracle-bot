@@ -52,7 +52,9 @@ class DeskMarketRegime(BaseModel):
     btcDominance: float | None = None
     usdtDominance: float | None = None
     fundingStatus: str | None = None
+    fundingRate: float | None = None
     fearGreed: str | None = None
+    fearGreedValue: int | None = None
 
 
 class DeskTrade(BaseModel):

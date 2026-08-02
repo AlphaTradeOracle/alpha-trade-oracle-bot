@@ -70,7 +70,7 @@ class SignalEngineConfig:
     short_min_score: float = 18.0
     regime_filter_enabled: bool = True
     strategy_version_label: str = "default:1"
-    market_regime_score_enabled: bool = True
+    market_regime_score_enabled: bool = False
     market_score_coin_weight: float = 0.60
     market_score_market_weight: float = 0.25
     market_score_funding_weight: float = 0.05

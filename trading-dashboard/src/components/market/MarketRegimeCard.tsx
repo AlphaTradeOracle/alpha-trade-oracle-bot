@@ -60,8 +60,22 @@ export function MarketRegimeCard({ regime }: MarketRegimeCardProps) {
           label="USDT.D"
           value={regime?.usdtDominance != null ? `${regime.usdtDominance.toFixed(1)}%` : 'pending'}
         />
-        <Field label="Funding" value={regime?.fundingStatus ?? 'pending_feed'} />
-        <Field label="Fear & Greed" value={regime?.fearGreed ?? 'pending'} />
+        <Field
+          label="Funding"
+          value={
+            regime?.fundingRate != null
+              ? `${(regime.fundingRate * 100).toFixed(4)}%`
+              : (regime?.fundingStatus ?? 'pending_feed')
+          }
+        />
+        <Field
+          label="Fear & Greed"
+          value={
+            regime?.fearGreedValue != null
+              ? `${regime.fearGreedValue}${regime.fearGreed ? ` · ${regime.fearGreed.replace(/_/g, ' ')}` : ''}`
+              : (regime?.fearGreed ?? 'pending')
+          }
+        />
       </div>
     </section>
   )

@@ -116,6 +116,52 @@ class TestEthereumAnalyzer:
         assert result.metrics.get("relativeStrengthVsBtc20") is not None
 
 
+class TestFearGreedAnalyzer:
+    def test_extreme_fear_is_contrarian_bullish(self) -> None:
+        from app.market.analyzers.fear_greed import FearGreedAnalyzer
+
+        result = FearGreedAnalyzer().analyze(
+            asof=NOW, frames={"payload": {"value": 12, "label": "extreme_fear"}}
+        )
+        assert result.available
+        assert result.score > 0
+        assert result.metrics["value"] == 12
+
+    def test_extreme_greed_is_caution(self) -> None:
+        from app.market.analyzers.fear_greed import FearGreedAnalyzer
+
+        result = FearGreedAnalyzer().analyze(
+            asof=NOW, frames={"payload": {"value": 85, "label": "extreme_greed"}}
+        )
+        assert result.available
+        assert result.score < 0
+
+
+class TestFundingAnalyzer:
+    def test_positive_funding_is_risk_off(self) -> None:
+        from app.market.analyzers.funding import FundingAnalyzer
+
+        result = FundingAnalyzer().analyze(
+            asof=NOW,
+            frames={"payload": {"current": 0.0012, "symbol": "ETHUSDT"}, "btc": {"current": 0.0001}},
+            symbol="ETHUSDT",
+        )
+        assert result.available
+        assert result.score < 0
+        assert result.metrics["extreme"] == "extreme_positive"
+
+    def test_negative_funding_is_risk_on(self) -> None:
+        from app.market.analyzers.funding import FundingAnalyzer
+
+        result = FundingAnalyzer().analyze(
+            asof=NOW,
+            frames={"payload": {"current": -0.0008, "symbol": "BTCUSDT"}},
+            symbol="BTCUSDT",
+        )
+        assert result.available
+        assert result.score > 0
+
+
 class TestMarketRegimeEngine:
     def test_aggregates_btc_and_stubs(self, uptrend_df) -> None:
         engine = MarketRegimeEngine()
@@ -128,6 +174,22 @@ class TestMarketRegimeEngine:
         trade_ctx = trade_market_context_payload(ctx)
         assert "btcBias" in trade_ctx
 
+    def test_feed_extras_populate_funding_and_fng(self, uptrend_df) -> None:
+        engine = MarketRegimeEngine()
+        ctx = engine.analyze(
+            btc_frames={"1h": uptrend_df, "4h": uptrend_df, "1d": uptrend_df},
+            feed_extras={
+                "fear_greed": {"value": 22, "label": "extreme_fear"},
+                "btc_funding": {"current": 0.0002, "symbol": "BTCUSDT"},
+                "coin_funding": {"current": 0.0002, "symbol": "BTCUSDT"},
+            },
+        )
+        assert ctx.components["fear_greed"].available
+        assert ctx.components["funding"].available
+        payload = desk_regime_payload(ctx)
+        assert payload["fearGreedValue"] == 22
+        assert payload["fundingRate"] == pytest.approx(0.0002)
+
     def test_legacy_regime_bridge(self, downtrend_df) -> None:
         engine = MarketRegimeEngine()
         ctx = engine.analyze(
@@ -137,6 +199,28 @@ class TestMarketRegimeEngine:
         assert snap.available
         assert snap.regime is not None
         assert snap.regime.value == "bearish"
+
+    def test_soft_gate_only_blocks_strong_bias(self) -> None:
+        from app.signals.regime import MarketRegime
+
+        engine = MarketRegimeEngine()
+        mild = MarketContext(
+            asof=NOW,
+            bias=MarketBias.BEARISH,
+            market_score=-35.0,
+            available=True,
+            detail="mild",
+        )
+        strong = MarketContext(
+            asof=NOW,
+            bias=MarketBias.STRONG_BEARISH,
+            market_score=-80.0,
+            available=True,
+            detail="strong",
+        )
+        assert engine.to_legacy_regime(mild, soft=True).regime is MarketRegime.NEUTRAL
+        assert engine.to_legacy_regime(strong, soft=True).regime is MarketRegime.BEARISH
+        assert engine.to_legacy_regime(mild, soft=False).regime is MarketRegime.BEARISH
 
 
 class TestSignalEngineMarketBlend:

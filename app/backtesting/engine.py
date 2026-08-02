@@ -96,6 +96,8 @@ class BacktestConfig:
     market_score_liquidations_weight: float = 0.05
     short_min_score: float = 18.0
     regime_filter_enabled: bool = True
+    #: Soft gate: only strong bull/bear block the opposite side.
+    regime_soft_gate_enabled: bool = True
 
     @classmethod
     def from_settings(
@@ -137,6 +139,7 @@ class BacktestConfig:
             "market_score_liquidations_weight": settings.market_score_liquidations_weight,
             "short_min_score": settings.signal_short_min_score,
             "regime_filter_enabled": settings.regime_filter_enabled,
+            "regime_soft_gate_enabled": settings.regime_soft_gate_enabled,
         }
         params.update(overrides)
         return cls(**params)  # type: ignore[arg-type]
@@ -535,7 +538,9 @@ class BacktestEngine:
             market_context = self._market_context_at(candle_time)
             market_regime = None
             if market_context is not None and self._config.regime_filter_enabled:
-                snap = self._market_engine.to_legacy_regime(market_context)
+                snap = self._market_engine.to_legacy_regime(
+                    market_context, soft=self._config.regime_soft_gate_enabled
+                )
                 market_regime = snap.regime if snap.available else None
             return self._signal_engine.generate(
                 self._config.symbol,
@@ -579,7 +584,9 @@ class BacktestEngine:
             market_context = self._market_context_at(cutoff)
             market_regime = None
             if market_context is not None and self._config.regime_filter_enabled:
-                snap = self._market_engine.to_legacy_regime(market_context)
+                snap = self._market_engine.to_legacy_regime(
+                    market_context, soft=self._config.regime_soft_gate_enabled
+                )
                 market_regime = snap.regime if snap.available else None
             return self._signal_engine.generate(
                 self._config.symbol,

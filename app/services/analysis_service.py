@@ -22,6 +22,7 @@ from app.llm.schemas import LLMAnalysisResponse, LLMCallResult
 from app.llm.service import LLMService
 from app.market.analyzers.bitcoin import BitcoinAnalyzer
 from app.market.engine import MarketRegimeEngine
+from app.market.feeds import fetch_binance_funding, fetch_market_feed_bundle
 from app.market.types import MarketContext
 from app.market_data.base import MarketDataProvider
 from app.market_data.types import CandleSeries
@@ -81,6 +82,8 @@ class AnalysisService:
         )
         self._regime_cache: RegimeSnapshot | None = None
         self._market_context_cache: MarketContext | None = None
+        self._market_frames_cache: dict[str, dict] | None = None
+        self._market_feed_base: dict | None = None
         self._market_engine = MarketRegimeEngine(
             bitcoin=BitcoinAnalyzer(
                 timeframes=tuple(
@@ -91,10 +94,10 @@ class AnalysisService:
             )
         )
 
-    async def resolve_market_context(self, *, refresh: bool = False) -> MarketContext | None:
-        """Full multi-TF market snapshot (BTC + ETH + stubs), cached per scan."""
-        if self._market_context_cache is not None and not refresh:
-            return self._market_context_cache
+    async def _ensure_market_frames(self, *, refresh: bool = False) -> dict[str, dict]:
+        """Load BTC/ETH frames once per scan cycle."""
+        if self._market_frames_cache is not None and not refresh:
+            return self._market_frames_cache
 
         btc_symbol = self._settings.regime_btc_symbol.upper()
         eth_symbol = self._settings.market_eth_symbol.upper()
@@ -103,7 +106,6 @@ class AnalysisService:
             for tf in self._settings.market_btc_timeframes.split(",")
             if tf.strip() and tf.strip() != "1w"
         ]
-        # Always ensure regime TF is loaded even if not listed.
         if self._settings.regime_timeframe not in btc_tfs:
             btc_tfs.append(self._settings.regime_timeframe)
 
@@ -128,28 +130,98 @@ class AnalysisService:
         except Exception as exc:
             logger.warning("market_context_eth_load_failed", error=str(exc))
 
+        self._market_frames_cache = {"btc": btc_frames, "eth": eth_frames}
+        return self._market_frames_cache
+
+    async def _ensure_market_feed_base(self, *, refresh: bool = False) -> dict:
+        """Fear & Greed + BTC funding once per scan (not per coin)."""
+        if self._market_feed_base is not None and not refresh:
+            return self._market_feed_base
+        btc_symbol = self._settings.regime_btc_symbol.upper()
+        extras: dict = {}
+        if self._settings.market_fear_greed_enabled or self._settings.market_funding_enabled:
+            try:
+                bundle = await fetch_market_feed_bundle(
+                    coin_symbol=None,
+                    btc_symbol=btc_symbol,
+                    settings=self._settings,
+                )
+                if self._settings.market_fear_greed_enabled:
+                    extras["fear_greed"] = bundle.get("fear_greed")
+                if self._settings.market_funding_enabled:
+                    extras["btc_funding"] = bundle.get("btc_funding")
+                    extras["coin_funding"] = bundle.get("btc_funding")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("market_feed_bundle_failed", error=str(exc))
+        self._market_feed_base = extras
+        return extras
+
+    async def resolve_market_context(
+        self,
+        *,
+        refresh: bool = False,
+        symbol: str | None = None,
+    ) -> MarketContext | None:
+        """Full multi-TF market snapshot (BTC + ETH + live feeds).
+
+        Candle frames and global feeds are cached per scan. Per-coin funding is
+        fetched only when ``symbol`` is set and differs from BTC.
+        """
+        if not self._settings.market_intelligence_enabled:
+            return None
+
+        frames = await self._ensure_market_frames(refresh=refresh)
+        feed_extras = dict(await self._ensure_market_feed_base(refresh=refresh))
+
+        btc_symbol = self._settings.regime_btc_symbol.upper()
+        if (
+            symbol
+            and self._settings.market_funding_enabled
+            and symbol.upper() != btc_symbol
+        ):
+            try:
+                coin_funding = await fetch_binance_funding(
+                    symbol.upper(), settings=self._settings
+                )
+                if coin_funding is not None:
+                    feed_extras["coin_funding"] = coin_funding
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("coin_funding_fetch_failed", symbol=symbol, error=str(exc))
+
+        # Global (no coin) context can be reused; per-coin funding rebuilds cheaply.
+        if (
+            self._market_context_cache is not None
+            and not refresh
+            and (not symbol or symbol.upper() == btc_symbol)
+        ):
+            return self._market_context_cache
+
         context = self._market_engine.analyze(
-            btc_frames=btc_frames or None,
-            eth_frames=eth_frames or None,
+            btc_frames=frames.get("btc") or None,
+            eth_frames=frames.get("eth") or None,
+            symbol=symbol,
+            feed_extras=feed_extras or None,
         )
-        self._market_context_cache = context
+        if not symbol or symbol.upper() == btc_symbol:
+            self._market_context_cache = context
         return context
 
     async def resolve_market_regime(self, *, refresh: bool = False) -> RegimeSnapshot:
-        """BTC-Regime fuer den aktuellen Scan-Zyklus (gecacht).
+        """BTC-/Market-Regime fuer den aktuellen Scan-Zyklus (gecacht).
 
-        Wenn der Market-Regime-Score aktiv ist, wird das Legacy-Gate aus dem
-        Multi-TF MarketContext abgeleitet; sonst bleibt der einfache 4h-Pfad.
+        Preferiert den Multi-TF MarketContext (Soft-Gate). Fallback: einfacher 4h-Pfad.
         """
         if not self._settings.regime_filter_enabled:
             return RegimeSnapshot(None, "regime_filter_disabled", False)
         if self._regime_cache is not None and not refresh:
             return self._regime_cache
 
-        if self._settings.market_regime_score_enabled:
+        if self._settings.market_intelligence_enabled:
             context = await self.resolve_market_context(refresh=refresh)
-            if context is not None:
-                snapshot = self._market_engine.to_legacy_regime(context)
+            if context is not None and context.available:
+                snapshot = self._market_engine.to_legacy_regime(
+                    context, soft=self._settings.regime_soft_gate_enabled
+                )
                 if not snapshot.available:
                     log_regime_degraded(snapshot.detail)
                 self._regime_cache = snapshot
@@ -183,6 +255,8 @@ class AnalysisService:
     def clear_regime_cache(self) -> None:
         self._regime_cache = None
         self._market_context_cache = None
+        self._market_frames_cache = None
+        self._market_feed_base = None
 
     @property
     def provider(self) -> MarketDataProvider:
@@ -270,8 +344,8 @@ class AnalysisService:
         sentiment_score = await self._load_sentiment(normalized)
 
         market_context = None
-        if self._settings.market_regime_score_enabled:
-            market_context = await self.resolve_market_context()
+        if self._settings.market_intelligence_enabled:
+            market_context = await self.resolve_market_context(symbol=normalized)
 
         regime_snapshot = await self.resolve_market_regime()
         market_regime = (

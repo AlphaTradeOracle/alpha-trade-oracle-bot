@@ -20,11 +20,13 @@ from app.signals.regime import MarketRegime, RegimeSnapshot
 
 
 # Weights inside the global market score (BTC-dominant by design).
+# Unavailable components are skipped and the rest renormalized.
 COMPONENT_WEIGHTS = {
-    "bitcoin": 0.55,
+    "bitcoin": 0.50,
     "ethereum": 0.15,
-    "dominance": 0.15,
     "fear_greed": 0.15,
+    "funding": 0.10,
+    "dominance": 0.10,
 }
 
 
@@ -61,18 +63,29 @@ class MarketRegimeEngine:
         btc_frames: dict[str, pd.DataFrame] | None = None,
         eth_frames: dict[str, pd.DataFrame] | None = None,
         symbol: str | None = None,
+        feed_extras: dict | None = None,
     ) -> MarketContext:
         when = asof or utc_now()
         eth_bundle = dict(eth_frames or {})
         if btc_frames and "4h" in btc_frames:
             eth_bundle.setdefault("btc_4h", btc_frames["4h"])
 
+        extras = feed_extras or {}
+        fear_payload = extras.get("fear_greed")
+        coin_funding = extras.get("coin_funding")
+        btc_funding = extras.get("btc_funding")
+
         frames_for = {
             "bitcoin": btc_frames,
             "ethereum": eth_bundle or None,
             "dominance": None,
-            "fear_greed": None,
-            "funding": None,
+            "fear_greed": {"payload": fear_payload} if fear_payload else None,
+            "funding": {
+                "payload": coin_funding,
+                "btc": btc_funding,
+            }
+            if (coin_funding or btc_funding)
+            else None,
             "open_interest": None,
             "liquidations": None,
         }
@@ -97,10 +110,29 @@ class MarketRegimeEngine:
             components=components,
         )
 
-    def to_legacy_regime(self, context: MarketContext) -> RegimeSnapshot:
-        """Bridge to the existing binary paper/scan regime gate."""
+    def to_legacy_regime(
+        self,
+        context: MarketContext,
+        *,
+        soft: bool = True,
+    ) -> RegimeSnapshot:
+        """Bridge to the existing binary paper/scan regime gate.
+
+        soft=True (default): only *strong* biases block the opposite side.
+        Mild bull/bear map to NEUTRAL so both directions remain allowed.
+        """
         if not context.available:
             return RegimeSnapshot(None, context.detail or "market_unavailable", False)
+        if soft:
+            if context.bias is MarketBias.STRONG_BULLISH:
+                regime = MarketRegime.BULLISH
+            elif context.bias is MarketBias.STRONG_BEARISH:
+                regime = MarketRegime.BEARISH
+            else:
+                regime = MarketRegime.NEUTRAL
+            detail = f"{context.detail} | soft_gate bias={context.bias.value}"
+            return RegimeSnapshot(regime, detail, True)
+
         if context.bias in {MarketBias.STRONG_BULLISH, MarketBias.BULLISH}:
             regime = MarketRegime.BULLISH
         elif context.bias in {MarketBias.STRONG_BEARISH, MarketBias.BEARISH}:
@@ -153,9 +185,19 @@ def desk_regime_payload(context: MarketContext) -> dict:
         "btcDominance": (dom.metrics.get("btcDominance") if dom else None),
         "usdtDominance": (dom.metrics.get("usdtDominance") if dom else None),
         "fundingStatus": (
-            "configured" if funding and funding.available else "pending_feed"
+            (funding.metrics.get("extreme") or "normal")
+            if funding and funding.available
+            else "pending_feed"
         ),
-        "fearGreed": (fg.metrics.get("label") if fg else None),
+        "fundingRate": (
+            funding.metrics.get("current") if funding and funding.available else None
+        ),
+        "fearGreed": (
+            fg.metrics.get("label") if fg and fg.available else None
+        ),
+        "fearGreedValue": (
+            fg.metrics.get("value") if fg and fg.available else None
+        ),
     }
 
 

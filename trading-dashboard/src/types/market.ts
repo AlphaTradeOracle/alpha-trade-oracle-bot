@@ -19,7 +19,9 @@ export interface MarketRegimeSnapshot {
   btcDominance?: number | null
   usdtDominance?: number | null
   fundingStatus?: string | null
+  fundingRate?: number | null
   fearGreed?: string | null
+  fearGreedValue?: number | null
 }
 
 export interface TradeMarketContext {

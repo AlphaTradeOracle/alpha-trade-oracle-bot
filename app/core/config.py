@@ -127,8 +127,13 @@ class Settings(BaseSettings):
     regime_filter_enabled: bool = True
     regime_btc_symbol: str = "BTCUSDT"
     regime_timeframe: str = "4h"
-    #: Global Market Regime Filter — blendet Coin-Score mit Gesamtmarkt.
-    market_regime_score_enabled: bool = True
+    #: Soft gate: nur Strong Bullish blockiert Shorts / Strong Bearish blockiert Longs.
+    #: Mild Bull/Bear und Neutral lassen beide Seiten zu.
+    regime_soft_gate_enabled: bool = True
+    #: Market Intelligence vor jedem Trade laden (Desk/Journal), unabhaengig vom Score-Blend.
+    market_intelligence_enabled: bool = True
+    #: Coin-Score mit Gesamtmarkt mischen — Default aus (30d A/B war schlechter).
+    market_regime_score_enabled: bool = False
     market_score_coin_weight: float = 0.60
     market_score_market_weight: float = 0.25
     market_score_funding_weight: float = 0.05
@@ -137,6 +142,9 @@ class Settings(BaseSettings):
     #: BTC Multi-TF fuer MarketRegimeEngine (Komma-getrennt).
     market_btc_timeframes: str = "1h,4h,1d,1w"
     market_eth_symbol: str = "ETHUSDT"
+    #: Externe Feeds fuer Market Intelligence.
+    market_fear_greed_enabled: bool = True
+    market_funding_enabled: bool = True
 
     # --- Scheduler / Daten -------------------------------------------------
     scan_interval_minutes: int = 15

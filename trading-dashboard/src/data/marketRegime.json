@@ -3,12 +3,14 @@
   "status": "bearish",
   "marketScore": -38.5,
   "available": true,
-  "detail": "bitcoin=-42 | ethereum=-28",
+  "detail": "bitcoin=-42 | ethereum=-28 | fear_greed=-15 | funding=-8",
   "btcTrend": "BEARISH",
   "btcBias": "bearish",
   "btcScore": -42.0,
   "btcDominance": null,
   "usdtDominance": null,
-  "fundingStatus": "pending_feed",
-  "fearGreed": null
+  "fundingStatus": "normal",
+  "fundingRate": 0.00012,
+  "fearGreed": "greed",
+  "fearGreedValue": 62
 }
