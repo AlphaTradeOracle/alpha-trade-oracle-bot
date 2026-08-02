@@ -28,7 +28,7 @@ export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
   const tip = getKpiTooltip('Performance')
 
   const card = (
-    <article className="panel relative flex min-h-[108px] w-full flex-col items-center justify-center gap-2 px-4 pb-3.5 pt-4 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
+    <article className="panel relative flex h-[108px] w-full flex-col items-center justify-center gap-1 px-3 pb-2.5 pt-3 text-center transition-colors hover:bg-[var(--color-surface-hover)]">
       <span
         className="absolute right-3 top-3 rounded-lg bg-[var(--color-surface-hover)] p-1.5 text-[var(--color-text-secondary)]"
         aria-hidden
@@ -38,13 +38,13 @@ export function PerformanceKpiCard({ equity }: PerformanceKpiCardProps) {
       <p className="w-full px-6 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
         Performance
       </p>
-      <dl className="grid w-full grid-cols-2 gap-x-2 gap-y-2">
+      <dl className="grid w-full grid-cols-2 gap-x-2 gap-y-0.5">
         {windows.map((win) => (
-          <div key={win.label} className="flex flex-col items-center gap-0.5">
-            <dt className="text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
+          <div key={win.label} className="flex items-baseline justify-center gap-1 leading-none">
+            <dt className="text-[9px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
               {win.label}
             </dt>
-            <dd className={`tabular text-xs font-semibold sm:text-[0.8rem] ${toneClass(win.pct)}`}>
+            <dd className={`tabular text-[11px] font-semibold ${toneClass(win.pct)}`}>
               {formatWindowPct(win.pct)}
             </dd>
           </div>
