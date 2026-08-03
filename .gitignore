@@ -33,6 +33,7 @@ assets_db_export.txt
 scripts/*_out.json
 scripts/paper_dashboard.json
 scripts/_*.py
+!scripts/_vps_*.py
 scripts/_vps_cleanup*.sh
 
 # Cursor VPS deploy key (never commit)
