@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     #: false = LONG/SHORT ab Score-Schwelle erlaubt (Frequenz-Test 2026-07; ADX/Score bleiben).
     signal_require_strong: bool = False
     #: Fuer Shorts: Score darf maximal so hoch sein (Spiegel zu min_score).
-    signal_short_max_score: float = 25.0
+    signal_short_max_score: float = 30.0
     signal_cooldown_minutes: int = 120
     signal_expiry_multiplier: int = 24
     signal_rsi_long_max: float = 75.0
