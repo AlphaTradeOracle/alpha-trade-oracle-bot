@@ -92,6 +92,7 @@ class UniverseService:
         *,
         settings: Settings | None = None,
         leverage: LeverageCoverageClient | None = None,
+        perp_provider: MarketDataProvider | None = None,
     ) -> None:
         if isinstance(provider, dict):
             self._providers = provider
@@ -101,6 +102,8 @@ class UniverseService:
         self._settings = settings or get_settings()
         self._exchange_order = self._resolve_exchange_order()
         self._leverage = leverage
+        # Same router paper fills use — source of truth for "we can get perp data".
+        self._perp_provider = perp_provider
 
     def _resolve_exchange_order(self) -> list[str]:
         """Konfigurierte Reihenfolge plus alle vorhandenen Provider-Instanzen."""
@@ -171,6 +174,17 @@ class UniverseService:
                 result.skipped_duplicate += 1
                 continue
 
+            # Re-check after spot mapping: CG ticker / exchange base can diverge
+            # (e.g. GALA vs GALAX). Also require the paper PerpRouter can resolve.
+            if leverage_bases is not None:
+                mapped_base = (info.base_asset or "").upper().strip()
+                if not base_has_leverage(mapped_base, leverage_bases):
+                    result.skipped_no_leverage += 1
+                    continue
+                if not await self._verify_perp_route(symbol):
+                    result.skipped_no_leverage += 1
+                    continue
+
             verdict = await self._verify_tradability(symbol, exchange)
             if verdict == "no_candles":
                 result.skipped_no_candles += 1
@@ -226,6 +240,25 @@ class UniverseService:
             **result.as_summary(),
         )
         return result
+
+    async def _verify_perp_route(self, symbol: str) -> bool:
+        """True if paper perp router can resolve this desk symbol."""
+        provider = self._perp_provider
+        if provider is None:
+            return True
+        resolve = getattr(provider, "resolve_venue", None)
+        if resolve is None:
+            return True
+        try:
+            await resolve(symbol)
+            return True
+        except SymbolNotFoundError:
+            logger.info("universe_symbol_without_perp_route", symbol=symbol)
+            return False
+        except Exception as exc:
+            # Don't drop the coin on a transient venue outage.
+            logger.warning("universe_perp_route_verify_failed", symbol=symbol, error=str(exc))
+            return True
 
     async def _verify_tradability(self, symbol: str, exchange: str) -> str:
         """Pruefen, ob der Provider Kerzen liefert und das Paar liquide genug ist.

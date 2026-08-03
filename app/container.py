@@ -111,10 +111,15 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
         sentiment_service=sentiment_service,
     )
     backtest_service = BacktestService(provider, settings=cfg)
-    universe_service = UniverseService(universe_providers, coingecko, settings=cfg)
+    paper_price_provider = create_paper_price_provider(cfg)
+    universe_service = UniverseService(
+        universe_providers,
+        coingecko,
+        settings=cfg,
+        perp_provider=paper_price_provider if cfg.universe_require_leverage else None,
+    )
     data_retention = DataRetentionService(universe_providers, settings=cfg)
     paper_trading = PaperTradingService(settings=cfg)
-    paper_price_provider = create_paper_price_provider(cfg)
 
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
