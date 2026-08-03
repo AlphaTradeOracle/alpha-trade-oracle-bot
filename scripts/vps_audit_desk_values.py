@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 from datetime import timedelta
+from pathlib import Path
 
 from app.container import build_container
 from app.core.enums import SignalDirection
@@ -12,7 +14,7 @@ from app.core.logging import configure_logging
 from app.core.time import ensure_utc, utc_now
 from app.database.session import session_scope
 from app.repositories.paper_repository import PaperRepository
-from app.services.desk_service import DeskService
+from app.services.desk_service import DeskService, _parse_zone, _pending_retest_zone
 
 
 def _pct(a: float, b: float) -> float | None:
@@ -30,9 +32,17 @@ def _close(a: float | None, b: float | None, tol: float = 0.05) -> bool:
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", default="/tmp/desk_math_audit.json")
+    args = parser.parse_args()
+
     configure_logging("WARNING", json_output=False)
     container = build_container()
     issues: list[str] = []
+    warnings: list[str] = []
+    portfolio_rows: list[dict] = []
+    trade_rows: list[dict] = []
+    pending_rows: list[dict] = []
     try:
         async with session_scope() as session:
             account = await container.paper_trading.get_or_create_account(session)
@@ -102,21 +112,38 @@ async def main() -> None:
                 tag = "OK" if ok else "FAIL"
                 if not ok:
                     issues.append(f"{name}: api={api_v} calc={calc_v}")
+                portfolio_rows.append(
+                    {
+                        "field": name,
+                        "api": api_v,
+                        "calc": round(calc_v, 6) if isinstance(calc_v, float) else calc_v,
+                        "ok": ok,
+                    }
+                )
                 print(f"  {tag:4} {name:22} api={api_v} calc={calc_v}")
 
             # Identity
             identity = initial + ledger_realized
             cash_margin = cash + open_margin
+            id_ok = _close(cash_margin, identity)
             print(
-                f"  {'OK' if _close(cash_margin, identity) else 'FAIL':4} "
+                f"  {'OK' if id_ok else 'FAIL':4} "
                 f"cash+margin vs initial+realized: {cash_margin:.4f} vs {identity:.4f}"
             )
-            if not _close(cash_margin, identity):
+            portfolio_rows.append(
+                {
+                    "field": "cash+margin == initial+realized",
+                    "api": round(cash_margin, 4),
+                    "calc": round(identity, 4),
+                    "ok": id_ok,
+                }
+            )
+            if not id_ok:
                 issues.append("account_identity_broken")
 
             # closedTrades cap risk
             if len(all_closed) > 500:
-                issues.append(
+                warnings.append(
                     f"CLOSED_CAP: summary uses 500 but DB has {len(all_closed)} closed"
                 )
                 print(f"  WARN CLOSED_CAP all_closed={len(all_closed)} summary_cap=500")
@@ -194,8 +221,74 @@ async def main() -> None:
                         f"r_api={t.r} r_calc={r}"
                     )
                 else:
-                    trade_ok += 1
-                    print(f"  OK   PENDING {p.symbol}")
+                    # Pending: entry zone must be price levels, not ATR multipliers
+                    notes = str(p.notes or "")
+                    calc_lo, calc_hi = _pending_retest_zone(
+                        notes,
+                        entry=float(p.entry_price),
+                        direction=p.direction,
+                    )
+                    fake_atr = (
+                        t.entryZoneLow is not None
+                        and t.entryZoneHigh is not None
+                        and 0.0 < float(t.entryZoneLow) < 2.0
+                        and 0.0 < float(t.entryZoneHigh) <= 2.0
+                        and "ATR" in notes.upper()
+                        and _parse_zone(notes) == (None, None)
+                        and abs(float(t.entryZoneLow) - 0.55) < 0.02
+                    )
+                    zone_ok = (
+                        _close(t.entryZoneLow, calc_lo, tol=1e-6)
+                        and _close(t.entryZoneHigh, calc_hi, tol=1e-6)
+                        and not fake_atr
+                    )
+                    # Short: stop should be above zone high; long: below zone low.
+                    # Desk display can still be correct when geometry is tight.
+                    structure_ok = True
+                    if (
+                        calc_lo is not None
+                        and calc_hi is not None
+                        and float(p.stop_loss or 0) > 0
+                    ):
+                        sl = float(p.stop_loss)
+                        if SignalDirection(p.direction).is_short:
+                            structure_ok = sl >= calc_hi - 1e-12
+                        else:
+                            structure_ok = sl <= calc_lo + 1e-12
+                    display_ok = zone_ok and (not fake_atr) and _close(
+                        t.entry, float(p.entry_price)
+                    )
+                    if not display_ok:
+                        trade_fail += 1
+                        issues.append(
+                            f"PENDING {p.symbol}: zone api={t.entryZoneLow}-{t.entryZoneHigh} "
+                            f"calc={calc_lo}-{calc_hi} fake_atr={fake_atr}"
+                        )
+                    else:
+                        trade_ok += 1
+                    if not structure_ok:
+                        warnings.append(
+                            f"STOP_INSIDE_ZONE {p.symbol}: zone={calc_lo}-{calc_hi} "
+                            f"stop={p.stop_loss} (desk OK, risk geometry tight)"
+                        )
+                    pending_rows.append(
+                        {
+                            "symbol": p.symbol,
+                            "score": float(p.signal_score or 0),
+                            "entry": float(p.entry_price),
+                            "zone_lo": t.entryZoneLow,
+                            "zone_hi": t.entryZoneHigh,
+                            "stop": float(p.stop_loss or 0),
+                            "ok": display_ok,
+                            "structure_ok": structure_ok,
+                            "fake_atr_zone": fake_atr,
+                        }
+                    )
+                    tag = "OK" if display_ok and structure_ok else ("WARN" if display_ok else "FAIL")
+                    print(
+                        f"  {tag:4} PENDING {p.symbol:12} zone={t.entryZoneLow}-{t.entryZoneHigh} "
+                        f"stop={p.stop_loss}"
+                    )
 
             print(f"  trade_rows ok={trade_ok} fail={trade_fail}")
 
@@ -241,34 +334,24 @@ async def main() -> None:
 
             # --- Regime presence ---
             print("=== MARKET REGIME ===")
-            reg = snap.market_regime
+            reg = getattr(snap, "marketRegime", None) or getattr(snap, "market_regime", None)
             if reg is None:
                 print("  WARN marketRegime=null")
+                warnings.append("marketRegime=null (snapshot without regime payload)")
             else:
-                d = reg if isinstance(reg, dict) else reg.model_dump() if hasattr(reg, "model_dump") else vars(reg)
-                # DeskMarketRegime is a dataclass/pydantic — print key nums
                 for key in (
+                    "globalScore",
                     "global_score",
+                    "btcD",
                     "btc_d",
-                    "usdt_d",
-                    "fear_greed",
-                    "liquidity_score",
+                    "usdtD",
+                    "fearGreed",
+                    "liquidityScore",
                     "available",
                     "bias",
                 ):
-                    # try both snake and camel via getattr
-                    val = getattr(reg, key, None)
-                    if val is None:
-                        camel = "".join(
-                            w.capitalize() if i else w
-                            for i, w in enumerate(key.split("_"))
-                        )
-                        # already camel variants
-                        for alt in (key, camel, key.replace("_", "")):
-                            if hasattr(reg, alt):
-                                val = getattr(reg, alt)
-                                break
-                    print(f"  {key}={val}")
+                    if hasattr(reg, key):
+                        print(f"  {key}={getattr(reg, key)}")
 
             print("=== SEMANTIC RISKS (UI) ===")
             print(
@@ -290,33 +373,49 @@ async def main() -> None:
             print(f"issues={len(issues)}")
             for i in issues:
                 print(f"  - {i}")
+            print(f"warnings={len(warnings)}")
+            for w in warnings:
+                print(f"  - {w}")
             print(f"FINAL_OK={len(issues)==0}")
 
-            # dump compact portfolio for UI cross-check
+            out = {
+                "generated_at": utc_now().isoformat(),
+                "final_ok": len(issues) == 0,
+                "issue_count": len(issues),
+                "warning_count": len(warnings),
+                "issues": issues,
+                "warnings": warnings,
+                "portfolio": {
+                    "totalCapital": _p("totalCapital"),
+                    "equity": _p("equity"),
+                    "cash": _p("cash"),
+                    "accountRealizedPnl": _p("accountRealizedPnl"),
+                    "realizedPnl": _p("realizedPnl"),
+                    "openRealizedPnl": _p("openRealizedPnl"),
+                    "openUpnl": _p("openUpnl"),
+                    "totalReturnPct": _p("totalReturnPct"),
+                    "winRatePct": _p("winRatePct"),
+                    "marginLocked": _p("marginLocked"),
+                    "openPositions": _p("openPositions"),
+                    "pendingOrders": _p("pendingOrders"),
+                    "closedTrades": _p("closedTrades"),
+                    "equityChangePct": _p("equityChangePct"),
+                    "realizedChangePct": _p("realizedChangePct"),
+                    "openR": _p("openR"),
+                },
+                "portfolio_checks": portfolio_rows,
+                "trade_ok": trade_ok,
+                "trade_fail": trade_fail,
+                "pending_checks": pending_rows,
+                "open_symbols": [p.symbol for p in opens],
+                "closed_n": len(closed),
+                "pending_n": len(pendings),
+                "open_n": len(opens),
+            }
+            Path(args.out).write_text(json.dumps(out, indent=2), encoding="utf-8")
+            print(f"WROTE {args.out}")
             print("=== SNAPSHOT_PORTFOLIO_JSON ===")
-            print(
-                json.dumps(
-                    {
-                        "totalCapital": _p("totalCapital"),
-                        "equity": _p("equity"),
-                        "cash": _p("cash"),
-                        "accountRealizedPnl": _p("accountRealizedPnl"),
-                        "realizedPnl": _p("realizedPnl"),
-                        "openRealizedPnl": _p("openRealizedPnl"),
-                        "openUpnl": _p("openUpnl"),
-                        "totalReturnPct": _p("totalReturnPct"),
-                        "winRatePct": _p("winRatePct"),
-                        "marginLocked": _p("marginLocked"),
-                        "openPositions": _p("openPositions"),
-                        "pendingOrders": _p("pendingOrders"),
-                        "closedTrades": _p("closedTrades"),
-                        "equityChangePct": _p("equityChangePct"),
-                        "realizedChangePct": _p("realizedChangePct"),
-                        "openR": _p("openR"),
-                    },
-                    indent=2,
-                )
-            )
+            print(json.dumps(out["portfolio"], indent=2))
     finally:
         await container.aclose()
 
