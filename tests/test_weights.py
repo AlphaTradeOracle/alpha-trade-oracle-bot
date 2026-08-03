@@ -16,13 +16,15 @@ class TestWeightSum:
     def test_all_eight_categories_are_covered(self) -> None:
         assert set(DEFAULT_WEIGHTS.as_dict()) == set(ScoreCategory)
 
-    def test_paper_forward_weights_match_simulation(self) -> None:
-        """Paper-Forward-Gewichte aus reduce_multi_timeframe (sentiment=0)."""
-        assert DEFAULT_WEIGHTS.trend == pytest.approx(0.273)
+    def test_default_weights_match_v1_structure_mtf(self) -> None:
+        """Default = v1: Structure 16.38%, MTF 10.46% (18/18 reverted)."""
+        assert DEFAULT_WEIGHTS.trend == pytest.approx(0.2730)
         assert DEFAULT_WEIGHTS.momentum == pytest.approx(0.2184)
         assert DEFAULT_WEIGHTS.volume == pytest.approx(0.1638)
         assert DEFAULT_WEIGHTS.market_structure == pytest.approx(0.1638)
         assert DEFAULT_WEIGHTS.multi_timeframe == pytest.approx(0.1046)
+        assert DEFAULT_WEIGHTS.volatility == pytest.approx(0.0437)
+        assert DEFAULT_WEIGHTS.risk_reward == pytest.approx(0.0327)
         assert DEFAULT_WEIGHTS.sentiment == pytest.approx(0.0)
 
     def test_rejects_weights_that_do_not_sum_to_one(self) -> None:

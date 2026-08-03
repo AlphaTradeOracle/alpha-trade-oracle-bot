@@ -36,6 +36,11 @@ from app.models.market import Asset
 from app.repositories.asset_repository import AssetRepository
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
+BTC_WEIGHT_PRESETS: dict[str, dict[str, float]] = {
+    "old": {"1w": 0.35, "1d": 0.30, "4h": 0.25, "1h": 0.10, "12h": 0.20, "15m": 0.05},
+    "new": {"1w": 0.10, "1d": 0.15, "4h": 0.35, "1h": 0.40, "12h": 0.20, "15m": 0.05},
+}
+
 
 def _iso(dt: datetime | None) -> str | None:
     if dt is None:
@@ -46,7 +51,7 @@ def _iso(dt: datetime | None) -> str | None:
 
 
 def _paper_config_kwargs(settings, *, capital: float, fee: float, slip: float) -> dict[str, Any]:
-    return {
+    raw: dict[str, Any] = {
         "timeframe": "1h",
         "fee_percent": fee,
         "slippage_percent": slip,
@@ -75,16 +80,31 @@ def _paper_config_kwargs(settings, *, capital: float, fee: float, slip: float) -
         "retest_zone_far": settings.paper_retest_zone_far,
         "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
         "retest_min_bars_in_zone": settings.paper_retest_min_bars_in_zone,
-        "retest_trendline_gate": settings.signal_trendline_gate_enabled,
-        "retest_trendline_buffer_atr": settings.signal_trendline_buffer_atr,
-        "retest_trendline_lookback": settings.signal_trendline_lookback,
-        "retest_trendline_min_points": settings.signal_trendline_min_points,
-        "retest_trendline_min_r2": settings.signal_trendline_min_r2,
-        "retest_trendline_min_clearance_atr": settings.signal_trendline_min_clearance_atr,
+        # Optional: only present on builds with trendline gate.
+        "retest_trendline_gate": bool(
+            getattr(settings, "signal_trendline_gate_enabled", False)
+        ),
+        "retest_trendline_buffer_atr": float(
+            getattr(settings, "signal_trendline_buffer_atr", 0.15)
+        ),
+        "retest_trendline_lookback": int(
+            getattr(settings, "signal_trendline_lookback", 120)
+        ),
+        "retest_trendline_min_points": int(
+            getattr(settings, "signal_trendline_min_points", 3)
+        ),
+        "retest_trendline_min_r2": float(
+            getattr(settings, "signal_trendline_min_r2", 0.85)
+        ),
+        "retest_trendline_min_clearance_atr": float(
+            getattr(settings, "signal_trendline_min_clearance_atr", 0.25)
+        ),
         "short_max_score": settings.signal_short_max_score,
         "short_min_score": settings.signal_short_min_score,
         "weights": DEFAULT_WEIGHTS.without_sentiment(),
     }
+    known = set(BacktestConfig.__dataclass_fields__)
+    return {k: v for k, v in raw.items() if k in known}
 
 
 def _serialize_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -220,6 +240,12 @@ def _run_symbol_job(payload: dict[str, Any]) -> dict[str, Any]:
     symbol = payload["symbol"]
     rank = payload["rank"]
     try:
+        weights = payload.get("btc_tf_weights")
+        if isinstance(weights, dict) and weights:
+            from app.market_regime import bitcoin as btc_mod
+
+            btc_mod.DEFAULT_TF_WEIGHTS.clear()
+            btc_mod.DEFAULT_TF_WEIGHTS.update({str(k): float(v) for k, v in weights.items()})
         df = _records_to_df(payload["frame"])
         btc: dict[str, pd.DataFrame] = {}
         for tf, recs in (payload.get("btc_frames") or {}).items():
@@ -370,7 +396,20 @@ def _write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--top", type=int, default=400)
-    parser.add_argument("--days", type=int, default=90)
+    parser.add_argument("--days", type=float, default=90)
+    parser.add_argument(
+        "--since",
+        type=str,
+        default="",
+        help="ISO start time (UTC); overrides --days when set",
+    )
+    parser.add_argument(
+        "--btc-weights",
+        type=str,
+        default="current",
+        choices=("current", "old", "new"),
+        help="BTC MTF weight preset for regime blend/veto",
+    )
     parser.add_argument("--capital", type=float, default=0.0)
     parser.add_argument("--fee", type=float, default=-1.0)
     parser.add_argument("--slippage", type=float, default=0.0)
@@ -384,7 +423,15 @@ async def main() -> int:
     capital = float(args.capital or settings.paper_initial_balance or 5000.0)
     fee = float(settings.paper_fee_percent if args.fee < 0 else args.fee)
     end = utc_now()
-    start = end - timedelta(days=int(args.days))
+    if str(args.since).strip():
+        start = datetime.fromisoformat(str(args.since).replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        else:
+            start = start.astimezone(timezone.utc)
+    else:
+        start = end - timedelta(days=float(args.days))
+    btc_tf_weights = BTC_WEIGHT_PRESETS.get(str(args.btc_weights))
     base_kwargs = _serialize_kwargs(
         _paper_config_kwargs(settings, capital=capital, fee=fee, slip=float(args.slippage))
     )
@@ -392,16 +439,35 @@ async def main() -> int:
     symbols = await _load_symbols(args.top)
     t0 = time.time()
     print(
-        f"Top{len(symbols)} × {args.days}d paper-parity · workers={args.workers} · "
-        f"fee={fee}% slip={args.slippage}% capital={capital} · {start.date()}→{end.date()}",
+        f"Top{len(symbols)} paper-parity · btc_weights={args.btc_weights} · "
+        f"workers={args.workers} · fee={fee}% slip={args.slippage}% capital={capital} · "
+        f"{start.isoformat()}→{end.isoformat()}",
         file=sys.stderr,
         flush=True,
     )
+    if btc_tf_weights:
+        print(f"  BTC TF weights: {btc_tf_weights}", file=sys.stderr, flush=True)
 
-    print("Loading BTC 4h regime...", file=sys.stderr, flush=True)
-    btc_df = await _load_frame(settings.regime_btc_symbol.upper(), "4h", start=start, end=end)
-    btc_frames_ser = {"4h": _df_to_records(btc_df)} if btc_df is not None else {}
-    print(f"  BTC 4h bars={0 if btc_df is None else len(btc_df)}", file=sys.stderr, flush=True)
+    btc_tfs = tuple(
+        tf.strip()
+        for tf in str(
+            getattr(settings, "market_regime_btc_timeframes", "1h,4h,1d,1w")
+        ).split(",")
+        if tf.strip()
+    ) or ("1h", "4h", "1d", "1w")
+    print(f"Loading BTC regime TFs {btc_tfs}...", file=sys.stderr, flush=True)
+    btc_frames_ser: dict[str, list[dict[str, Any]]] = {}
+    for tf in btc_tfs:
+        btc_df = await _load_frame(
+            settings.regime_btc_symbol.upper(), tf, start=start, end=end
+        )
+        if btc_df is not None:
+            btc_frames_ser[tf] = _df_to_records(btc_df)
+        print(
+            f"  BTC {tf} bars={0 if btc_df is None else len(btc_df)}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     print("Preloading 1h frames...", file=sys.stderr, flush=True)
     jobs: list[dict[str, Any]] = []
@@ -418,6 +484,7 @@ async def main() -> int:
                 "frame": _df_to_records(df),
                 "btc_frames": btc_frames_ser,
                 "base_kwargs": base_kwargs,
+                "btc_tf_weights": btc_tf_weights,
             }
         )
         if idx % 50 == 0 or idx == len(symbols):
@@ -463,9 +530,9 @@ async def main() -> int:
                     "done": done,
                     "total": len(jobs),
                     "window": {
-                        "days": int(args.days),
-                        "start": start.date().isoformat(),
-                        "end": end.date().isoformat(),
+                        "days": round((end - start).total_seconds() / 86400.0, 2),
+                        "start": start.isoformat(),
+                        "end": end.isoformat(),
                     },
                     "config": {
                         "top_n": len(symbols),
@@ -474,6 +541,8 @@ async def main() -> int:
                         "capital": capital,
                         "fee_percent": fee,
                         "slippage_percent": float(args.slippage),
+                        "btc_weights": args.btc_weights,
+                        "btc_tf_weights": btc_tf_weights,
                         "paper_max_open_positions": settings.paper_max_open_positions,
                         "paper_max_open_per_direction": settings.paper_max_open_per_direction,
                     },
@@ -515,9 +584,13 @@ async def main() -> int:
 
     payload = {
         "generated_at": utc_now().isoformat(),
-        "label": "top400_paper_parity_90d",
+        "label": f"top400_paper_parity_{args.btc_weights}",
         "runtime_seconds": round(time.time() - t0, 1),
-        "window": {"days": int(args.days), "start": start.date().isoformat(), "end": end.date().isoformat()},
+        "window": {
+            "days": round((end - start).total_seconds() / 86400.0, 2),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+        },
         "config": {
             "top_n": len(symbols),
             "jobs": len(jobs),
@@ -526,7 +599,9 @@ async def main() -> int:
             "fee_percent": fee,
             "slippage_percent": float(args.slippage),
             "timeframe": "1h",
-            "btc_regime": "4h",
+            "btc_weights": args.btc_weights,
+            "btc_tf_weights": btc_tf_weights,
+            "btc_regime_tfs": list(btc_frames_ser.keys()),
             "retest_entry_enabled": settings.backtest_retest_entry_enabled,
             "signal_min_score": settings.signal_min_score,
             "signal_short_min_score": settings.signal_short_min_score,
@@ -538,7 +613,7 @@ async def main() -> int:
             "paper_max_open_positions": settings.paper_max_open_positions,
             "paper_max_open_per_direction": settings.paper_max_open_per_direction,
             "candle_source": "db",
-            "note": "1h primary + BTC 4h regime; paper caps on combined book equity.",
+            "note": "1h primary + BTC MTF regime; paper caps on combined book equity.",
         },
         "kpi_paper_book": kpi,
         "independent": {

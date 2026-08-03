@@ -17,8 +17,8 @@ from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 logger = get_logger(__name__)
 
 NOTES = (
-    "Paper forward test (2026-07-30): MTF -5pp, Trend +1.5pp — "
-    "sim variant reduce_multi_timeframe"
+    "Revert to v1 weights (2026-08-03): Structure 16.38% + MTF 10.46% "
+    "(18/18 counterfactual underperformed baseline)"
 )
 
 

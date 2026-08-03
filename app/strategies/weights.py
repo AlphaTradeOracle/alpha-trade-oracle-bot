@@ -15,10 +15,8 @@ WEIGHT_SUM_TOLERANCE = 1e-6
 class StrategyWeights(BaseModel):
     """Gewichtung der Score-Kategorien.
 
-    Paper-Forward-Test ab v2 (2026-07-30): MTF −5pp, Trend +1.5pp gegenueber der
-    effektiven Baseline (``without_sentiment``). Variantenname in der Simulation:
-    ``reduce_multi_timeframe``. Volume und Structure unveraendert relativ zur
-    Baseline; ``sentiment`` ist 0, weil standardmaessig deaktiviert.
+    Zurueck auf v1 (pre-18/18): Structure 16.38%, MTF 10.46%. ``sentiment`` bleibt 0.
+    Die 18/18-Variante (v2) lag in der Counterfactual-Sim unter Baseline.
 
     Die Klasse ist unveraenderlich. Eine geaenderte Gewichtung ist immer eine
     neue Instanz und wird als neue Strategieversion persistiert — nie als
@@ -27,7 +25,7 @@ class StrategyWeights(BaseModel):
 
     model_config = {"frozen": True}
 
-    trend: float = Field(default=0.273, ge=0.0, le=1.0)
+    trend: float = Field(default=0.2730, ge=0.0, le=1.0)
     momentum: float = Field(default=0.2184, ge=0.0, le=1.0)
     volume: float = Field(default=0.1638, ge=0.0, le=1.0)
     market_structure: float = Field(default=0.1638, ge=0.0, le=1.0)
