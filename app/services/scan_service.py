@@ -121,6 +121,7 @@ class ScanService:
         self._analysis.clear_regime_cache()
         market_snap = await self._analysis.resolve_market_regime_snapshot(refresh=True)
         regime_snapshot = await self._analysis.resolve_market_regime()
+        btc_rise_block = await self._analysis.resolve_btc_rise_short_block(refresh=True)
         if self._settings.regime_filter_enabled or self._settings.market_regime_enabled:
             logger.info(
                 "market_regime_resolved",
@@ -130,6 +131,8 @@ class ScanService:
                 available=regime_snapshot.available,
                 detail=regime_snapshot.detail,
             )
+        if btc_rise_block:
+            logger.info("btc_rise_short_block_scan", detail=btc_rise_block)
 
         if concurrency <= 1:
             for symbol in targets:
@@ -140,6 +143,7 @@ class ScanService:
                     dispatch=dispatch,
                     universe_mode=universe_mode,
                     regime_snapshot=regime_snapshot,
+                    btc_rise_block_reason=btc_rise_block,
                 )
         else:
             await self._scan_targets_concurrent(
@@ -148,6 +152,7 @@ class ScanService:
                 dispatch=dispatch,
                 universe_mode=universe_mode,
                 regime_snapshot=regime_snapshot,
+                btc_rise_block_reason=btc_rise_block,
                 concurrency=concurrency,
             )
 
@@ -177,6 +182,7 @@ class ScanService:
         dispatch: bool,
         universe_mode: bool,
         regime_snapshot: RegimeSnapshot | None,
+        btc_rise_block_reason: str | None,
         concurrency: int,
     ) -> None:
         """Analyse Symbole parallel — je Worker eigene DB-Session (AsyncSession nicht shareable)."""
@@ -195,6 +201,7 @@ class ScanService:
                             dispatch=dispatch,
                             universe_mode=universe_mode,
                             regime_snapshot=regime_snapshot,
+                            btc_rise_block_reason=btc_rise_block_reason,
                         )
                         async with lock:
                             result.symbols_scanned += local.symbols_scanned
@@ -225,6 +232,7 @@ class ScanService:
         dispatch: bool,
         universe_mode: bool,
         regime_snapshot: RegimeSnapshot | None,
+        btc_rise_block_reason: str | None = None,
     ) -> None:
         result.symbols_scanned += 1
         try:
@@ -235,6 +243,7 @@ class ScanService:
                 dispatch=dispatch,
                 universe_mode=universe_mode,
                 regime_snapshot=regime_snapshot,
+                btc_rise_block_reason=btc_rise_block_reason,
             )
         except AlphaTradeOracleError as exc:
             result.failures.append((symbol, str(exc)))
@@ -264,6 +273,7 @@ class ScanService:
         dispatch: bool,
         universe_mode: bool,
         regime_snapshot: RegimeSnapshot | None = None,
+        btc_rise_block_reason: str | None = None,
     ) -> None:
         outcome = await self._analysis.analyze(
             symbol,
@@ -319,6 +329,7 @@ class ScanService:
                 session,
                 outcome,
                 regime_snapshot=regime_snapshot,
+                btc_rise_block_reason=btc_rise_block_reason,
             )
             if paper_position is None:
                 logger.info(

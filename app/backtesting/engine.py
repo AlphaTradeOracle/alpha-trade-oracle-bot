@@ -31,6 +31,7 @@ from app.indicators.engine import IndicatorEngine
 from app.market_data.types import Candle
 from app.signals.engine import SignalEngine, SignalEngineConfig
 from app.market_regime import MarketRegimeEngine, bias_to_market_regime
+from app.signals.btc_momentum import BtcRiseThresholds, btc_rising_short_block_reason
 from app.signals.regime import regime_from_indicators
 from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry, levels_from_entry_sl
 from app.signals.risk import RiskConfig, RiskManager
@@ -39,6 +40,14 @@ from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
 if TYPE_CHECKING:
     from app.core.config import Settings
+
+
+@dataclass(frozen=True)
+class _BtcOhlc:
+    open: float
+    close: float
+    is_closed: bool = True
+
 
 logger = get_logger(__name__)
 
@@ -104,6 +113,16 @@ class BacktestConfig:
     retest_trendline_min_clearance_atr: float = 0.0
     #: Nach TP1 Hold-Fenster verlaengern (wie Paper).
     expiry_multiplier_after_tp1: int = 48
+    #: BTC rising-momentum short pause (independent of regime label).
+    btc_rise_short_block_enabled: bool = False
+    btc_rise_1h_pct: float = 0.15
+    btc_rise_3h_pct: float = 0.35
+    btc_rise_4h_pct: float = 0.30
+    btc_rise_6h_pct: float = 0.50
+    btc_rise_use_1h: bool = True
+    btc_rise_use_3h: bool = True
+    btc_rise_use_4h: bool = True
+    btc_rise_use_6h: bool = True
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -153,6 +172,15 @@ class BacktestConfig:
             "expiry_multiplier_after_tp1": settings.paper_expiry_multiplier_after_tp1,
             "short_max_score": settings.signal_short_max_score,
             "short_min_score": settings.signal_short_min_score,
+            "btc_rise_short_block_enabled": settings.btc_rise_short_block_enabled,
+            "btc_rise_1h_pct": settings.btc_rise_1h_pct,
+            "btc_rise_3h_pct": settings.btc_rise_3h_pct,
+            "btc_rise_4h_pct": settings.btc_rise_4h_pct,
+            "btc_rise_6h_pct": settings.btc_rise_6h_pct,
+            "btc_rise_use_1h": settings.btc_rise_use_1h,
+            "btc_rise_use_3h": settings.btc_rise_use_3h,
+            "btc_rise_use_4h": settings.btc_rise_use_4h,
+            "btc_rise_use_6h": settings.btc_rise_use_6h,
             "weights": weights,
         }
         params.update(overrides)
@@ -307,6 +335,44 @@ class BacktestEngine:
         if not sliced:
             return None
         return self._regime_engine.resolve_from_btc_frames(sliced)
+
+    def _btc_rise_reason_at(self, cutoff: datetime) -> str | None:
+        """BTC rising short-pause reason at bar time (closed bars only via cutoff)."""
+        if not self._config.btc_rise_short_block_enabled or not self._btc_mtf_frames:
+            return None
+        thresholds = BtcRiseThresholds(
+            enabled=True,
+            pct_1h=self._config.btc_rise_1h_pct,
+            pct_3h=self._config.btc_rise_3h_pct,
+            pct_4h=self._config.btc_rise_4h_pct,
+            pct_6h=self._config.btc_rise_6h_pct,
+            use_1h=self._config.btc_rise_use_1h,
+            use_3h=self._config.btc_rise_use_3h,
+            use_4h=self._config.btc_rise_use_4h,
+            use_6h=self._config.btc_rise_use_6h,
+        )
+
+        def _rows(tf: str, *, need: int) -> list[_BtcOhlc]:
+            frame = self._btc_mtf_frames.get(tf) if self._btc_mtf_frames else None
+            if frame is None or frame.empty:
+                return []
+            window = frame.loc[frame.index <= cutoff].tail(need)
+            out: list[_BtcOhlc] = []
+            for _, row in window.iterrows():
+                out.append(
+                    _BtcOhlc(
+                        open=float(row["open"]),
+                        close=float(row["close"]),
+                        is_closed=True,
+                    )
+                )
+            return out
+
+        return btc_rising_short_block_reason(
+            _rows("1h", need=8),
+            _rows("4h", need=2),
+            thresholds=thresholds,
+        )
 
     def _run_single(self, df: pd.DataFrame) -> BacktestOutcome:
         """Backtest auf einem OHLCV-DataFrame ausfuehren.
@@ -554,6 +620,7 @@ class BacktestEngine:
                 data_quality=100.0,
                 now=candle_time,
                 market_regime=market_regime,
+                btc_rise_block_reason=self._btc_rise_reason_at(candle_time),
             )
             if market_snap is not None and market_snap.available:
                 result.coin_score = result.score
@@ -609,6 +676,7 @@ class BacktestEngine:
                 data_quality=data_quality,
                 now=cutoff,
                 market_regime=market_regime,
+                btc_rise_block_reason=self._btc_rise_reason_at(cutoff),
             )
             if market_snap is not None and market_snap.available:
                 result.coin_score = result.score
@@ -733,6 +801,10 @@ class BacktestEngine:
             ),
         )
         if not arm.filled or arm.fill_price is None or arm.fill_time is None or arm.stop is None:
+            return None
+
+        fill_time = ensure_utc(arm.fill_time)
+        if signal.direction.is_short and self._btc_rise_reason_at(fill_time):
             return None
 
         entry_price = self._apply_slippage(

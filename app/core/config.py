@@ -137,6 +137,19 @@ class Settings(BaseSettings):
     regime_filter_enabled: bool = True
     regime_btc_symbol: str = "BTCUSDT"
     regime_timeframe: str = "4h"
+    #: Short-Pause bei kurzfristig steigendem BTC (unabhaengig vom Regime-Label).
+    #: Nur geschlossene 1h/4h-Kerzen; OR ueber aktivierte Fenster.
+    btc_rise_short_block_enabled: bool = True
+    btc_rise_1h_pct: float = 0.15
+    btc_rise_3h_pct: float = 0.35
+    btc_rise_4h_pct: float = 0.30
+    btc_rise_6h_pct: float = 0.50
+    btc_rise_use_1h: bool = True
+    btc_rise_use_3h: bool = True
+    btc_rise_use_4h: bool = True
+    btc_rise_use_6h: bool = True
+    #: Pending Short-Retests canceln, solange BTC-Rising aktiv ist.
+    btc_rise_cancel_pending_shorts: bool = True
     #: Global Market Regime Filter (MTF BTC + aux modules + score blend).
     market_regime_enabled: bool = True
     market_regime_hard_veto: bool = True
