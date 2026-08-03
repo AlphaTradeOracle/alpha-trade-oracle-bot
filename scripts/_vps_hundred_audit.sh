@@ -201,8 +201,11 @@ FROM paper_positions WHERE account_id=1 GROUP BY status ORDER BY status;
 SELECT 'acct|'||ROUND(cash_balance::numeric,2)||'|'||ROUND(realized_pnl::numeric,2)||'|'||ROUND(initial_balance::numeric,2)
 FROM paper_accounts WHERE id=1;
 SELECT 'signals_24h|'||COUNT(*) FROM signals WHERE created_at > NOW() - INTERVAL '24 hours';
-SELECT 'actionable_24h|'||COUNT(*) FROM signals WHERE created_at > NOW() - INTERVAL '24 hours' AND is_actionable=true;
-SELECT 'dispatched_24h|'||COUNT(*) FROM signals WHERE created_at > NOW() - INTERVAL '24 hours' AND dispatched_at IS NOT NULL;
+SELECT 'tradeable_24h|'||COUNT(*) FROM signals
+WHERE created_at > NOW() - INTERVAL '24 hours'
+  AND direction IN ('LONG','SHORT','STRONG_LONG','STRONG_SHORT');
+SELECT 'dispatched_24h|'||COUNT(*) FROM signals
+WHERE created_at > NOW() - INTERVAL '24 hours' AND is_dispatched=true;
 SELECT 'universe|'||COUNT(*) FILTER (WHERE in_universe AND is_active) FROM assets;
 SQL
 

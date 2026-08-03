@@ -15,6 +15,29 @@ from app.market_data.types import Candle, CandleSeries, SymbolInfo
 from app.models.market import Asset, IndicatorSnapshot, MarketCandle
 
 
+def prepare_indicator_snapshot_values(payload: dict) -> dict[str, object]:
+    """Map ``to_snapshot_dict`` onto ORM columns; unknown keys → ``extra_values``.
+
+    Keeps trendline fields (falling_resistance / rising_support) persistable
+    without a schema migration.
+    """
+    known_columns = set(IndicatorSnapshot.__table__.columns.keys())
+    reserved = {"id", "asset_id", "timeframe", "captured_at", "candle_open_time"}
+    data = dict(payload)
+    extra = dict(data.pop("extra_values", None) or {})
+    column_values: dict[str, object] = {}
+    for key, value in data.items():
+        if key in known_columns and key not in reserved:
+            column_values[key] = (
+                Decimal(str(value)) if isinstance(value, float) else value
+            )
+        elif key not in reserved:
+            extra[key] = value
+    if extra:
+        column_values["extra_values"] = extra
+    return column_values
+
+
 class AssetRepository:
     """Instrumente und ihre Zeitreihen."""
 
@@ -265,16 +288,13 @@ class AssetRepository:
 
     async def save_indicator_snapshot(self, asset_id: int, indicators: IndicatorSet) -> None:
         """Indikator-Snapshot idempotent je Kerze schreiben."""
-        payload = indicators.to_snapshot_dict()
+        column_values = prepare_indicator_snapshot_values(indicators.to_snapshot_dict())
         values = {
             "asset_id": asset_id,
             "timeframe": indicators.timeframe,
             "captured_at": utc_now(),
             "candle_open_time": indicators.candle_open_time,
-            **{
-                key: (Decimal(str(value)) if isinstance(value, float) else value)
-                for key, value in payload.items()
-            },
+            **column_values,
         }
 
         statement = insert_ignore_duplicates(

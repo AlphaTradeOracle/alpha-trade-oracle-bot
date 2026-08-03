@@ -15,7 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import DeliveryStatus, SignalDirection, SuppressionReason
 from app.market_data.types import Candle, CandleSeries, SymbolInfo
-from app.repositories.asset_repository import AssetRepository
+from app.repositories.asset_repository import (
+    AssetRepository,
+    prepare_indicator_snapshot_values,
+)
 from app.repositories.chat_repository import ChatRepository, WatchlistRepository
 from app.repositories.event_repository import EventRepository, ScheduledJobRepository
 from app.repositories.signal_repository import SignalRepository
@@ -578,3 +581,25 @@ class TestScheduledJobRepository:
         assert digest is not None and digest.is_enabled is False
         assert digest.last_status == "disabled"
         assert scan is not None and scan.is_enabled is True
+
+
+class TestIndicatorSnapshotPrepare:
+    def test_trendline_fields_go_to_extra_values(self) -> None:
+        values = prepare_indicator_snapshot_values(
+            {
+                "close_price": 100.0,
+                "nearest_support": 90.0,
+                "nearest_resistance": 110.0,
+                "falling_resistance": 105.5,
+                "rising_support": 95.25,
+                "structure_state": "range",
+            }
+        )
+        assert "falling_resistance" not in values
+        assert "rising_support" not in values
+        assert values["extra_values"] == {
+            "falling_resistance": 105.5,
+            "rising_support": 95.25,
+        }
+        assert values["close_price"] == pytest.approx(100.0)
+        assert values["nearest_support"] == pytest.approx(90.0)
