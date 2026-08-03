@@ -112,6 +112,9 @@ class SchedulerRunner:
         next_runs: dict[str, datetime] = {}
         async with session_scope() as session:
             jobs = ScheduledJobRepository(session)
+            stale = await jobs.clear_stale_running()
+            if stale:
+                logger.warning("scheduler_stale_running_cleared", job_keys=stale)
             for definition in definitions:
                 row = await jobs.register(
                     definition.key, definition.job_type, definition.interval_seconds

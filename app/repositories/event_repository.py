@@ -141,3 +141,15 @@ class ScheduledJobRepository:
             job.last_error = reason[:2000]
             disabled.append(job.job_key)
         return disabled
+
+    async def clear_stale_running(self) -> list[str]:
+        """Reset jobs left as ``running`` after a worker kill/restart."""
+        result = await self._session.execute(
+            select(ScheduledJob).where(ScheduledJob.last_status == "running")
+        )
+        cleared: list[str] = []
+        for job in result.scalars():
+            job.last_status = "interrupted"
+            job.last_error = "cleared_stale_running_on_startup"
+            cleared.append(job.job_key)
+        return cleared

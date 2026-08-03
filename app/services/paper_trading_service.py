@@ -14,7 +14,7 @@ from app.core.config import Settings, get_settings
 from app.core.entry_blackout import is_in_utc_blackout
 from app.core.enums import Confidence, ExitReason, MarketPhase, SignalDirection
 from app.core.logging import get_logger
-from app.core.time import ensure_utc, timeframe_to_timedelta, utc_now
+from app.core.time import ensure_utc, timeframe_minutes, timeframe_to_timedelta, utc_now
 from app.models.paper import PaperAccount, PaperFill, PaperPosition
 from app.models.signal import Signal
 from app.repositories.asset_repository import AssetRepository
@@ -55,6 +55,24 @@ PORTFOLIO_LIMIT_SKIPS = frozenset(
         SKIP_REGIME,
     }
 )
+
+
+def _parse_note_kv(notes: str | None, key: str) -> str | None:
+    if not notes:
+        return None
+    prefix = f"{key}="
+    for part in notes.split(";"):
+        part = part.strip()
+        if part.startswith(prefix):
+            return part[len(prefix) :]
+    return None
+
+
+def _set_note_kv(notes: str | None, key: str, value: str) -> str:
+    prefix = f"{key}="
+    parts = [p for p in (notes or "").split(";") if p and not p.strip().startswith(prefix)]
+    parts.append(f"{key}={value}")
+    return ";".join(parts)
 
 
 @dataclass
@@ -764,8 +782,11 @@ class PaperTradingService:
         far = Decimal(str(self._settings.paper_retest_zone_far))
         atr_f = self._primary_atr(result)
         zone_note = f"zone_atr={float(near)}-{float(far)}"
+        # Annotate only — authoritative zone∩SL gate is arm_retest_entry at
+        # resolve (candle ATR). Assessment ATR here can disagree and would
+        # falsely skip or falsely arm vs the resolve path.
         if atr_f is not None and atr_f > 0:
-            from app.signals.retest_entry import retest_zone, zone_overlaps_stop
+            from app.signals.retest_entry import retest_zone
 
             zone_lo, zone_hi = retest_zone(
                 entry,
@@ -774,17 +795,6 @@ class PaperTradingService:
                 zone_near=near,
                 zone_far=far,
             )
-            if zone_overlaps_stop(zone_lo, zone_hi, stop):
-                self._last_skip_reason = SKIP_ZONE_STOP_OVERLAP
-                logger.info(
-                    "paper_skip_zone_stop_overlap",
-                    symbol=result.symbol,
-                    entry=float(entry),
-                    stop=float(stop),
-                    zone_lo=float(zone_lo),
-                    zone_hi=float(zone_hi),
-                )
-                return None
             zone_note = (
                 f"zone={float(zone_lo)}-{float(zone_hi)};"
                 f"zone_atr={float(near)}-{float(far)};atr={atr_f}"
@@ -1316,16 +1326,20 @@ class PaperTradingService:
         entry_low = float(signal.entry_low or signal.reference_price)
         entry_high = float(signal.entry_high or signal.reference_price)
         entry_mid = (entry_low + entry_high) / 2.0
+        # TPs/RR from zone edge (same reference live open / retest arm use).
+        entry_ref = entry_low if direction.is_long else entry_high
+        if entry_ref <= 0:
+            entry_ref = entry_mid
         stop_loss = float(signal.stop_loss)
         # Paper nutzt aktuelle TP-Multiples (Wide), nicht die historisch gespeicherten TPs.
         tp1, tp2, tp3 = RiskManager.targets_from_stop(
-            entry_mid,
+            entry_ref,
             stop_loss,
             is_long=direction.is_long,
             multipliers=self._tp_multipliers,
         )
-        stop_distance = abs(entry_mid - stop_loss)
-        rr = abs(tp2 - entry_mid) / stop_distance if stop_distance > 0 else 0.0
+        stop_distance = abs(entry_ref - stop_loss)
+        rr = abs(tp2 - entry_ref) / stop_distance if stop_distance > 0 else 0.0
         risk = RiskParameters(
             entry_low=entry_low,
             entry_high=entry_high,
@@ -1336,7 +1350,7 @@ class PaperTradingService:
             risk_reward_ratio=rr,
             risk_percent=float(signal.risk_percent or 0.0),
             suggested_position_size=float(signal.suggested_position_size or 0.0),
-            stop_distance_percent=(stop_distance / entry_mid * 100.0) if entry_mid else 0.0,
+            stop_distance_percent=(stop_distance / entry_ref * 100.0) if entry_ref else 0.0,
             invalidation_note=signal.invalidation_note or "",
         )
         expires_at = signal.expires_at
@@ -1629,6 +1643,44 @@ class PaperTradingService:
 
         return backfill
 
+    def _wick_cursor(self, position: PaperPosition, *, bar_minutes: int) -> datetime:
+        """Exclusive lower bound for wick bars already applied."""
+        raw = _parse_note_kv(position.notes, "last_wick")
+        if raw:
+            try:
+                return ensure_utc(datetime.fromisoformat(raw))
+            except ValueError:
+                pass
+        opened = ensure_utc(position.opened_at) if position.opened_at is not None else utc_now()
+        # Include the bar that contains the fill on the first poll.
+        return opened - timedelta(minutes=max(1, bar_minutes))
+
+    async def _fetch_wick_bars(
+        self,
+        provider,
+        position: PaperPosition,
+        *,
+        wick_timeframe: str,
+    ) -> list:
+        """All missed wick bars since last watermark (not only the latest)."""
+        bar_minutes = max(1, timeframe_minutes(wick_timeframe))
+        cursor = self._wick_cursor(position, bar_minutes=bar_minutes)
+        now = utc_now()
+        span_minutes = max(bar_minutes, int((now - cursor).total_seconds() / 60) + bar_minutes)
+        limit = min(500, max(2, span_minutes // bar_minutes + 2))
+        series = await provider.get_candles(
+            position.symbol.upper(),
+            wick_timeframe,
+            limit=limit,
+            start_time=cursor,
+            end_time=now,
+            include_unclosed=True,
+        )
+        candles = list(series.candles) if series is not None else []
+        bars = [c for c in candles if ensure_utc(c.open_time) > cursor]
+        bars.sort(key=lambda c: ensure_utc(c.open_time))
+        return bars
+
     async def _replay_bars(
         self,
         session: AsyncSession,
@@ -1739,15 +1791,18 @@ class PaperTradingService:
 
             if provider is not None and position.status == "open":
                 try:
-                    series = await provider.get_candles(
-                        position.symbol.upper(),
-                        wick_timeframe,
-                        limit=1,
-                        include_unclosed=True,
+                    bars = await self._fetch_wick_bars(
+                        provider, position, wick_timeframe=wick_timeframe
                     )
-                    bars = list(series.candles) if series is not None else []
                     if bars:
                         await self._replay_bars(session, account, position, bars)
+                        last_ot = getattr(bars[-1], "open_time", None)
+                        if last_ot is not None:
+                            position.notes = _set_note_kv(
+                                position.notes,
+                                "last_wick",
+                                ensure_utc(last_ot).isoformat(),
+                            )
                         if position.status != "open":
                             updated.append(position)
                             continue

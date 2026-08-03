@@ -96,6 +96,8 @@ class BacktestConfig:
     retest_zone_far: float = 1.0
     retest_pending_multiplier: int = 6
     retest_min_bars_in_zone: int = 1
+    #: Nach TP1 Hold-Fenster verlaengern (wie Paper).
+    expiry_multiplier_after_tp1: int = 48
     weights: StrategyWeights = DEFAULT_WEIGHTS
 
     @classmethod
@@ -136,6 +138,7 @@ class BacktestConfig:
             "retest_zone_far": settings.paper_retest_zone_far,
             "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
             "retest_min_bars_in_zone": settings.paper_retest_min_bars_in_zone,
+            "expiry_multiplier_after_tp1": settings.paper_expiry_multiplier_after_tp1,
             "short_max_score": settings.signal_short_max_score,
             "short_min_score": settings.signal_short_min_score,
             "weights": weights,
@@ -687,7 +690,13 @@ class BacktestEngine:
             return None
 
         arm_time = ensure_utc(_index_time(df, index))
-        reference = float(signal.risk.entry_mid or signal.reference_price)
+        # Zone edge like live paper (long=low / short=high), not mid.
+        if signal.direction.is_long and signal.risk.entry_low is not None:
+            reference = float(signal.risk.entry_low)
+        elif (not signal.direction.is_long) and signal.risk.entry_high is not None:
+            reference = float(signal.risk.entry_high)
+        else:
+            reference = float(signal.risk.entry_mid or signal.reference_price)
         candles = _df_to_candles(df, self._config.timeframe)
         arm = arm_retest_entry(
             direction=signal.direction,
@@ -868,6 +877,11 @@ class BacktestEngine:
                         trade.entry_price,
                         is_long=is_long,
                         fee_percent=self._config.fee_percent,
+                    )
+                extend_mult = int(self._config.expiry_multiplier_after_tp1)
+                if extend_mult > 0:
+                    trade.expires_at = candle_time + extend_mult * timeframe_to_timedelta(
+                        self._config.timeframe
                     )
             elif level == 2:
                 trade.tp2_filled = True
