@@ -330,6 +330,9 @@ class ScanService:
                 )
                 return
             if paper_position.status == "pending":
+                # Cooldown starts at arm so skipped/cancelled retests cannot
+                # immediately re-arm the same symbol.
+                await self._dedup.record_dispatch(outcome.result)
                 logger.info(
                     "signal_telegram_deferred_until_retest_fill",
                     symbol=symbol,

@@ -457,9 +457,8 @@ class BacktestEngine:
         if signal.direction.is_long and signal.score < long_floor:
             outcome.signals_skipped_below_score += 1
             return False
-        if signal.direction.is_short and (100.0 - signal.score) < self._config.min_score:
-            outcome.signals_skipped_below_score += 1
-            return False
+        # Align with live dedup/paper gates: short_max / short_min only (no
+        # mirror of min_score that would hard-cap shorts at 100-min_score).
         if (
             signal.direction.is_short
             and self._config.short_max_score is not None

@@ -124,6 +124,7 @@ def build_container(settings: Settings | None = None) -> ApplicationContainer:
     deduplicator = SignalDeduplicator(
         cooldown_minutes=cfg.signal_cooldown_minutes, redis_client=redis_client
     )
+    paper_trading.set_deduplicator(deduplicator)
 
     health_service = HealthService(
         cfg,

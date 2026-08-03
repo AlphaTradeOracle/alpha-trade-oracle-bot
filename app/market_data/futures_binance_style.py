@@ -71,19 +71,24 @@ class BinanceStyleFuturesProvider:
 
     async def resolve_native_symbol(self, symbol: str) -> str:
         """Map desk ``BTCUSDT`` → venue perpetual symbol."""
+        from app.market_data.leverage_coverage import base_alias_candidates
+
         await self._load_exchange_info()
         normalized = symbol.upper().strip().replace("-", "").replace("/", "")
         if normalized in self._symbol_cache:
             return normalized
         base = _base_from_symbol(normalized)
-        mapped = self._base_to_symbol.get(base)
-        if mapped:
-            return mapped
+        for candidate in base_alias_candidates(base):
+            mapped = self._base_to_symbol.get(candidate)
+            if mapped:
+                return mapped
         raise SymbolNotFoundError(symbol)
 
     async def supports_base(self, base: str) -> bool:
+        from app.market_data.leverage_coverage import base_alias_candidates
+
         await self._load_exchange_info()
-        return normalize_base(base) in self._base_to_symbol
+        return any(c in self._base_to_symbol for c in base_alias_candidates(base))
 
     async def get_price(self, symbol: str) -> float:
         native = await self.resolve_native_symbol(symbol)

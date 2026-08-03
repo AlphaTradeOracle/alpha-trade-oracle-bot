@@ -9,7 +9,12 @@ import pytest
 from app.core.enums import SignalDirection
 from app.core.time import timeframe_to_timedelta
 from app.market_data.types import Candle
-from app.signals.retest_entry import RetestEntryConfig, arm_retest_entry
+from app.signals.retest_entry import (
+    RetestEntryConfig,
+    arm_retest_entry,
+    zone_overlaps_stop,
+)
+from decimal import Decimal
 
 
 def _c(open_time: datetime, high: float, low: float, close: float) -> Candle:
@@ -184,3 +189,13 @@ class TestArmRetestEntry:
             config=RetestEntryConfig(min_bars_in_zone=2),
         )
         assert arm_two.filled
+
+
+class TestZoneStopOverlap:
+    def test_detects_stop_inside_zone(self) -> None:
+        assert zone_overlaps_stop(Decimal("1.549"), Decimal("1.554"), Decimal("1.552"))
+        assert not zone_overlaps_stop(Decimal("1.549"), Decimal("1.554"), Decimal("1.560"))
+
+    def test_inclusive_edges(self) -> None:
+        assert zone_overlaps_stop(Decimal("10"), Decimal("12"), Decimal("10"))
+        assert zone_overlaps_stop(Decimal("10"), Decimal("12"), Decimal("12"))

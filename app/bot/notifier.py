@@ -13,12 +13,13 @@ from telegram.error import RetryAfter, TelegramError
 
 from app.bot.formatting import (
     format_paper_digest_message,
+    format_paper_trade_open_message,
     format_signal_message,
     infer_price_precision,
-    signal_result_from_paper_position,
     split_caption_and_body,
     split_message,
 )
+from app.core.enums import SignalDirection
 from app.charts.signal_chart import build_paper_trade_chart, resolve_paper_chart_timeframe
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -244,6 +245,28 @@ class TelegramSignalDispatcher(SignalDispatcher):
         self._session = session
         self._settings = settings or get_settings()
 
+    def _passes_chat_score_gate(
+        self, result: object, min_score_override: float | None
+    ) -> bool:
+        direction = getattr(result, "direction", None)
+        score = float(getattr(result, "score", 0.0))
+        if not isinstance(direction, SignalDirection) or not direction.is_actionable:
+            return False
+        long_floor = (
+            float(min_score_override)
+            if min_score_override is not None
+            else float(self._settings.signal_min_score)
+        )
+        if direction.is_long:
+            return score >= long_floor
+        # Shorts: optional chat override tightens the short_max ceiling.
+        short_max = float(self._settings.signal_short_max_score)
+        if min_score_override is not None:
+            # Mirror convention: override 75 → short max 25; override 70 → 30.
+            short_max = min(short_max, max(0.0, 100.0 - float(min_score_override)))
+        short_min = float(self._settings.signal_short_min_score)
+        return short_min < score <= short_max
+
     async def dispatch(self, outcome: AnalysisOutcome) -> list[tuple[int, int | None, str | None]]:
         chats = await ChatRepository(self._session).list_active_with_notifications()
         if not chats:
@@ -259,18 +282,13 @@ class TelegramSignalDispatcher(SignalDispatcher):
 
         results: list[tuple[int, int | None, str | None]] = []
         for chat in chats:
-            # Ein chat-spezifischer Mindestscore darf strenger sein als der globale.
-            threshold = (
-                float(chat.min_score_override)
-                if chat.min_score_override is not None
-                else self._settings.signal_min_score
-            )
-            if outcome.result.score < threshold:
+            # Direction-aware gate: longs use min_score, shorts use short_max/min.
+            if not self._passes_chat_score_gate(outcome.result, chat.min_score_override):
                 logger.debug(
                     "chat_threshold_not_met",
                     chat_id=chat.chat_id,
                     score=outcome.result.score,
-                    threshold=threshold,
+                    direction=outcome.result.direction.value,
                 )
                 continue
 
@@ -334,12 +352,13 @@ class TelegramPaperTradeNotifier:
             logger.debug("paper_trade_notify_skipped_no_chats", symbol=position.symbol)
             return
 
-        result = signal_result_from_paper_position(position, reasons=reasons)
         price_precision = infer_price_precision(float(position.entry_price))
-        text = format_signal_message(
-            result,
+        text = format_paper_trade_open_message(
+            position,
             price_precision=price_precision,
             display_timezone=self._settings.display_timezone,
+            retest_fill=retest_fill,
+            reasons=reasons,
         )
 
         chart_tf = resolve_paper_chart_timeframe(

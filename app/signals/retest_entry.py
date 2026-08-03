@@ -97,6 +97,17 @@ def retest_zone(
     return reference + near, reference + far
 
 
+def zone_overlaps_stop(
+    zone_lo: Decimal,
+    zone_hi: Decimal,
+    stop: Decimal,
+) -> bool:
+    """True when the original stop sits inside the retest zone (inclusive)."""
+    lo = min(zone_lo, zone_hi)
+    hi = max(zone_lo, zone_hi)
+    return lo <= stop <= hi
+
+
 def zone_fill_price(
     *,
     low: Decimal,

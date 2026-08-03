@@ -192,6 +192,8 @@ class TestRetestFill:
 
         position = await service.open_from_signal(session, outcome, opened_at=armed_at)
         assert position is not None and position.status == "pending"
+        # Retest reference is zone-edge (entry_low), not mid.
+        assert float(position.entry_price) == pytest.approx(99.0)
 
         candles = _flat_candles(armed_at - timedelta(hours=30), 31)
         pullback_time = armed_at + timedelta(hours=2)
@@ -206,14 +208,15 @@ class TestRetestFill:
                 volume=1000.0,
             )
         )
+        # Ref=99, ATR~2 → long zone ~[97.0, 97.9]; pull into that band.
         candles.append(
             Candle(
                 open_time=pullback_time,
                 close_time=pullback_time + timedelta(hours=1),
-                open=100.0,
-                high=100.0,
-                low=98.5,
-                close=99.0,
+                open=99.0,
+                high=99.0,
+                low=97.4,
+                close=98.0,
                 volume=1000.0,
             )
         )
@@ -510,10 +513,10 @@ class TestPortfolioRiskLimits:
             Candle(
                 open_time=pullback_time,
                 close_time=pullback_time + timedelta(hours=1),
-                open=100.0,
-                high=100.0,
-                low=98.5,
-                close=99.0,
+                open=99.0,
+                high=99.0,
+                low=97.4,
+                close=98.0,
                 volume=1000.0,
             )
         )
@@ -589,6 +592,50 @@ class TestPaperTrading:
         summary = await service.summary(session)
         assert summary.closed_trades == 1
         assert summary.open_positions == 0
+
+    @pytest.mark.asyncio
+    async def test_wall_clock_expires_pending_without_candles(
+        self, session: AsyncSession
+    ) -> None:
+        settings = Settings(
+            enable_paper_trading=True,
+            paper_initial_balance=5000.0,
+            paper_margin_per_trade=100.0,
+            paper_leverage=5.0,
+            paper_fee_percent=0.0,
+            paper_retest_entry_enabled=True,
+            paper_retest_pending_multiplier=2,
+        )
+        service = PaperTradingService(settings)
+        armed_at = datetime(2024, 6, 1, 12, tzinfo=UTC)
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="paper-wall-clock",
+            created_at=armed_at,
+        )
+        result.risk = _tight_long_risk(100.0)
+        position = await service.open_from_signal(
+            session, AnalysisOutcome(result=result, price_precision=2), opened_at=armed_at
+        )
+        assert position is not None and position.status == "pending"
+
+        class _BoomProvider:
+            name = "boom"
+
+            async def get_candles(self, *args, **kwargs):
+                raise RuntimeError("no candles")
+
+        # pending_multiplier=2 × 1h → expires at armed_at+2h; +3h is past window.
+        out = await service.resolve_pending_retest(
+            session,
+            _BoomProvider(),
+            end_time=armed_at + timedelta(hours=3),
+        )
+        assert out.skipped == 1
+        assert position.status == "cancelled"
+        assert "pending_expired_wall_clock" in (position.notes or "")
 
     @pytest.mark.asyncio
     async def test_retest_opens_as_pending_without_cash_lock(self, session: AsyncSession) -> None:

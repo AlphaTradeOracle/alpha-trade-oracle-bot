@@ -33,6 +33,30 @@ def normalize_base(base: str) -> str:
     return b
 
 
+def base_alias_candidates(base: str) -> list[str]:
+    """Desk base plus common perp aliases (1000x / k-prefix / unwrap)."""
+    b = normalize_base(base)
+    if not b:
+        return []
+    out: list[str] = [b]
+    for candidate in (f"1000{b}", f"K{b}"):
+        if candidate not in out:
+            out.append(candidate)
+    if b.startswith("1000") and len(b) > 4:
+        bare = b[4:]
+        if bare and bare not in out:
+            out.append(bare)
+    if b.startswith("K") and len(b) > 2:
+        bare = b[1:]
+        if bare and bare not in out:
+            out.append(bare)
+    if b == "BTC" and "XBT" not in out:
+        out.append("XBT")
+    if b == "XBT" and "BTC" not in out:
+        out.append("BTC")
+    return out
+
+
 def base_has_leverage(base: str, tradable: set[str]) -> bool:
     """True if ``base`` (or a common alias/k-prefix) is in the tradable set."""
     b = normalize_base(base)

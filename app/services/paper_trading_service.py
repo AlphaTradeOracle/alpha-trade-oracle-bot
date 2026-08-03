@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Iterator, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +43,7 @@ SKIP_MAX_POSITIONS = "skipped_max_positions"
 SKIP_DIRECTION_CAP = "skipped_direction_cap"
 SKIP_SYMBOL_CIRCUIT = "skipped_symbol_circuit"
 SKIP_ENTRY_BLACKOUT = "skipped_entry_blackout"
+SKIP_ZONE_STOP_OVERLAP = "skipped_zone_stop_overlap"
 SKIP_REGIME = "skipped_regime"
 PORTFOLIO_LIMIT_SKIPS = frozenset(
     {
@@ -197,6 +198,10 @@ class PositionSizing:
     risk_amount: Decimal
 
 
+class _DispatchRecorder(Protocol):
+    async def record_dispatch(self, result: object) -> None: ...
+
+
 class PaperTradingService:
     """Oeffnet und verwaltet Paper-Positionen aus Signalen."""
 
@@ -205,9 +210,11 @@ class PaperTradingService:
         settings: Settings | None = None,
         *,
         notifier: PaperTradeNotifier | None = None,
+        deduplicator: _DispatchRecorder | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._notifier = notifier
+        self._deduplicator = deduplicator
         self._notify_enabled = True
         self._last_skip_reason: str | None = None
         self._regime_engine = MarketRegimeEngine(self._settings)
@@ -256,6 +263,9 @@ class PaperTradingService:
 
     def set_notifier(self, notifier: PaperTradeNotifier | None) -> None:
         self._notifier = notifier
+
+    def set_deduplicator(self, deduplicator: _DispatchRecorder | None) -> None:
+        self._deduplicator = deduplicator
 
     @property
     def last_skip_reason(self) -> str | None:
@@ -728,7 +738,14 @@ class PaperTradingService:
         assert result.risk is not None
         repo = PaperRepository(session)
         leverage = Decimal(str(self._settings.paper_leverage))
-        entry = Decimal(str(result.risk.entry_mid or result.reference_price))
+        # Same edge reference RiskManager used for SL/TP — not mid — so retest R
+        # distance matches the gated signal geometry.
+        if result.direction.is_long and result.risk.entry_low is not None:
+            entry = Decimal(str(result.risk.entry_low))
+        elif (not result.direction.is_long) and result.risk.entry_high is not None:
+            entry = Decimal(str(result.risk.entry_high))
+        else:
+            entry = Decimal(str(result.risk.entry_mid or result.reference_price))
         stop = Decimal(str(result.risk.stop_loss))
         if entry <= 0:
             return None
@@ -748,7 +765,7 @@ class PaperTradingService:
         atr_f = self._primary_atr(result)
         zone_note = f"zone_atr={float(near)}-{float(far)}"
         if atr_f is not None and atr_f > 0:
-            from app.signals.retest_entry import retest_zone
+            from app.signals.retest_entry import retest_zone, zone_overlaps_stop
 
             zone_lo, zone_hi = retest_zone(
                 entry,
@@ -757,6 +774,17 @@ class PaperTradingService:
                 zone_near=near,
                 zone_far=far,
             )
+            if zone_overlaps_stop(zone_lo, zone_hi, stop):
+                self._last_skip_reason = SKIP_ZONE_STOP_OVERLAP
+                logger.info(
+                    "paper_skip_zone_stop_overlap",
+                    symbol=result.symbol,
+                    entry=float(entry),
+                    stop=float(stop),
+                    zone_lo=float(zone_lo),
+                    zone_hi=float(zone_hi),
+                )
+                return None
             zone_note = (
                 f"zone={float(zone_lo)}-{float(zone_hi)};"
                 f"zone_atr={float(near)}-{float(far)};atr={atr_f}"
@@ -834,6 +862,18 @@ class PaperTradingService:
 
         for position in pending:
             tf = position.timeframe or "1h"
+            # Wall-clock expiry: do not wait for candle timestamps when the
+            # pending window is already over (stale/missing feeds included).
+            # Strict ``>`` matches arm_retest_entry candle expiry semantics.
+            if position.expires_at is not None and cutoff > ensure_utc(position.expires_at):
+                await self._cancel_pending_retest(
+                    session,
+                    position,
+                    RetestArmResult(status="skipped_expiry", note="pending_expired_wall_clock"),
+                )
+                out.skipped += 1
+                continue
+
             try:
                 series = await provider.get_candles(
                     position.symbol,
@@ -878,16 +918,8 @@ class PaperTradingService:
                     out.filled += 1
                 else:
                     out.skipped += 1
-            elif arm.status == "pending" and not historical:
+            elif arm.status == "pending":
                 out.still_pending += 1
-            elif arm.status == "pending" and historical:
-                if position.expires_at is not None and cutoff >= ensure_utc(
-                    position.expires_at
-                ):
-                    await self._cancel_pending_retest(session, position, arm)
-                    out.skipped += 1
-                else:
-                    out.still_pending += 1
             else:
                 await self._cancel_pending_retest(session, position, arm)
                 out.skipped += 1
@@ -905,6 +937,35 @@ class PaperTradingService:
     ) -> bool:
         assert arm.fill_price is not None and arm.fill_time is not None and arm.stop is not None
         direction = SignalDirection(position.direction)
+        fill_time = ensure_utc(arm.fill_time)
+        if self._entry_blackout_active(fill_time):
+            self._last_skip_reason = SKIP_ENTRY_BLACKOUT
+            await self._cancel_pending_retest(
+                session,
+                position,
+                RetestArmResult(
+                    status=SKIP_ENTRY_BLACKOUT,
+                    note="entry_blackout_at_fill",
+                    zone_lo=arm.zone_lo,
+                    zone_hi=arm.zone_hi,
+                ),
+            )
+            return False
+        if await self._symbol_circuit_breach(
+            session, account, position.symbol, when=fill_time
+        ):
+            self._last_skip_reason = SKIP_SYMBOL_CIRCUIT
+            await self._cancel_pending_retest(
+                session,
+                position,
+                RetestArmResult(
+                    status=SKIP_SYMBOL_CIRCUIT,
+                    note="symbol_circuit_at_fill",
+                    zone_lo=arm.zone_lo,
+                    zone_hi=arm.zone_hi,
+                ),
+            )
+            return False
         if self._regime_blocks_direction(direction, regime_snapshot):
             self._last_skip_reason = SKIP_REGIME
             await self._cancel_pending_retest(
@@ -991,7 +1052,6 @@ class PaperTradingService:
             )
             return False
 
-        fill_time = ensure_utc(arm.fill_time)
         tf = position.timeframe or "1h"
         mult = int(self._settings.signal_expiry_multiplier)
         # Ab Fill, nicht ab Arm-Zeit: sonst frisst die Wartezeit auf den Retest
@@ -1056,7 +1116,29 @@ class PaperTradingService:
         await self._notify_open(position, retest_fill=True, reasons=reasons)
         if position.signal_id is not None:
             await SignalRepository(session).mark_dispatched(position.signal_id)
+        await self._record_dispatch_for_position(position, reasons=reasons)
         return True
+
+    async def _record_dispatch_for_position(
+        self,
+        position: PaperPosition,
+        *,
+        reasons: list[str] | None = None,
+    ) -> None:
+        """Seed dedup cooldown after a real entry (IST open or retest fill)."""
+        if self._deduplicator is None:
+            return
+        try:
+            from app.bot.formatting import signal_result_from_paper_position
+
+            result = signal_result_from_paper_position(position, reasons=reasons)
+            await self._deduplicator.record_dispatch(result)
+        except Exception as exc:
+            logger.warning(
+                "paper_dispatch_record_failed",
+                symbol=position.symbol,
+                error=str(exc),
+            )
 
     async def _cancel_pending_retest(
         self,

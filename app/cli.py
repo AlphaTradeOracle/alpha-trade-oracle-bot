@@ -284,11 +284,10 @@ async def _run_worker() -> None:
         container.paper_trading.set_notifier(
             TelegramPaperTradeNotifier(
                 telegram_notifier,
-                container.provider,
+                container.paper_price_provider,
                 settings,
             )
         )
-
     # Der ScanService muss vor der Application existieren, weil die Handler ihn
     # brauchen. Der Notifier nutzt daher eine eigene Bot-Instanz statt
     # application.bot — das vermeidet eine zirkulaere Abhaengigkeit.

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.enums import SignalDirection
 from app.core.errors import InsufficientDataError, MarketDataError
 from app.core.logging import get_logger
 from app.indicators.engine import IndicatorEngine, IndicatorSet
@@ -319,6 +320,12 @@ class AnalysisService:
                     f"Market regime blend: coin {blended.coin_score:.1f} → "
                     f"final {blended.final_score:.1f} ({market_snap.bias.label})"
                 )
+            # Re-apply score gates on the blended score (engine gated coin score).
+            blend_block = self._blended_score_no_trade(result)
+            if blend_block is not None:
+                result.no_trade_reason = blend_block
+                result.direction = SignalDirection.NO_TRADE
+                result.reasons.append(blend_block)
         else:
             result.market_context = result.market_context or {}
 
@@ -450,6 +457,28 @@ class AnalysisService:
             enable_sentiment=self._settings.enable_sentiment,
         )
         return SignalEngine(config, risk_manager)
+
+    def _blended_score_no_trade(self, result: SignalResult) -> str | None:
+        """Score gates that must hold after regime blend mutates ``result.score``."""
+        if not result.direction.is_actionable:
+            return None
+        score = float(result.score)
+        if result.direction.is_long and score < self._settings.signal_min_score:
+            return (
+                f"Blended long score {score:.1f} below minimum "
+                f"{self._settings.signal_min_score:.1f}"
+            )
+        if result.direction.is_short and score > self._settings.signal_short_max_score:
+            return (
+                f"Blended short score {score:.1f} above maximum "
+                f"{self._settings.signal_short_max_score:.1f}"
+            )
+        if result.direction.is_short and score <= self._settings.signal_short_min_score:
+            return (
+                f"Blended short score {score:.1f} in exhaustion band "
+                f"(minimum {self._settings.signal_short_min_score:.0f})"
+            )
+        return None
 
     async def _load_sentiment(self, symbol: str) -> float | None:
         """Sentiment laden. Ohne verlaessliche Daten wird kein Wert erfunden."""
