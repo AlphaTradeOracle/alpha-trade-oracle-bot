@@ -135,6 +135,7 @@ class SignalEngine:
         sentiment_score: float | None = None,
         now: datetime | None = None,
         market_regime: MarketRegime | None = None,
+        btc_rise_block_reason: str | None = None,
     ) -> SignalResult:
         """Signal fuer ein Symbol erzeugen.
 
@@ -145,6 +146,8 @@ class SignalEngine:
             sentiment_score: Optionaler Wert in [-100, +100]. ``None`` bedeutet
                 „keine Daten" — es wird dann kein Wert erfunden.
             now: Referenzzeit, im Backtest der Zeitpunkt der Kerze.
+            btc_rise_block_reason: Optional precomputed BTC-rising short pause
+                (independent of market regime). Applied only to short directions.
         """
         if not indicator_sets:
             raise ValueError("Es wurde kein Indikatorsatz uebergeben")
@@ -178,6 +181,7 @@ class SignalEngine:
             market_phase=market_phase,
             score=score,
             market_regime=market_regime,
+            btc_rise_block_reason=btc_rise_block_reason,
         )
         if no_trade_reason is not None:
             direction = SignalDirection.NO_TRADE
@@ -344,6 +348,7 @@ class SignalEngine:
         market_phase: MarketPhase,
         score: float,
         market_regime: MarketRegime | None = None,
+        btc_rise_block_reason: str | None = None,
     ) -> str | None:
         """Harte Ausschlusskriterien. Sie ueberschreiben jede Richtung."""
         if not direction.is_actionable:
@@ -357,6 +362,10 @@ class SignalEngine:
                 f"Short score {score:.1f} in exhaustion band "
                 f"(minimum {self._config.short_min_score:.0f})"
             )
+
+        # BTC rising momentum — shorts only; independent of regime label.
+        if direction.is_short and btc_rise_block_reason:
+            return btc_rise_block_reason
 
         if self._config.regime_filter_enabled and market_regime is not None:
             blocked = regime_block_reason(market_regime, direction)

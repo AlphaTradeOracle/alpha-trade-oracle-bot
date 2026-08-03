@@ -24,6 +24,11 @@ from app.services.analysis_service import AnalysisOutcome
 from app.indicators.engine import IndicatorEngine
 from app.market_regime import MarketRegimeEngine, to_legacy_regime_snapshot
 from app.signals.regime import RegimeSnapshot, direction_allowed_by_regime, log_regime_degraded, regime_from_indicators
+from app.signals.btc_momentum import (
+    btc_rising_short_block_reason,
+    log_btc_rise_degraded,
+    thresholds_from_settings,
+)
 from app.signals.retest_entry import (
     RetestArmResult,
     RetestEntryConfig,
@@ -45,6 +50,7 @@ SKIP_SYMBOL_CIRCUIT = "skipped_symbol_circuit"
 SKIP_ENTRY_BLACKOUT = "skipped_entry_blackout"
 SKIP_ZONE_STOP_OVERLAP = "skipped_zone_stop_overlap"
 SKIP_REGIME = "skipped_regime"
+SKIP_BTC_RISE = "skipped_btc_rise"
 PORTFOLIO_LIMIT_SKIPS = frozenset(
     {
         SKIP_PORTFOLIO_RISK,
@@ -53,6 +59,7 @@ PORTFOLIO_LIMIT_SKIPS = frozenset(
         SKIP_SYMBOL_CIRCUIT,
         SKIP_ENTRY_BLACKOUT,
         SKIP_REGIME,
+        SKIP_BTC_RISE,
     }
 )
 
@@ -360,6 +367,41 @@ class PaperTradingService:
             return False
         return True
 
+    async def _fetch_btc_rise_block_reason(self, provider) -> str | None:
+        """Live BTC rising short pause; missing candles → no block."""
+        if not self._settings.btc_rise_short_block_enabled:
+            return None
+        symbol = self._settings.regime_btc_symbol.upper()
+        thresholds = thresholds_from_settings(self._settings)
+        try:
+            series_map = await provider.get_multi_timeframe_candles(
+                symbol,
+                ["1h", "4h"],
+                limit=max(48, min(self._settings.candle_limit, 120)),
+            )
+            c1 = series_map.get("1h")
+            c4 = series_map.get("4h")
+            candles_1h = c1.candles if c1 is not None and not c1.is_empty else None
+            candles_4h = c4.candles if c4 is not None and not c4.is_empty else None
+            if not candles_1h and not candles_4h:
+                log_btc_rise_degraded("btc_candles_empty")
+                return None
+            return btc_rising_short_block_reason(
+                candles_1h,
+                candles_4h,
+                thresholds=thresholds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_btc_rise_degraded(str(exc))
+            return None
+
+    def _btc_rise_blocks_short(
+        self,
+        direction: SignalDirection,
+        reason: str | None,
+    ) -> bool:
+        return bool(reason) and direction.is_short
+
     def _update_peak_price(self, position: PaperPosition, price: float) -> None:
         peak = position.peak_price
         is_long = SignalDirection(position.direction).is_long
@@ -601,6 +643,7 @@ class PaperTradingService:
         *,
         opened_at: datetime | None = None,
         regime_snapshot: RegimeSnapshot | None = None,
+        btc_rise_block_reason: str | None = None,
     ) -> PaperPosition | None:
         if not self.enabled:
             return None
@@ -640,6 +683,16 @@ class PaperTradingService:
                 symbol=result.symbol,
                 direction=result.direction.value,
                 regime=regime_val,
+            )
+            return None
+
+        if self._btc_rise_blocks_short(result.direction, btc_rise_block_reason):
+            self._last_skip_reason = SKIP_BTC_RISE
+            logger.info(
+                "paper_skip_btc_rise",
+                symbol=result.symbol,
+                direction=result.direction.value,
+                detail=btc_rise_block_reason,
             )
             return None
 
@@ -871,12 +924,39 @@ class PaperTradingService:
 
         cfg = self._retest_config()
         cutoff = ensure_utc(end_time or utc_now())
-        # Historical rebuild must not apply *current* BTC regime to past fills.
+        # Historical rebuild must not apply *current* BTC regime/rise to past fills.
         regime_snapshot = (
             None if historical else await self._fetch_regime_snapshot(provider)
         )
+        btc_rise_reason = (
+            None if historical else await self._fetch_btc_rise_block_reason(provider)
+        )
         # ATR braucht Warmup; etwas Historie vor Armed-Zeit laden.
         lookback_pad = timedelta(days=14)
+
+        if (
+            not historical
+            and btc_rise_reason
+            and self._settings.btc_rise_cancel_pending_shorts
+        ):
+            for position in list(pending):
+                if not SignalDirection(position.direction).is_short:
+                    continue
+                if position.status != "pending":
+                    continue
+                await self._cancel_pending_retest(
+                    session,
+                    position,
+                    RetestArmResult(
+                        status=SKIP_BTC_RISE,
+                        resolved_at=cutoff,
+                        note="btc_rise_cancel_pending",
+                    ),
+                )
+                out.skipped += 1
+            pending = await repo.list_pending_positions(account.id)
+            if not pending:
+                return out
 
         for position in pending:
             tf = position.timeframe or "1h"
@@ -934,7 +1014,12 @@ class PaperTradingService:
                 and arm.stop is not None
             ):
                 activated = await self._activate_pending_retest(
-                    session, account, position, arm, regime_snapshot=regime_snapshot
+                    session,
+                    account,
+                    position,
+                    arm,
+                    regime_snapshot=regime_snapshot,
+                    btc_rise_block_reason=btc_rise_reason,
                 )
                 if activated:
                     out.filled += 1
@@ -956,6 +1041,7 @@ class PaperTradingService:
         arm: RetestArmResult,
         *,
         regime_snapshot: RegimeSnapshot | None = None,
+        btc_rise_block_reason: str | None = None,
     ) -> bool:
         assert arm.fill_price is not None and arm.fill_time is not None and arm.stop is not None
         direction = SignalDirection(position.direction)
@@ -999,6 +1085,20 @@ class PaperTradingService:
                     status=SKIP_REGIME,
                     resolved_at=fill_time,
                     note="regime_blocked_at_fill",
+                    zone_lo=arm.zone_lo,
+                    zone_hi=arm.zone_hi,
+                ),
+            )
+            return False
+        if self._btc_rise_blocks_short(direction, btc_rise_block_reason):
+            self._last_skip_reason = SKIP_BTC_RISE
+            await self._cancel_pending_retest(
+                session,
+                position,
+                RetestArmResult(
+                    status=SKIP_BTC_RISE,
+                    resolved_at=fill_time,
+                    note="btc_rise_blocked_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
                 ),

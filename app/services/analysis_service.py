@@ -35,11 +35,18 @@ from app.intelligence.types import InstitutionalContext
 from app.market_regime import MarketRegimeEngine, to_legacy_regime_snapshot
 from app.market_regime.types import MarketRegimeSnapshot
 from app.signals.regime import RegimeSnapshot, log_regime_degraded, regime_from_indicators
+from app.signals.btc_momentum import (
+    btc_rising_short_block_reason,
+    log_btc_rise_degraded,
+    thresholds_from_settings,
+)
 from app.signals.risk import RiskConfig, RiskManager, tp_multipliers_from_settings
 from app.signals.types import SignalResult
 from app.strategies.weights import DEFAULT_WEIGHTS, StrategyWeights
 
 logger = get_logger(__name__)
+
+_BTC_RISE_UNSET: object = object()
 
 
 @dataclass
@@ -89,6 +96,7 @@ class AnalysisService:
         self._regime_cache: RegimeSnapshot | None = None
         self._market_regime_cache: MarketRegimeSnapshot | None = None
         self._intel_cache: InstitutionalContext | None = None
+        self._btc_rise_cache: object = _BTC_RISE_UNSET
 
     async def resolve_market_regime_snapshot(
         self,
@@ -157,7 +165,48 @@ class AnalysisService:
         self._regime_cache = None
         self._market_regime_cache = None
         self._intel_cache = None
+        self._btc_rise_cache = _BTC_RISE_UNSET
         self._regime_engine.clear_cache()
+
+    async def resolve_btc_rise_short_block(self, *, refresh: bool = False) -> str | None:
+        """BTC rising-momentum short pause (cached per scan cycle).
+
+        Uses only closed 1h/4h BTC candles. Missing data → None (no block).
+        """
+        if not self._settings.btc_rise_short_block_enabled:
+            return None
+        if self._btc_rise_cache is not _BTC_RISE_UNSET and not refresh:
+            return self._btc_rise_cache  # type: ignore[return-value]
+
+        symbol = self._settings.regime_btc_symbol.upper()
+        thresholds = thresholds_from_settings(self._settings)
+        try:
+            series_map = await self._provider.get_multi_timeframe_candles(
+                symbol,
+                ["1h", "4h"],
+                limit=max(48, min(self._settings.candle_limit, 120)),
+            )
+            c1 = series_map.get("1h")
+            c4 = series_map.get("4h")
+            candles_1h = c1.candles if c1 is not None and not c1.is_empty else None
+            candles_4h = c4.candles if c4 is not None and not c4.is_empty else None
+            if not candles_1h and not candles_4h:
+                log_btc_rise_degraded("btc_candles_empty")
+                self._btc_rise_cache = None
+                return None
+            reason = btc_rising_short_block_reason(
+                candles_1h,
+                candles_4h,
+                thresholds=thresholds,
+            )
+            self._btc_rise_cache = reason
+            if reason:
+                logger.info("btc_rise_short_block_active", detail=reason, symbol=symbol)
+            return reason
+        except Exception as exc:  # noqa: BLE001
+            log_btc_rise_degraded(str(exc))
+            self._btc_rise_cache = None
+            return None
 
     async def resolve_market_intelligence(
         self,
@@ -249,6 +298,7 @@ class AnalysisService:
             and regime_snapshot.available
         )
         market_regime = regime_snapshot.regime if hard_veto else None
+        btc_rise_block = await self.resolve_btc_rise_short_block()
 
         series_map = await provider.get_multi_timeframe_candles(
             normalized, target_timeframes, limit=self._settings.candle_limit
@@ -297,6 +347,7 @@ class AnalysisService:
             data_quality=data_quality,
             sentiment_score=sentiment_score,
             market_regime=market_regime,
+            btc_rise_block_reason=btc_rise_block,
         )
         result.coin_score = result.score
         if self._settings.market_regime_enabled and market_snap is not None:
