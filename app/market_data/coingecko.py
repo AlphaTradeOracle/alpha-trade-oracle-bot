@@ -164,25 +164,52 @@ class CoinGeckoClient:
         self._rate_limiter = RateLimiter(RATE_LIMIT_CALLS, RATE_LIMIT_PERIOD_SECONDS)
 
     async def fetch_top_markets(self, limit: int = 1000) -> list[CoinGeckoMarket]:
-        """Top-``limit`` Coins nach Market Cap (USD) laden."""
+        """Top-``limit`` Coins nach Market Cap (USD) laden.
+
+        Pagination stoppt nur, wenn die **rohe** API-Seite kuerzer als
+        ``per_page`` ist. Einzeln gedroppte Rows (z. B. ``market_cap_rank=null``)
+        duerfen die naechste Seite nicht verhindern — sonst bleiben wir bei
+        ~249 Rankings stehen und das Leverage-Universe schrumpft stark.
+        """
         if limit <= 0:
             return []
 
         collected: list[CoinGeckoMarket] = []
         page = 1
         while len(collected) < limit:
-            remaining = limit - len(collected)
-            per_page = min(MAX_PER_PAGE, remaining)
-            batch = await self._fetch_markets_page(page=page, per_page=per_page)
-            if not batch:
+            # Always request a full page so a few parse drops cannot look like
+            # "end of results" when we still need more ranks.
+            per_page = MAX_PER_PAGE
+            batch, raw_count = await self._fetch_markets_page(page=page, per_page=per_page)
+            if raw_count == 0:
                 break
+            if raw_count > len(batch):
+                logger.info(
+                    "coingecko_markets_page_parse_dropped",
+                    page=page,
+                    raw=raw_count,
+                    parsed=len(batch),
+                    dropped=raw_count - len(batch),
+                )
             collected.extend(batch)
-            if len(batch) < per_page:
+            # End-of-catalog signal: CoinGecko returned a short *raw* page.
+            if raw_count < per_page:
                 break
             page += 1
 
         markets = collected[:limit]
-        logger.info("coingecko_top_markets_loaded", requested=limit, received=len(markets))
+        if len(markets) < limit:
+            logger.warning(
+                "coingecko_top_markets_short",
+                requested=limit,
+                received=len(markets),
+            )
+        else:
+            logger.info(
+                "coingecko_top_markets_loaded",
+                requested=limit,
+                received=len(markets),
+            )
         return markets
 
     async def fetch_live_markets(self, limit: int = 10) -> list[CoinGeckoLiveMarket]:
@@ -298,7 +325,15 @@ class CoinGeckoClient:
         if self._owns_client:
             await self._client.aclose()
 
-    async def _fetch_markets_page(self, *, page: int, per_page: int) -> list[CoinGeckoMarket]:
+    async def _fetch_markets_page(
+        self, *, page: int, per_page: int
+    ) -> tuple[list[CoinGeckoMarket], int]:
+        """Eine Markets-Seite laden.
+
+        Returns:
+            ``(parsed_markets, raw_row_count)`` — ``raw_row_count`` steuert die
+            Pagination unabhaengig von Parse-Drops.
+        """
         params = {
             "vs_currency": "usd",
             "order": "market_cap_desc",
@@ -339,7 +374,7 @@ class CoinGeckoClient:
             parsed = _parse_market(item)
             if parsed is not None:
                 markets.append(parsed)
-        return markets
+        return markets, len(payload)
 
     async def _fetch_tickers_page(self, coin_id: str, *, page: int) -> list[CoinGeckoTicker]:
         params = {

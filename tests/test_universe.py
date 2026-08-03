@@ -139,6 +139,52 @@ class TestCoinGeckoClient:
         assert pages == [1, 2]
 
     @pytest.mark.asyncio
+    async def test_pagination_continues_when_null_rank_drops_parsed_count(self) -> None:
+        """Regression: a full raw page with one null-rank row must not stop paging."""
+        pages: list[int] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            page = int(request.url.params.get("page", "1"))
+            pages.append(page)
+            if page == 1:
+                # Full page (MAX_PER_PAGE mocked to 3): one null-rank drop → parsed=2.
+                payload = [
+                    _cg_market("bitcoin", "btc", 1),
+                    {
+                        "id": "mystery",
+                        "symbol": "xyz",
+                        "name": "Mystery",
+                        "market_cap": 1.0,
+                        "market_cap_rank": None,
+                    },
+                    _cg_market("ethereum", "eth", 2),
+                ]
+            else:
+                payload = [_cg_market("solana", "sol", 3)]
+            return httpx.Response(200, json=payload)
+
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.coingecko.com/api/v3",
+        )
+        gecko = CoinGeckoClient(NO_RETRY, client=client)
+        gecko._owns_client = True
+        try:
+            import app.market_data.coingecko as cg_mod
+
+            original = cg_mod.MAX_PER_PAGE
+            cg_mod.MAX_PER_PAGE = 3
+            try:
+                markets = await gecko.fetch_top_markets(limit=3)
+            finally:
+                cg_mod.MAX_PER_PAGE = original
+        finally:
+            await gecko.close()
+
+        assert [m.symbol for m in markets] == ["BTC", "ETH", "SOL"]
+        assert pages == [1, 2]
+
+    @pytest.mark.asyncio
     async def test_fetches_live_markets_with_sparkline(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             assert request.url.params.get("sparkline") == "true"
