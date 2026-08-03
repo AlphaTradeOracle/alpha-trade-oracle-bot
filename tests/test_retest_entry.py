@@ -199,3 +199,20 @@ class TestZoneStopOverlap:
     def test_inclusive_edges(self) -> None:
         assert zone_overlaps_stop(Decimal("10"), Decimal("12"), Decimal("10"))
         assert zone_overlaps_stop(Decimal("10"), Decimal("12"), Decimal("12"))
+
+    def test_arm_skips_when_stop_inside_retest_zone(self) -> None:
+        # ATR~2, short ref=100 → zone ~[101.1, 102.0]; stop clearly inside.
+        candles = _history(21, base=100.0)
+        arm_time = candles[-1].open_time
+        arm = arm_retest_entry(
+            direction=SignalDirection.SHORT,
+            arm_time=arm_time,
+            reference_entry=100.0,
+            original_stop=101.5,
+            timeframe="1h",
+            candles=candles,
+            config=RetestEntryConfig(pending_multiplier=4, min_bars_in_zone=1),
+        )
+        assert arm.status == "skipped_zone_stop_overlap"
+        assert not arm.filled
+        assert arm.resolved_at == arm_time

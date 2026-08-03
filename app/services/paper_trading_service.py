@@ -869,7 +869,11 @@ class PaperTradingService:
                 await self._cancel_pending_retest(
                     session,
                     position,
-                    RetestArmResult(status="skipped_expiry", note="pending_expired_wall_clock"),
+                    RetestArmResult(
+                        status="skipped_expiry",
+                        resolved_at=ensure_utc(position.expires_at),
+                        note="pending_expired_wall_clock",
+                    ),
                 )
                 out.skipped += 1
                 continue
@@ -945,6 +949,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status=SKIP_ENTRY_BLACKOUT,
+                    resolved_at=fill_time,
                     note="entry_blackout_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -960,6 +965,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status=SKIP_SYMBOL_CIRCUIT,
+                    resolved_at=fill_time,
                     note="symbol_circuit_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -973,6 +979,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status=SKIP_REGIME,
+                    resolved_at=fill_time,
                     note="regime_blocked_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -993,6 +1000,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status="skipped_sizing",
+                    resolved_at=fill_time,
                     note="no_valid_size_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -1020,6 +1028,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status=breach,
+                    resolved_at=fill_time,
                     note="portfolio_limit_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -1045,6 +1054,7 @@ class PaperTradingService:
                 position,
                 RetestArmResult(
                     status="skipped_cash",
+                    resolved_at=fill_time,
                     note="insufficient_cash_at_fill",
                     zone_lo=arm.zone_lo,
                     zone_hi=arm.zone_hi,
@@ -1147,7 +1157,12 @@ class PaperTradingService:
         arm: RetestArmResult,
     ) -> None:
         position.status = "cancelled"
-        position.closed_at = utc_now()
+        # Prefer the skip-bar / expiry event time. Wall-clock "now" during a
+        # historical rebuild would mark closed_at in the future relative to
+        # every later signal and falsely busy-lock the symbol for the rest of
+        # the stream (missed re-arms after skipped_sl / skipped_expiry).
+        closed_at = arm.resolved_at or position.expires_at or utc_now()
+        position.closed_at = ensure_utc(closed_at)
         position.exit_reason = ExitReason.RETEST_SKIPPED.value
         position.remaining_quantity = Decimal("0")
         position.margin_used = Decimal("0")
@@ -1161,6 +1176,7 @@ class PaperTradingService:
             status=arm.status,
             note=arm.note,
             bars_waited=arm.bars_waited,
+            closed_at=position.closed_at.isoformat() if position.closed_at else None,
         )
 
     async def backfill_from_signals(
@@ -1556,7 +1572,11 @@ class PaperTradingService:
                 await self._cancel_pending_retest(
                     session,
                     position,
-                    RetestArmResult(status="skipped_no_history", note=str(exc)),
+                    RetestArmResult(
+                        status="skipped_no_history",
+                        resolved_at=ensure_utc(position.opened_at),
+                        note=str(exc),
+                    ),
                 )
                 out.retest_skipped += 1
                 continue

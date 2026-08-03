@@ -42,6 +42,9 @@ class RetestArmResult:
     status: str
     fill_price: float | None = None
     fill_time: datetime | None = None
+    # Event time for terminal skips (used as closed_at so rebuild/live busy
+    # checks free the symbol at the real skip bar, not wall-clock "now").
+    resolved_at: datetime | None = None
     stop: float | None = None
     zone_lo: float | None = None
     zone_hi: float | None = None
@@ -188,11 +191,19 @@ def arm_retest_entry(
 
     sig_idx = idx_at_or_before(candles, arm_time)
     if sig_idx is None:
-        return RetestArmResult(status="skipped_no_history", note="no_bar_at_signal")
+        return RetestArmResult(
+            status="skipped_no_history",
+            resolved_at=arm_time,
+            note="no_bar_at_signal",
+        )
 
     atr_f = wilder_atr(candles, sig_idx, period=cfg.atr_period)
     if atr_f is None:
-        return RetestArmResult(status="skipped_no_atr", note="insufficient_atr_history")
+        return RetestArmResult(
+            status="skipped_no_atr",
+            resolved_at=arm_time,
+            note="insufficient_atr_history",
+        )
     atr = Decimal(str(atr_f))
     zone_lo, zone_hi = retest_zone(
         reference,
@@ -201,6 +212,18 @@ def arm_retest_entry(
         zone_near=cfg.zone_near,
         zone_far=cfg.zone_far,
     )
+    # Same gate as live arm: SL inside the retest zone makes R undefined /
+    # toxic. Must live here (not only in _open_pending_retest) because rebuild
+    # from stored signals has empty assessments → no ATR at pending-create time.
+    if zone_overlaps_stop(zone_lo, zone_hi, orig_sl):
+        return RetestArmResult(
+            status="skipped_zone_stop_overlap",
+            resolved_at=arm_time,
+            zone_lo=float(zone_lo),
+            zone_hi=float(zone_hi),
+            atr=float(atr),
+            note="stop_inside_retest_zone",
+        )
 
     bars_waited = 0
     bars_in_zone = 0
@@ -211,6 +234,7 @@ def arm_retest_entry(
         if when > pending_until:
             return RetestArmResult(
                 status="skipped_expiry",
+                resolved_at=pending_until,
                 zone_lo=float(zone_lo),
                 zone_hi=float(zone_hi),
                 atr=float(atr),
@@ -224,6 +248,7 @@ def arm_retest_entry(
         if is_long and low <= orig_sl:
             return RetestArmResult(
                 status="skipped_sl",
+                resolved_at=when,
                 zone_lo=float(zone_lo),
                 zone_hi=float(zone_hi),
                 atr=float(atr),
@@ -233,6 +258,7 @@ def arm_retest_entry(
         if (not is_long) and high >= orig_sl:
             return RetestArmResult(
                 status="skipped_sl",
+                resolved_at=when,
                 zone_lo=float(zone_lo),
                 zone_hi=float(zone_hi),
                 atr=float(atr),
@@ -260,6 +286,7 @@ def arm_retest_entry(
                     status="filled",
                     fill_price=float(fill),
                     fill_time=when,
+                    resolved_at=when,
                     stop=float(stop),
                     zone_lo=float(zone_lo),
                     zone_hi=float(zone_hi),
@@ -282,6 +309,7 @@ def arm_retest_entry(
 
     return RetestArmResult(
         status="skipped_expiry",
+        resolved_at=pending_until,
         zone_lo=float(zone_lo),
         zone_hi=float(zone_hi),
         atr=float(atr),
