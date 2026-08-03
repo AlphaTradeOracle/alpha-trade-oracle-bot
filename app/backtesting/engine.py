@@ -96,6 +96,12 @@ class BacktestConfig:
     retest_zone_far: float = 1.0
     retest_pending_multiplier: int = 6
     retest_min_bars_in_zone: int = 1
+    retest_trendline_gate: bool = True
+    retest_trendline_buffer_atr: float = 0.1
+    retest_trendline_lookback: int = 40
+    retest_trendline_min_points: int = 2
+    retest_trendline_min_r2: float = 0.85
+    retest_trendline_min_clearance_atr: float = 0.0
     #: Nach TP1 Hold-Fenster verlaengern (wie Paper).
     expiry_multiplier_after_tp1: int = 48
     weights: StrategyWeights = DEFAULT_WEIGHTS
@@ -138,6 +144,12 @@ class BacktestConfig:
             "retest_zone_far": settings.paper_retest_zone_far,
             "retest_pending_multiplier": settings.paper_retest_pending_multiplier,
             "retest_min_bars_in_zone": settings.paper_retest_min_bars_in_zone,
+            "retest_trendline_gate": settings.signal_trendline_gate_enabled,
+            "retest_trendline_buffer_atr": settings.signal_trendline_buffer_atr,
+            "retest_trendline_lookback": settings.signal_trendline_lookback,
+            "retest_trendline_min_points": settings.signal_trendline_min_points,
+            "retest_trendline_min_r2": settings.signal_trendline_min_r2,
+            "retest_trendline_min_clearance_atr": settings.signal_trendline_min_clearance_atr,
             "expiry_multiplier_after_tp1": settings.paper_expiry_multiplier_after_tp1,
             "short_max_score": settings.signal_short_max_score,
             "short_min_score": settings.signal_short_min_score,
@@ -710,6 +722,14 @@ class BacktestEngine:
                 zone_far=Decimal(str(self._config.retest_zone_far)),
                 pending_multiplier=self._config.retest_pending_multiplier,
                 min_bars_in_zone=int(self._config.retest_min_bars_in_zone),
+                trendline_gate_enabled=bool(self._config.retest_trendline_gate),
+                trendline_buffer_atr=float(self._config.retest_trendline_buffer_atr),
+                trendline_lookback=int(self._config.retest_trendline_lookback),
+                trendline_min_points=int(self._config.retest_trendline_min_points),
+                trendline_min_r2=float(self._config.retest_trendline_min_r2),
+                trendline_min_clearance_atr=float(
+                    self._config.retest_trendline_min_clearance_atr
+                ),
             ),
         )
         if not arm.filled or arm.fill_price is None or arm.fill_time is None or arm.stop is None:

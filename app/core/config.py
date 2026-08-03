@@ -242,6 +242,14 @@ class Settings(BaseSettings):
     paper_retest_pending_multiplier: int = 6
     #: Mindestanzahl aufeinanderfolgender Kerzen in der Retest-Zone vor Fill.
     paper_retest_min_bars_in_zone: int = 1
+    #: Diagonale Trendlinien (fallender Widerstand / steigender Support).
+    signal_trendline_gate_enabled: bool = True
+    signal_trendline_lookback: int = 40
+    signal_trendline_buffer_atr: float = 0.1
+    signal_trendline_min_points: int = 2
+    signal_trendline_min_r2: float = 0.85
+    #: 0 = aus. Zusaetzlich blocken wenn Fill zu nah an der Diagonale liegt.
+    signal_trendline_min_clearance_atr: float = 0.0
     #: Backtest nutzt dieselbe Retest-Entry-Regel (statt naechster 1h-Open / IST).
     backtest_retest_entry_enabled: bool = True
     #: Paper-Trade-Telegram-Chart (Default 4h, wie Signal-Charts).

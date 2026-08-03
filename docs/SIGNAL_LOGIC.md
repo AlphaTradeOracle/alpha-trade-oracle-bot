@@ -189,6 +189,12 @@ Ohne Retest (IST) steigen SL-Treffer im Paper deutlich — Retest-Skip bleibt si
 | `PAPER_RETEST_ZONE_FAR` | `1.0` | Zone-Außenkante × ATR |
 | `PAPER_RETEST_PENDING_MULTIPLIER` | `6` | Pending-Fenster = N × Primary-TF |
 | `PAPER_RETEST_MIN_BARS_IN_ZONE` | `1` | Mindestens N Kerzen in Zone vor Fill |
+| `SIGNAL_TRENDLINE_GATE_ENABLED` | `true` | Kein Fill wenn Bounce die Diagonale bricht (Short LH / Long HL) |
+| `SIGNAL_TRENDLINE_LOOKBACK` | `40` | Frische Fenster für Pivot-Kette (Primary-TF Kerzen) |
+| `SIGNAL_TRENDLINE_BUFFER_ATR` | `0.1` | Puffer um die Diagonale × ATR |
+| `SIGNAL_TRENDLINE_MIN_POINTS` | `2` | Mindest-Anzahl Swings (LH bzw. HL) |
+| `SIGNAL_TRENDLINE_MIN_R2` | `0.85` | Mindest-Fit-Qualität (≥3 Punkte; 2 Punkte = 1.0) |
+| `SIGNAL_TRENDLINE_MIN_CLEARANCE_ATR` | `0.0` | Optional: Mindestabstand Fill↔Linie (0 = aus) |
 
 Ablauf:
 
@@ -199,7 +205,10 @@ Ablauf:
 4. Fill-Preis = Zonenmitte. Stop = Fill ± ursprüngliches R (Abstand Signal-Entry↔SL).
    TPs neu aus konfigurierter Leiter (Default 1.5/2.5/4R). Management-Expiry am Signal-Fenster (`SIGNAL_EXPIRY_MULTIPLIER` × TF); nach TP1 optional 48h (`PAPER_EXPIRY_MULTIPLIER_AFTER_TP1`).
 5. Skip ohne Fill, wenn vor dem Retest der Signal-SL getroffen wird, das Pending-
-   Fenster abläuft oder keine ATR-Historie verfügbar ist (`exit_reason=retest_skipped`).
+   Fenster abläuft, keine ATR-Historie verfügbar ist, oder Fill/Docht die frische
+   Diagonale durchbricht — Short: fallender Widerstand (LH), Long: steigender
+   Support (HL). Desk: `blocked: broke falling resistance` /
+   `blocked: broke rising support` (`skipped_trendline_break`).
 
 Nicht aktiv: Delay+30m und HTF-4h-Breakout (bewusst verworfen / reverted).
 

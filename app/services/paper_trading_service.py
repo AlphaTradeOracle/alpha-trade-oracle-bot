@@ -333,6 +333,14 @@ class PaperTradingService:
             zone_far=Decimal(str(self._settings.paper_retest_zone_far)),
             pending_multiplier=int(self._settings.paper_retest_pending_multiplier),
             min_bars_in_zone=int(self._settings.paper_retest_min_bars_in_zone),
+            trendline_gate_enabled=bool(self._settings.signal_trendline_gate_enabled),
+            trendline_buffer_atr=float(self._settings.signal_trendline_buffer_atr),
+            trendline_lookback=int(self._settings.signal_trendline_lookback),
+            trendline_min_points=int(self._settings.signal_trendline_min_points),
+            trendline_min_r2=float(self._settings.signal_trendline_min_r2),
+            trendline_min_clearance_atr=float(
+                self._settings.signal_trendline_min_clearance_atr
+            ),
         )
 
     def _regime_blocks_direction(

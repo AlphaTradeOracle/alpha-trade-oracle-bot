@@ -78,6 +78,12 @@ async def main() -> int:
         zone_far=Decimal(str(settings.paper_retest_zone_far)),
         pending_multiplier=int(settings.paper_retest_pending_multiplier),
         min_bars_in_zone=int(settings.paper_retest_min_bars_in_zone),
+        trendline_gate_enabled=bool(settings.signal_trendline_gate_enabled),
+        trendline_buffer_atr=float(settings.signal_trendline_buffer_atr),
+        trendline_lookback=int(settings.signal_trendline_lookback),
+        trendline_min_points=int(settings.signal_trendline_min_points),
+        trendline_min_r2=float(settings.signal_trendline_min_r2),
+        trendline_min_clearance_atr=float(settings.signal_trendline_min_clearance_atr),
     )
     lookback = timedelta(days=14)
     tp_mults = tuple(Decimal(str(m)) for m in tp_multipliers_from_settings(settings))

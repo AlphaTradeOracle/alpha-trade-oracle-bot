@@ -18,6 +18,11 @@ from decimal import Decimal
 
 from app.core.enums import SignalDirection
 from app.core.time import ensure_utc, timeframe_to_timedelta
+from app.indicators.trendlines import (
+    TrendlineDetectConfig,
+    TrendlineGateConfig,
+    evaluate_retest_trendline_gate,
+)
 from app.market_data.types import Candle
 from app.signals.risk import DEFAULT_TP_MULTIPLIERS
 
@@ -26,6 +31,10 @@ ZONE_FAR = Decimal("1.0")
 ATR_PERIOD = 14
 DEFAULT_PENDING_MULTIPLIER = 6
 DEFAULT_MIN_BARS_IN_ZONE = 1
+DEFAULT_TRENDLINE_BUFFER_ATR = 0.1
+DEFAULT_TRENDLINE_LOOKBACK = 40
+DEFAULT_TRENDLINE_MIN_POINTS = 2
+DEFAULT_TRENDLINE_MIN_R2 = 0.85
 
 
 @dataclass(frozen=True)
@@ -35,6 +44,16 @@ class RetestEntryConfig:
     atr_period: int = ATR_PERIOD
     pending_multiplier: int = DEFAULT_PENDING_MULTIPLIER
     min_bars_in_zone: int = DEFAULT_MIN_BARS_IN_ZONE
+    #: Retest: Fill verwerfen wenn Bounce die Diagonale bricht
+    #: (Short: fallender Widerstand / Long: aufsteigender Support).
+    trendline_gate_enabled: bool = True
+    trendline_buffer_atr: float = DEFAULT_TRENDLINE_BUFFER_ATR
+    trendline_lookback: int = DEFAULT_TRENDLINE_LOOKBACK
+    trendline_min_points: int = DEFAULT_TRENDLINE_MIN_POINTS
+    trendline_min_r2: float = DEFAULT_TRENDLINE_MIN_R2
+    trendline_min_clearance_atr: float = 0.0
+    #: Deprecated alias — maps to ``trendline_buffer_atr`` when set via older call sites.
+    trendline_tol_atr: float | None = None
 
 
 @dataclass
@@ -179,6 +198,7 @@ def arm_retest_entry(
       - skipped_no_atr
       - skipped_expiry
       - skipped_sl
+      - skipped_trendline_break (broke / too close to falling resistance or rising support)
       - pending (data ended before fill, pending window still open)
     """
     cfg = config or RetestEntryConfig()
@@ -229,7 +249,7 @@ def arm_retest_entry(
     bars_in_zone = 0
     now_cap = ensure_utc(candles[-1].open_time) if candles else arm_time
 
-    for candle in candles[sig_idx + 1 :]:
+    for fill_idx, candle in enumerate(candles[sig_idx + 1 :], start=sig_idx + 1):
         when = ensure_utc(candle.open_time)
         if when > pending_until:
             return RetestArmResult(
@@ -276,6 +296,47 @@ def arm_retest_entry(
                     zone_hi=zone_hi,
                     is_long=is_long,
                 )
+                if cfg.trendline_gate_enabled and atr_f > 0:
+                    buffer = (
+                        float(cfg.trendline_tol_atr)
+                        if cfg.trendline_tol_atr is not None
+                        else float(cfg.trendline_buffer_atr)
+                    )
+                    gate = evaluate_retest_trendline_gate(
+                        candles,
+                        fill_idx=fill_idx,
+                        fill_price=float(fill),
+                        atr=float(atr_f),
+                        is_long=is_long,
+                        cfg=TrendlineGateConfig(
+                            enabled=True,
+                            buffer_atr=buffer,
+                            min_clearance_atr=float(cfg.trendline_min_clearance_atr),
+                            detect=TrendlineDetectConfig(
+                                lookback=max(10, int(cfg.trendline_lookback)),
+                                min_points=max(2, int(cfg.trendline_min_points)),
+                                min_r2=float(cfg.trendline_min_r2),
+                            ),
+                        ),
+                    )
+                    if gate.blocked:
+                        return RetestArmResult(
+                            status="skipped_trendline_break",
+                            resolved_at=when,
+                            zone_lo=float(zone_lo),
+                            zone_hi=float(zone_hi),
+                            atr=float(atr),
+                            bars_waited=bars_waited,
+                            note=(
+                                f"{gate.reason}"
+                                + (
+                                    f":line={gate.line_price:.8g}"
+                                    if gate.line_price is not None
+                                    else ""
+                                )
+                                + f";fill={float(fill):.8g}"
+                            ),
+                        )
                 stop = stop_from_retest_fill(
                     fill,
                     reference_entry=reference,

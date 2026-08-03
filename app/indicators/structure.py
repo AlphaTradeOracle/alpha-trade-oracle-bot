@@ -32,6 +32,10 @@ class StructureAnalysis:
     resistances: list[float] = field(default_factory=list)
     nearest_support: float | None = None
     nearest_resistance: float | None = None
+    #: Aktueller Preis der fallenden Widerstands-Diagonale (Lower Highs), falls frisch.
+    falling_resistance: float | None = None
+    #: Aktueller Preis der steigenden Support-Diagonale (Higher Lows), falls frisch.
+    rising_support: float | None = None
     breakout_up: bool = False
     breakout_down: bool = False
     failed_breakout_up: bool = False
@@ -108,8 +112,12 @@ def analyze_structure(
     swing_right: int = 3,
     lookback: int = 120,
     atr_value: float | None = None,
+    trendline_lookback: int = 40,
 ) -> StructureAnalysis:
     """Vollstaendige Marktstrukturanalyse fuer den aktuellen Kursstand."""
+    # Local import avoids a circular dependency at module load.
+    from app.indicators.trendlines import TrendlineDetectConfig, fit_falling_resistance, fit_rising_support
+
     result = StructureAnalysis()
     if len(close) < swing_left + swing_right + 10:
         result.notes.append("Zu wenige Kerzen fuer eine Strukturanalyse")
@@ -199,6 +207,33 @@ def analyze_structure(
             distance = (current_price - result.nearest_support) / atr_value
             if distance < 0.5:
                 result.notes.append("Kurs unmittelbar ueber einem Support")
+
+    # --- Diagonale Trendlinien (frisch im Trendline-Lookback) -------------
+    tl_cfg = TrendlineDetectConfig(
+        lookback=max(10, int(trendline_lookback)),
+        min_points=2,
+        swing_left=swing_left,
+        swing_right=swing_right,
+    )
+    tl_start = max(0, len(high_w) - tl_cfg.lookback)
+    tl_swings = [s for s in swings if s.index >= tl_start]
+    eval_idx = len(high_w) - 1
+    falling = fit_falling_resistance(
+        tl_swings, eval_idx=eval_idx, atr=atr_value, cfg=tl_cfg
+    )
+    rising = fit_rising_support(
+        tl_swings, eval_idx=eval_idx, atr=atr_value, cfg=tl_cfg
+    )
+    if falling is not None:
+        result.falling_resistance = falling.price_at(eval_idx)
+        result.notes.append(
+            f"Fallender Widerstand @ {result.falling_resistance:.6g} (r2={falling.r2:.2f})"
+        )
+    if rising is not None:
+        result.rising_support = rising.price_at(eval_idx)
+        result.notes.append(
+            f"Steigender Support @ {result.rising_support:.6g} (r2={rising.r2:.2f})"
+        )
 
     return result
 

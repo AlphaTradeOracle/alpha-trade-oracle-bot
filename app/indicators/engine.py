@@ -150,6 +150,8 @@ class IndicatorSet:
             "structure_state": self.structure.state.value,
             "nearest_support": self.structure.nearest_support,
             "nearest_resistance": self.structure.nearest_resistance,
+            "falling_resistance": self.structure.falling_resistance,
+            "rising_support": self.structure.rising_support,
         }
 
 
