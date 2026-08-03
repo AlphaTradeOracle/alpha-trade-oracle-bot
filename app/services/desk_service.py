@@ -26,9 +26,17 @@ from app.schemas.desk import (
 )
 from app.services.paper_trading_service import PaperTradingService
 
-# Price zones only — skip ATR-multiplier notes like ``zone=0.55-1.0ATR``.
-_ZONE_RE = re.compile(
-    r"zone=(?P<lo>-?\d+(?:\.\d+)?)-(?P<hi>-?\d+(?:\.\d+)?)(?!ATR)"
+# Price zones in notes: ``zone=99.0-101.0``. Reject ATR-multiplier form
+# ``zone=0.55-1.0ATR`` (the old ``(?!ATR)`` lookahead failed via backtracking
+# on ``1.0ATR`` → matched hi=``1``).
+_ZONE_PX_RE = re.compile(
+    r"(?:^|;)zone=(?P<lo>-?\d+(?:\.\d+)?)-(?P<hi>-?\d+(?:\.\d+)?)(?!ATR)(?:;|$)"
+)
+_ZONE_ATR_RE = re.compile(r"(?:^|;)zone=-?\d+(?:\.\d+)?--?\d+(?:\.\d+)?ATR(?:;|$)")
+_REF_ENTRY_RE = re.compile(r"(?:^|;)ref_entry=(?P<v>-?\d+(?:\.\d+)?)(?:;|$)")
+_ATR_RE = re.compile(r"(?:^|;)atr=(?P<v>-?\d+(?:\.\d+)?)(?:;|$)")
+_ZONE_ATR_MULT_RE = re.compile(
+    r"(?:^|;)zone_atr=(?P<near>-?\d+(?:\.\d+)?)-(?P<far>-?\d+(?:\.\d+)?)(?:;|$)"
 )
 
 _EXIT_NOTE = {
@@ -113,12 +121,53 @@ def exit_fill_price(fills: list[Any] | None) -> float | None:
 
 
 def _parse_zone(notes: str | None) -> tuple[float | None, float | None]:
+    """Return price zone bounds; ignore ATR-multiplier ``zone=0.55-1.0ATR``."""
     if not notes:
         return None, None
-    match = _ZONE_RE.search(notes)
+    if _ZONE_ATR_RE.search(notes):
+        return None, None
+    match = _ZONE_PX_RE.search(notes)
     if not match:
         return None, None
     return float(match.group("lo")), float(match.group("hi"))
+
+
+def _pending_retest_zone(
+    notes: str | None,
+    *,
+    entry: float,
+    direction: str,
+) -> tuple[float | None, float | None]:
+    """Price zone for pending retest rows (notes or reconstructed from ATR)."""
+    lo, hi = _parse_zone(notes)
+    if lo is not None and hi is not None:
+        return lo, hi
+    if not notes:
+        return None, None
+
+    ref_m = _REF_ENTRY_RE.search(notes)
+    atr_m = _ATR_RE.search(notes)
+    ref = float(ref_m.group("v")) if ref_m else entry
+    atr = float(atr_m.group("v")) if atr_m else None
+    if atr is None or atr <= 0:
+        return None, None
+
+    near, far = 0.55, 1.0
+    mult = _ZONE_ATR_MULT_RE.search(notes)
+    if mult:
+        near, far = float(mult.group("near")), float(mult.group("far"))
+    else:
+        settings = get_settings()
+        near = float(settings.paper_retest_zone_near)
+        far = float(settings.paper_retest_zone_far)
+
+    try:
+        is_long = SignalDirection(direction).is_long
+    except ValueError:
+        is_long = True
+    if is_long:
+        return ref - far * atr, ref - near * atr
+    return ref + near * atr, ref + far * atr
 
 
 def _strategy_label(direction: str, status: str) -> str:
@@ -286,7 +335,14 @@ def map_position_to_desk_trade(
     elif desk_status == "CLOSED":
         mark_out = None
 
-    zone_lo, zone_hi = _parse_zone(str(notes) if notes else None)
+    if desk_status == "PENDING":
+        zone_lo, zone_hi = _pending_retest_zone(
+            str(notes) if notes else None,
+            entry=entry,
+            direction=direction,
+        )
+    else:
+        zone_lo, zone_hi = _parse_zone(str(notes) if notes else None)
     opened = _iso(opened_at) or utc_now().isoformat().replace("+00:00", "Z")
 
     market_context = None

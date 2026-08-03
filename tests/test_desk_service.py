@@ -7,11 +7,89 @@ from datetime import UTC, datetime
 import pytest
 
 from app.services.desk_service import (
+    _parse_zone,
     desk_status_for,
     exit_fill_price,
     map_position_to_desk_trade,
     map_raw_export_to_snapshot,
 )
+
+
+def test_parse_zone_rejects_atr_multipliers() -> None:
+    assert _parse_zone("retest_pending;zone=0.55-1.0ATR;ref_entry=1.2") == (None, None)
+    assert _parse_zone("retest_filled;zone=99.0-101.0;atr=1.2") == (99.0, 101.0)
+
+
+def test_pending_atr_multiplier_notes_do_not_fake_entry_zone() -> None:
+    trade = map_position_to_desk_trade(
+        {
+            "id": 42,
+            "symbol": "KASUSDT",
+            "direction": "SHORT",
+            "status": "pending",
+            "entry_price": 0.0265,
+            "stop_loss": 0.026724,
+            "current_stop": 0.026724,
+            "take_profit_1": 0.025,
+            "take_profit_2": 0.024,
+            "take_profit_3": 0.023,
+            "initial_quantity": 1.0,
+            "remaining_quantity": 1.0,
+            "margin_used": 0.0,
+            "notional": 100.0,
+            "realized_pnl": 0.0,
+            "fees": 0.0,
+            "risk_amount": 50.0,
+            "signal_score": 28.5,
+            "leverage": 5.0,
+            "timeframe": "1h",
+            "opened_at": "2026-08-03T08:00:00+00:00",
+            "notes": (
+                "retest_pending;ref_entry=0.0265;orig_sl=0.026724;"
+                "zone=0.55-1.0ATR"
+            ),
+        }
+    )
+    assert trade is not None
+    assert trade.status == "PENDING"
+    # Must not surface 0.55–1.0 as a price zone.
+    assert trade.entryZoneLow is None
+    assert trade.entryZoneHigh is None
+
+
+def test_pending_zone_from_price_notes() -> None:
+    trade = map_position_to_desk_trade(
+        {
+            "id": 43,
+            "symbol": "KASUSDT",
+            "direction": "SHORT",
+            "status": "pending",
+            "entry_price": 0.0265,
+            "stop_loss": 0.026724,
+            "current_stop": 0.026724,
+            "take_profit_1": 0.025,
+            "take_profit_2": 0.024,
+            "take_profit_3": 0.023,
+            "initial_quantity": 1.0,
+            "remaining_quantity": 1.0,
+            "margin_used": 0.0,
+            "notional": 100.0,
+            "realized_pnl": 0.0,
+            "fees": 0.0,
+            "risk_amount": 50.0,
+            "signal_score": 28.5,
+            "leverage": 5.0,
+            "timeframe": "1h",
+            "opened_at": "2026-08-03T08:00:00+00:00",
+            "notes": (
+                "retest_pending;ref_entry=0.0265;orig_sl=0.026724;"
+                "zone=0.0268-0.0272;zone_atr=0.55-1.0;atr=0.0004"
+            ),
+        }
+    )
+    assert trade is not None
+    assert trade.entryZoneLow == pytest.approx(0.0268)
+    assert trade.entryZoneHigh == pytest.approx(0.0272)
 
 
 def test_desk_status_omits_cancelled() -> None:

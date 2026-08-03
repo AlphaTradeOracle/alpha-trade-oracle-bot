@@ -427,6 +427,19 @@ class PaperTradingService:
         ctx = getattr(result, "market_context", None)
         return dict(ctx) if isinstance(ctx, dict) else None
 
+    @staticmethod
+    def _primary_atr(result: SignalResult) -> float | None:
+        """ATR14 from the primary TF assessment (for pending retest zone notes)."""
+        assessment = result.assessments.get(result.primary_timeframe)
+        if assessment is None and result.assessments:
+            assessment = next(iter(result.assessments.values()), None)
+        if assessment is None or assessment.indicators is None:
+            return None
+        atr = assessment.indicators.atr_14
+        if atr is None or atr <= 0:
+            return None
+        return float(atr)
+
     def _size_position(self, entry: Decimal, stop: Decimal) -> PositionSizing | None:
         """Stueckzahl aus Risikobetrag und Stop-Abstand statt aus fixer Margin.
 
@@ -730,6 +743,25 @@ class PaperTradingService:
         if sizing is None:
             return None
 
+        near = Decimal(str(self._settings.paper_retest_zone_near))
+        far = Decimal(str(self._settings.paper_retest_zone_far))
+        atr_f = self._primary_atr(result)
+        zone_note = f"zone_atr={float(near)}-{float(far)}"
+        if atr_f is not None and atr_f > 0:
+            from app.signals.retest_entry import retest_zone
+
+            zone_lo, zone_hi = retest_zone(
+                entry,
+                Decimal(str(atr_f)),
+                is_long=result.direction.is_long,
+                zone_near=near,
+                zone_far=far,
+            )
+            zone_note = (
+                f"zone={float(zone_lo)}-{float(zone_hi)};"
+                f"zone_atr={float(near)}-{float(far)};atr={atr_f}"
+            )
+
         position = PaperPosition(
             account_id=account.id,
             signal_id=outcome.signal_id,
@@ -756,9 +788,7 @@ class PaperTradingService:
             expires_at=expires_at,
             notes=(
                 f"retest_pending;ref_entry={float(entry)};orig_sl={float(stop)};"
-                f"armed_at={armed_at.isoformat()};"
-                f"zone={self._settings.paper_retest_zone_near}-"
-                f"{self._settings.paper_retest_zone_far}ATR"
+                f"armed_at={armed_at.isoformat()};{zone_note}"
             ),
             market_context=self._market_context_for(result),
         )
