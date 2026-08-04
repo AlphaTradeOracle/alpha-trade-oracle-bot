@@ -236,6 +236,15 @@ class Settings(BaseSettings):
     #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
     #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
     paper_fee_percent: float = 0.05
+    #: Adverse Slippage in Prozent auf Market-artige Fills (Entry, Stop, Expiry,
+    #: Early-Scratch). TP-Limits bleiben ohne Slippage. 0 = aus.
+    paper_slippage_percent: float = 0.05
+    #: Perp-Funding auf offene Notionals (Binance-Takt ~8h). Rate live wenn
+    #: abrufbar, sonst ``paper_funding_rate_default``.
+    paper_funding_enabled: bool = True
+    paper_funding_interval_hours: float = 8.0
+    #: Fallback-Funding-Rate pro Intervall (0.0001 = 0.01%).
+    paper_funding_rate_default: float = 0.0001
     paper_move_stop_to_breakeven: bool = True
     paper_update_interval_minutes: int = 5
     #: Stuendlicher Paper-Performance-Digest an TELEGRAM_ALLOWED_CHAT_IDS.

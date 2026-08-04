@@ -25,6 +25,22 @@ from tests.test_dedup import make_result
 
 NOW = datetime(2024, 6, 1, 12, tzinfo=UTC)
 
+# Existing unit tests assert exact fill/cash math; disable live-realism knobs unless
+# a test explicitly opts in.
+_PAPER_TEST_DEFAULTS: dict[str, object] = {
+    "paper_slippage_percent": 0.0,
+    "paper_funding_enabled": False,
+}
+
+
+def _paper_settings(**overrides: object) -> Settings:
+    base: dict[str, object] = {
+        "enable_paper_trading": True,
+        **_PAPER_TEST_DEFAULTS,
+    }
+    base.update(overrides)
+    return Settings(**base)  # type: ignore[arg-type]
+
 
 def _long_risk(entry: float = 100.0, stop_distance: float = 5.0) -> RiskParameters:
     return RiskParameters(
@@ -170,8 +186,7 @@ class TestRetestFill:
     async def test_expiry_window_starts_at_fill_not_at_arm(
         self, session: AsyncSession
     ) -> None:
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=5000.0,
             paper_leverage=10.0,
             paper_risk_per_trade_usd=50.0,
@@ -265,8 +280,7 @@ class TestRetestFill:
 
 class TestRiskNormalizedSizing:
     def _service(self, **overrides: object) -> PaperTradingService:
-        base = {
-            "enable_paper_trading": True,
+        base: dict[str, object] = {
             "paper_initial_balance": 5000.0,
             "paper_margin_per_trade": 100.0,
             "paper_leverage": 10.0,
@@ -275,7 +289,7 @@ class TestRiskNormalizedSizing:
             "paper_fee_percent": 0.0,
         }
         base.update(overrides)
-        return PaperTradingService(Settings(**base))  # type: ignore[arg-type]
+        return PaperTradingService(_paper_settings(**base))
 
     def test_dollar_risk_is_constant_across_stop_distances(self) -> None:
         service = self._service()
@@ -313,6 +327,7 @@ class TestPortfolioRiskLimits:
     def _settings(self, **overrides: object) -> Settings:
         base: dict[str, object] = {
             "enable_paper_trading": True,
+            **_PAPER_TEST_DEFAULTS,
             "paper_initial_balance": 5000.0,
             "paper_margin_per_trade": 100.0,
             "paper_leverage": 10.0,
@@ -707,8 +722,7 @@ class TestPortfolioRiskLimits:
 class TestPaperTrading:
     @pytest.mark.asyncio
     async def test_open_and_scale_out_to_breakeven(self, session: AsyncSession) -> None:
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=2000.0,
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
@@ -764,8 +778,7 @@ class TestPaperTrading:
     async def test_wall_clock_expires_pending_without_candles(
         self, session: AsyncSession
     ) -> None:
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=5000.0,
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
@@ -806,8 +819,7 @@ class TestPaperTrading:
 
     @pytest.mark.asyncio
     async def test_retest_opens_as_pending_without_cash_lock(self, session: AsyncSession) -> None:
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=2000.0,
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
@@ -837,8 +849,7 @@ class TestPaperTrading:
 
     @pytest.mark.asyncio
     async def test_skips_duplicate_open_symbol(self, session: AsyncSession) -> None:
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=2000.0,
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
@@ -875,8 +886,7 @@ class TestPaperTrading:
             async def notify_close(self, position) -> None:
                 events.append(("close", position.symbol))
 
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=2000.0,
             paper_margin_per_trade=100.0,
             paper_leverage=5.0,
@@ -913,8 +923,7 @@ class TestPaperMarginConservation:
         Old bug: ``margin_used * qty/initial`` after TP1 under-released, then
         full close zeroed ``margin_used`` without paying the leftover to cash.
         """
-        settings = Settings(
-            enable_paper_trading=True,
+        settings = _paper_settings(
             paper_initial_balance=5000.0,
             paper_margin_per_trade=150.0,
             paper_leverage=10.0,
@@ -962,3 +971,186 @@ class TestPaperMarginConservation:
         summary = await service.summary(session)
         assert summary.open_positions == 0
         assert float(summary.equity) == pytest.approx(float(account.cash_balance))
+
+
+class TestPaperLiveRealism:
+    """Wick watermark, entry-bar clip, slippage, funding."""
+
+    def _open_settings(self, **overrides: object) -> Settings:
+        return _paper_settings(
+            paper_initial_balance=5000.0,
+            paper_margin_per_trade=300.0,
+            paper_leverage=10.0,
+            paper_risk_per_trade_usd=0.0,
+            paper_fee_percent=0.0,
+            paper_retest_entry_enabled=False,
+            paper_early_scratch_hours=0,
+            **overrides,
+        )
+
+    def test_slip_price_is_adverse(self) -> None:
+        service = PaperTradingService(
+            self._open_settings(paper_slippage_percent=0.05)
+        )
+        assert service._slip_price(100.0, is_long=True, side="entry") == pytest.approx(
+            100.05
+        )
+        assert service._slip_price(100.0, is_long=False, side="entry") == pytest.approx(
+            99.95
+        )
+        assert service._slip_price(100.0, is_long=True, side="exit") == pytest.approx(
+            99.95
+        )
+        assert service._slip_price(100.0, is_long=False, side="exit") == pytest.approx(
+            100.05
+        )
+
+    def test_unclosed_bar_is_not_watermarked(self) -> None:
+        service = PaperTradingService(self._open_settings())
+        now = datetime(2024, 6, 1, 12, 3, tzinfo=UTC)
+        open_bar = Candle(
+            open_time=datetime(2024, 6, 1, 12, 0, tzinfo=UTC),
+            close_time=datetime(2024, 6, 1, 12, 5, tzinfo=UTC),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.5,
+            volume=1.0,
+            is_closed=False,
+        )
+        assert service._bar_is_closed(open_bar, bar_minutes=5, now=now) is False
+        closed = Candle(
+            open_time=datetime(2024, 6, 1, 11, 55, tzinfo=UTC),
+            close_time=datetime(2024, 6, 1, 12, 0, tzinfo=UTC),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.0,
+            volume=1.0,
+            is_closed=True,
+        )
+        assert service._bar_is_closed(closed, bar_minutes=5, now=now) is True
+
+    def test_skip_pre_fill_bar(self) -> None:
+        service = PaperTradingService(self._open_settings())
+        opened = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
+        before = Candle(
+            open_time=datetime(2024, 6, 1, 11, 55, tzinfo=UTC),
+            close_time=datetime(2024, 6, 1, 12, 0, tzinfo=UTC),
+            open=100.0,
+            high=101.0,
+            low=90.0,  # would fake-stop a long
+            close=100.0,
+            volume=1.0,
+        )
+        assert (
+            service._skip_pre_fill_bar(before, opened_at=opened, bar_minutes=5) is True
+        )
+        after = Candle(
+            open_time=datetime(2024, 6, 1, 12, 0, tzinfo=UTC),
+            close_time=datetime(2024, 6, 1, 12, 5, tzinfo=UTC),
+            open=100.0,
+            high=101.0,
+            low=99.0,
+            close=100.0,
+            volume=1.0,
+        )
+        assert (
+            service._skip_pre_fill_bar(after, opened_at=opened, bar_minutes=5) is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_entry_applies_slippage(self, session: AsyncSession) -> None:
+        service = PaperTradingService(
+            self._open_settings(paper_slippage_percent=0.05)
+        )
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="slip-entry",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.risk = _tight_long_risk(100.0)
+        pos = await service.open_from_signal(
+            session, AnalysisOutcome(result=result, price_precision=2)
+        )
+        assert pos is not None
+        # Zone edge 99 + 0.05% adverse slip.
+        assert float(pos.entry_price) == pytest.approx(99.0 * 1.0005, rel=1e-9)
+
+    @pytest.mark.asyncio
+    async def test_stop_exit_applies_slippage(self, session: AsyncSession) -> None:
+        service = PaperTradingService(
+            self._open_settings(paper_slippage_percent=0.05)
+        )
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="slip-stop",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.risk = _tight_long_risk(100.0)
+        pos = await service.open_from_signal(
+            session, AnalysisOutcome(result=result, price_precision=2)
+        )
+        assert pos is not None
+        stop = float(pos.current_stop)
+        await service.update_open_positions(session, {pos.symbol: stop - 1.0})
+        assert pos.status == "closed"
+        assert pos.exit_reason == ExitReason.STOP_LOSS.value
+        from sqlalchemy import select
+
+        from app.models.paper import PaperFill
+
+        fills = (
+            await session.scalars(
+                select(PaperFill).where(PaperFill.position_id == pos.id)
+            )
+        ).all()
+        stop_fills = [f for f in fills if f.reason == ExitReason.STOP_LOSS.value]
+        assert stop_fills
+        assert float(stop_fills[-1].price) == pytest.approx(stop * 0.9995, rel=1e-9)
+
+    @pytest.mark.asyncio
+    async def test_funding_accrues_every_interval(self, session: AsyncSession) -> None:
+        service = PaperTradingService(
+            self._open_settings(
+                paper_funding_enabled=True,
+                paper_funding_interval_hours=8.0,
+                paper_funding_rate_default=0.0001,
+            )
+        )
+        # Avoid live Binance fetch in unit test.
+        service._funding_rate_cache = {"BTCUSDT": 0.0001}
+        result = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="fund-1",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        result.risk = _tight_long_risk(100.0)
+        opened_at = datetime(2024, 6, 1, 0, 0, tzinfo=UTC)
+        pos = await service.open_from_signal(
+            session,
+            AnalysisOutcome(result=result, price_precision=2),
+            opened_at=opened_at,
+        )
+        assert pos is not None
+        account = await service.get_or_create_account(session)
+        cash_before = float(account.cash_balance)
+        notional = float(pos.notional)
+        charged = await service._accrue_funding(
+            session,
+            account,
+            pos,
+            when=opened_at + timedelta(hours=8),
+        )
+        assert charged is True
+        # Long pays positive funding: cash drops by notional * rate.
+        assert float(account.cash_balance) == pytest.approx(
+            cash_before - notional * 0.0001, rel=1e-9
+        )
+        assert "last_funding=" in (pos.notes or "")

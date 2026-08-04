@@ -414,11 +414,13 @@ class PaperTradingService:
         mfe = self._mfe_r(position)
         if mfe >= float(self._settings.paper_early_scratch_mfe_r):
             return False
+        is_long = SignalDirection(position.direction).is_long
+        slip_px = self._slip_price(price, is_long=is_long, side="exit")
         await self._close_remaining(
             session,
             account,
             position,
-            price=price,
+            price=slip_px,
             reason=ExitReason.EARLY_SCRATCH,
             when=when,
         )
@@ -427,7 +429,7 @@ class PaperTradingService:
             symbol=position.symbol,
             hours=round(elapsed_h, 2),
             mfe_r=round(mfe, 3),
-            price=price,
+            price=slip_px,
         )
         return True
 
@@ -482,6 +484,27 @@ class PaperTradingService:
         if atr is None or atr <= 0:
             return None
         return float(atr)
+
+    def _slip_price(self, price: float, *, is_long: bool, side: str) -> float:
+        """Adverse slippage for market-like fills (entry / stop / expiry / scratch).
+
+        ``side='entry'``: long pays up, short sells down.
+        ``side='exit'``: long sells down, short covers up.
+        TP limit fills should not call this.
+        """
+        slip = float(self._settings.paper_slippage_percent) / 100.0
+        if slip <= 0 or price <= 0:
+            return price
+        if side == "entry":
+            return price * (1.0 + slip) if is_long else price * (1.0 - slip)
+        return price * (1.0 - slip) if is_long else price * (1.0 + slip)
+
+    def _remaining_notional(self, position: PaperPosition) -> Decimal:
+        qty = Decimal(str(position.remaining_quantity or 0))
+        entry = Decimal(str(position.entry_price or 0))
+        if qty <= 0 or entry <= 0:
+            return Decimal("0")
+        return qty * entry
 
     def _size_position(self, entry: Decimal, stop: Decimal) -> PositionSizing | None:
         """Stueckzahl aus Risikobetrag und Stop-Abstand statt aus fixer Margin.
@@ -737,11 +760,20 @@ class PaperTradingService:
         # Fill at the same reference RiskManager used for SL/TP/RR (zone edge),
         # not mid — otherwise stop distance widens at fill and gated R:R lies.
         if result.direction.is_long and result.risk.entry_low is not None:
-            entry = Decimal(str(result.risk.entry_low))
+            raw_entry = float(result.risk.entry_low)
         elif (not result.direction.is_long) and result.risk.entry_high is not None:
-            entry = Decimal(str(result.risk.entry_high))
+            raw_entry = float(result.risk.entry_high)
         else:
-            entry = Decimal(str(result.risk.entry_mid or result.reference_price))
+            raw_entry = float(result.risk.entry_mid or result.reference_price)
+        entry = Decimal(
+            str(
+                self._slip_price(
+                    raw_entry,
+                    is_long=result.direction.is_long,
+                    side="entry",
+                )
+            )
+        )
         stop = Decimal(str(result.risk.stop_loss))
         sizing = self._size_position(entry, stop)
         if sizing is None:
@@ -1109,9 +1141,17 @@ class PaperTradingService:
                 ),
             )
             return False
-        entry = Decimal(str(arm.fill_price))
-        stop = Decimal(str(arm.stop))
         is_long = SignalDirection(position.direction).is_long
+        entry = Decimal(
+            str(
+                self._slip_price(
+                    float(arm.fill_price),
+                    is_long=is_long,
+                    side="entry",
+                )
+            )
+        )
+        stop = Decimal(str(arm.stop))
         tp1, tp2, tp3 = levels_from_entry_sl(
             entry, stop, is_long=is_long, multipliers=tuple(Decimal(str(m)) for m in self._tp_multipliers)
         )
@@ -1583,14 +1623,21 @@ class PaperTradingService:
                     if position.status != "open":
                         continue
                     try:
+                        tf = position.timeframe or "1h"
                         series = await provider.get_candles(
                             position.symbol,
-                            position.timeframe or "1h",
+                            tf,
                             limit=100_000,
                             start_time=position.opened_at,
                             end_time=utc_now(),
                         )
-                        await self._replay_bars(session, account, position, series.candles)
+                        await self._replay_bars(
+                            session,
+                            account,
+                            position,
+                            series.candles,
+                            bar_minutes=timeframe_minutes(tf),
+                        )
                         out.replayed += 1
                     except Exception as exc:
                         logger.warning(
@@ -1738,7 +1785,13 @@ class PaperTradingService:
 
             if position.status != "pending":
                 try:
-                    await self._replay_bars(session, account, position, candles)
+                    await self._replay_bars(
+                        session,
+                        account,
+                        position,
+                        candles,
+                        bar_minutes=timeframe_minutes(tf),
+                    )
                     out.replayed += 1
                 except Exception as exc:
                     logger.warning(
@@ -1812,14 +1865,21 @@ class PaperTradingService:
             out.retest_filled += 1
             await session.flush()
             try:
+                mgmt_tf = position.timeframe or "1h"
                 series_mgmt = await provider.get_candles(
                     symbol,
-                    position.timeframe or "1h",
+                    mgmt_tf,
                     limit=100_000,
                     start_time=position.opened_at,
                     end_time=cutoff,
                 )
-                await self._replay_bars(session, account, position, series_mgmt.candles)
+                await self._replay_bars(
+                    session,
+                    account,
+                    position,
+                    series_mgmt.candles,
+                    bar_minutes=timeframe_minutes(mgmt_tf),
+                )
                 await session.flush()
                 out.replayed += 1
             except Exception as exc:
@@ -1832,7 +1892,11 @@ class PaperTradingService:
         return backfill
 
     def _wick_cursor(self, position: PaperPosition, *, bar_minutes: int) -> datetime:
-        """Exclusive lower bound for wick bars already applied."""
+        """Exclusive lower bound for *closed* wick bars already applied.
+
+        Unclosed/forming bars are never watermarked — they are reprocessed every
+        poll until ``is_closed`` so final OHLC (and missed wicks) are not lost.
+        """
         raw = _parse_note_kv(position.notes, "last_wick")
         if raw:
             try:
@@ -1840,8 +1904,40 @@ class PaperTradingService:
             except ValueError:
                 pass
         opened = ensure_utc(position.opened_at) if position.opened_at is not None else utc_now()
-        # Include the bar that contains the fill on the first poll.
-        return opened - timedelta(minutes=max(1, bar_minutes))
+        # Bars with open_time >= opened_at are eligible; micro-epsilon keeps ``>``.
+        return opened - timedelta(microseconds=1)
+
+    def _bar_is_closed(self, candle, *, bar_minutes: int, now: datetime) -> bool:
+        if getattr(candle, "is_closed", None) is False:
+            return False
+        if getattr(candle, "is_closed", None) is True:
+            close_time = getattr(candle, "close_time", None)
+            if close_time is not None and ensure_utc(close_time) > now:
+                return False
+            return True
+        close_time = getattr(candle, "close_time", None)
+        if close_time is not None:
+            return ensure_utc(close_time) <= now
+        open_time = getattr(candle, "open_time", None)
+        if open_time is None:
+            return True
+        return ensure_utc(open_time) + timedelta(minutes=bar_minutes) <= now
+
+    def _skip_pre_fill_bar(self, candle, *, opened_at: datetime, bar_minutes: int) -> bool:
+        """Skip OHLC that printed entirely or partially before the fill."""
+        bar_open = ensure_utc(candle.open_time)
+        close_time = getattr(candle, "close_time", None)
+        bar_close = (
+            ensure_utc(close_time)
+            if close_time is not None
+            else bar_open + timedelta(minutes=max(1, bar_minutes))
+        )
+        if bar_close <= opened_at:
+            return True
+        # Ambiguous fill bar: open before fill, close after — path unknown.
+        if bar_open < opened_at < bar_close:
+            return True
+        return False
 
     async def _fetch_wick_bars(
         self,
@@ -1850,7 +1946,7 @@ class PaperTradingService:
         *,
         wick_timeframe: str,
     ) -> list:
-        """All missed wick bars since last watermark (not only the latest)."""
+        """Missed closed bars since watermark + current forming bar (reprocessed)."""
         bar_minutes = max(1, timeframe_minutes(wick_timeframe))
         cursor = self._wick_cursor(position, bar_minutes=bar_minutes)
         now = utc_now()
@@ -1865,7 +1961,15 @@ class PaperTradingService:
             include_unclosed=True,
         )
         candles = list(series.candles) if series is not None else []
-        bars = [c for c in candles if ensure_utc(c.open_time) > cursor]
+        bars: list = []
+        for candle in candles:
+            ot = ensure_utc(candle.open_time)
+            closed = self._bar_is_closed(candle, bar_minutes=bar_minutes, now=now)
+            if ot > cursor:
+                bars.append(candle)
+            elif not closed:
+                # Reprocess forming bar even if previously seen partially.
+                bars.append(candle)
         bars.sort(key=lambda c: ensure_utc(c.open_time))
         return bars
 
@@ -1875,16 +1979,26 @@ class PaperTradingService:
         account: PaperAccount,
         position: PaperPosition,
         bars,
+        *,
+        bar_minutes: int = 5,
     ) -> None:
         """OHLC-Replay: Stop hat Vorrang, danach TPs in Reihenfolge."""
         if not bars:
             return
+        opened_at = (
+            ensure_utc(position.opened_at) if position.opened_at is not None else None
+        )
         for candle in bars:
             if position.status != "open":
                 break
+            if opened_at is not None and self._skip_pre_fill_bar(
+                candle, opened_at=opened_at, bar_minutes=bar_minutes
+            ):
+                continue
             when = getattr(candle, "open_time", None) or getattr(candle, "timestamp", None)
             if when is None:
                 when = utc_now()
+            when = ensure_utc(when)
             high = float(candle.high)
             low = float(candle.low)
             close = float(candle.close)
@@ -1893,11 +2007,12 @@ class PaperTradingService:
 
             stop_hit = low <= stop if is_long else high >= stop
             if stop_hit:
+                slip_stop = self._slip_price(stop, is_long=is_long, side="exit")
                 await self._close_remaining(
                     session,
                     account,
                     position,
-                    price=stop,
+                    price=slip_stop,
                     reason=ExitReason.STOP_LOSS,
                     when=when,
                 )
@@ -1926,11 +2041,12 @@ class PaperTradingService:
                 and when >= position.expires_at
                 and position.remaining_quantity > 0
             ):
+                slip_close = self._slip_price(close, is_long=is_long, side="exit")
                 await self._close_remaining(
                     session,
                     account,
                     position,
-                    price=close,
+                    price=slip_close,
                     reason=ExitReason.EXPIRED,
                     when=when,
                 )
@@ -1977,20 +2093,44 @@ class PaperTradingService:
                     if abs(healed - cur) > 1e-12:
                         position.current_stop = Decimal(str(healed))
 
+            if position.status == "open":
+                funded = await self._accrue_funding(
+                    session, account, position, when=utc_now(), provider=provider
+                )
+                if funded:
+                    updated.append(position)
+
             if provider is not None and position.status == "open":
                 try:
+                    bar_minutes = max(1, timeframe_minutes(wick_timeframe))
                     bars = await self._fetch_wick_bars(
                         provider, position, wick_timeframe=wick_timeframe
                     )
                     if bars:
-                        await self._replay_bars(session, account, position, bars)
-                        last_ot = getattr(bars[-1], "open_time", None)
-                        if last_ot is not None:
-                            position.notes = _set_note_kv(
-                                position.notes,
-                                "last_wick",
-                                ensure_utc(last_ot).isoformat(),
+                        await self._replay_bars(
+                            session,
+                            account,
+                            position,
+                            bars,
+                            bar_minutes=bar_minutes,
+                        )
+                        now = utc_now()
+                        closed = [
+                            b
+                            for b in bars
+                            if self._bar_is_closed(
+                                b, bar_minutes=bar_minutes, now=now
                             )
+                        ]
+                        # Only watermark closed bars — forming bars reprocess next poll.
+                        if closed:
+                            last_ot = getattr(closed[-1], "open_time", None)
+                            if last_ot is not None:
+                                position.notes = _set_note_kv(
+                                    position.notes,
+                                    "last_wick",
+                                    ensure_utc(last_ot).isoformat(),
+                                )
                         if position.status != "open":
                             updated.append(position)
                             continue
@@ -2011,6 +2151,95 @@ class PaperTradingService:
                 updated.append(position)
 
         return updated
+
+    async def _funding_rate_for(self, symbol: str, provider=None) -> float:
+        """Live last funding rate when available, else configured default."""
+        default = float(self._settings.paper_funding_rate_default)
+        cache = getattr(self, "_funding_rate_cache", None)
+        if cache is None:
+            cache = {}
+            self._funding_rate_cache = cache
+        sym = symbol.upper()
+        cached = cache.get(sym)
+        if cached is not None:
+            return cached
+        rate = default
+        try:
+            from app.market_regime.sources import DerivativesClient
+
+            client = DerivativesClient(self._settings)
+            try:
+                reading = await client.fetch_funding(sym, history_limit=1)
+                if reading is not None and reading.rate is not None:
+                    rate = float(reading.rate)
+            finally:
+                await client.close()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("paper_funding_rate_fallback", symbol=sym, error=str(exc))
+            rate = default
+        cache[sym] = rate
+        return rate
+
+    async def _accrue_funding(
+        self,
+        session: AsyncSession,
+        account: PaperAccount,
+        position: PaperPosition,
+        *,
+        when: datetime,
+        provider=None,
+    ) -> bool:
+        """Charge Binance-style funding on open notional every N hours."""
+        if not bool(self._settings.paper_funding_enabled):
+            return False
+        if position.status != "open" or position.remaining_quantity <= 0:
+            return False
+        hours = float(self._settings.paper_funding_interval_hours)
+        if hours <= 0:
+            return False
+        interval = timedelta(hours=hours)
+        when = ensure_utc(when)
+        opened = (
+            ensure_utc(position.opened_at) if position.opened_at is not None else when
+        )
+        raw_last = _parse_note_kv(position.notes, "last_funding")
+        if raw_last:
+            try:
+                last = ensure_utc(datetime.fromisoformat(raw_last))
+            except ValueError:
+                last = opened
+        else:
+            last = opened
+
+        changed = False
+        rate = await self._funding_rate_for(position.symbol, provider)
+        is_long = SignalDirection(position.direction).is_long
+        # Positive rate: longs pay shorts. Negative: shorts pay longs.
+        while last + interval <= when and position.status == "open":
+            notional = self._remaining_notional(position)
+            if notional <= 0:
+                break
+            payment = notional * Decimal(str(rate))
+            # Long cash delta = -payment; short = +payment
+            cash_delta = -payment if is_long else payment
+            account.cash_balance += cash_delta
+            account.realized_pnl += cash_delta
+            position.realized_pnl += cash_delta
+            position.fees += abs(payment)
+            last = last + interval
+            position.notes = _set_note_kv(
+                position.notes, "last_funding", last.isoformat()
+            )
+            changed = True
+            logger.info(
+                "paper_funding_charged",
+                symbol=position.symbol,
+                rate=rate,
+                notional=float(notional),
+                cash_delta=float(cash_delta),
+                at=last.isoformat(),
+            )
+        return changed
 
     async def summary(
         self, session: AsyncSession, prices: dict[str, float] | None = None
@@ -2288,18 +2517,25 @@ class PaperTradingService:
 
         self._update_peak_price(position, price)
 
+        # Stop before early-scratch so mark polls match wick-path priority.
+        if check_stop:
+            stop_hit = price <= stop if is_long else price >= stop
+            if stop_hit:
+                slip_stop = self._slip_price(stop, is_long=is_long, side="exit")
+                await self._close_remaining(
+                    session,
+                    account,
+                    position,
+                    price=slip_stop,
+                    reason=ExitReason.STOP_LOSS,
+                    when=now,
+                )
+                return True
+
         if await self._maybe_early_scratch(
             session, account, position, price=price, when=now
         ):
             return True
-
-        if check_stop:
-            stop_hit = price <= stop if is_long else price >= stop
-            if stop_hit:
-                await self._close_remaining(
-                    session, account, position, price=stop, reason=ExitReason.STOP_LOSS, when=now
-                )
-                return True
 
         scale = self._scale_out_fractions
         levels = (
@@ -2319,6 +2555,7 @@ class PaperTradingService:
             )
             if level == 3:
                 qty = position.remaining_quantity
+            # TP limits fill at the level (no adverse slippage).
             await self._reduce(
                 session, account, position, quantity=qty, price=tp, reason=reason, when=now
             )
@@ -2356,8 +2593,14 @@ class PaperTradingService:
             and now >= position.expires_at
             and position.remaining_quantity > 0
         ):
+            slip_px = self._slip_price(price, is_long=is_long, side="exit")
             await self._close_remaining(
-                session, account, position, price=price, reason=ExitReason.EXPIRED, when=now
+                session,
+                account,
+                position,
+                price=slip_px,
+                reason=ExitReason.EXPIRED,
+                when=now,
             )
             return True
 
