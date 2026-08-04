@@ -29,6 +29,7 @@ from app.signals.retest_entry import (
     RetestEntryConfig,
     arm_retest_entry,
     levels_from_entry_sl,
+    wilder_atr,
 )
 from app.signals.risk import RiskManager, tp_multipliers_from_settings
 from app.signals.types import RiskParameters, SignalResult
@@ -1309,6 +1310,17 @@ class PaperTradingService:
             return False
         return True
 
+    @staticmethod
+    def _atr_stop(
+        entry: float,
+        atr: float,
+        *,
+        is_long: bool,
+        atr_multiplier: float,
+    ) -> float:
+        dist = float(atr) * float(atr_multiplier)
+        return entry - dist if is_long else entry + dist
+
     async def open_from_stored_signal(
         self,
         session: AsyncSession,
@@ -1316,6 +1328,7 @@ class PaperTradingService:
         *,
         symbol: str,
         extend_expiry: bool = False,
+        stop_loss_override: float | None = None,
     ) -> PaperPosition | None:
         """Paper-Position aus einem persistierten Signal oeffnen."""
         if not self.enabled:
@@ -1338,7 +1351,11 @@ class PaperTradingService:
         entry_ref = entry_low if direction.is_long else entry_high
         if entry_ref <= 0:
             entry_ref = entry_mid
-        stop_loss = float(signal.stop_loss)
+        stop_loss = (
+            float(stop_loss_override)
+            if stop_loss_override is not None and stop_loss_override > 0
+            else float(signal.stop_loss)
+        )
         # Paper nutzt aktuelle TP-Multiples (Wide), nicht die historisch gespeicherten TPs.
         tp1, tp2, tp3 = RiskManager.targets_from_stop(
             entry_ref,
@@ -1532,11 +1549,60 @@ class PaperTradingService:
                 backfill.skipped_existing += 1
                 continue
 
+            tf = signal.primary_timeframe or "1h"
+            armed_at = ensure_utc(signal.created_at)
+            candles: list = []
+            stop_override: float | None = None
+            try:
+                series = await provider.get_candles(
+                    symbol,
+                    tf,
+                    limit=100_000,
+                    start_time=armed_at - lookback_pad,
+                    end_time=cutoff,
+                )
+                candles = (
+                    list(series.candles)
+                    if series is not None and not series.is_empty
+                    else []
+                )
+            except Exception as exc:
+                logger.warning("paper_rebuild_candles_failed", symbol=symbol, error=str(exc))
+                candles = []
+
+            if candles:
+                arm_idx = max(
+                    (
+                        i
+                        for i, c in enumerate(candles)
+                        if ensure_utc(c.open_time) <= armed_at
+                    ),
+                    default=None,
+                )
+                atr = wilder_atr(candles, arm_idx) if arm_idx is not None else None
+                if atr and atr > 0:
+                    try:
+                        direction = SignalDirection(signal.direction)
+                        entry_low = float(signal.entry_low or signal.reference_price)
+                        entry_high = float(signal.entry_high or signal.reference_price)
+                        entry_ref = entry_low if direction.is_long else entry_high
+                        if entry_ref <= 0:
+                            entry_ref = float(signal.reference_price)
+                        stop_override = self._atr_stop(
+                            entry_ref,
+                            atr,
+                            is_long=direction.is_long,
+                            atr_multiplier=float(self._settings.atr_multiplier),
+                        )
+                    except (ValueError, TypeError):
+                        stop_override = None
+
             position = await self.open_from_stored_signal(
                 session,
                 signal,
                 symbol=symbol,
                 extend_expiry=not self.retest_enabled,
+                stop_loss_override=stop_override,
             )
             if position is None:
                 if self._last_skip_reason in PORTFOLIO_LIMIT_SKIPS:
@@ -1550,20 +1616,11 @@ class PaperTradingService:
             if symbol not in backfill.opened_symbols:
                 backfill.opened_symbols.append(symbol)
 
-            tf = position.timeframe or "1h"
+            tf = position.timeframe or tf
 
             if position.status != "pending":
                 try:
-                    series_mgmt = await provider.get_candles(
-                        symbol,
-                        tf,
-                        limit=100_000,
-                        start_time=position.opened_at,
-                        end_time=cutoff,
-                    )
-                    await self._replay_bars(
-                        session, account, position, series_mgmt.candles
-                    )
+                    await self._replay_bars(session, account, position, candles)
                     out.replayed += 1
                 except Exception as exc:
                     logger.warning(
@@ -1575,29 +1632,14 @@ class PaperTradingService:
 
             backfill.pending += 1
 
-            tf = position.timeframe or "1h"
-            try:
-                series = await provider.get_candles(
-                    symbol,
-                    tf,
-                    limit=100_000,
-                    start_time=ensure_utc(position.opened_at) - lookback_pad,
-                    end_time=cutoff,
-                )
-                candles = (
-                    list(series.candles)
-                    if series is not None and not series.is_empty
-                    else []
-                )
-            except Exception as exc:
-                logger.warning("paper_retest_candles_failed", symbol=symbol, error=str(exc))
+            if not candles:
                 await self._cancel_pending_retest(
                     session,
                     position,
                     RetestArmResult(
                         status="skipped_no_history",
                         resolved_at=ensure_utc(position.opened_at),
-                        note=str(exc),
+                        note="no_candles",
                     ),
                 )
                 out.retest_skipped += 1

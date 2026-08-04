@@ -54,7 +54,7 @@ LEVEL_RELEVANCE_ATR = 2.5
 class RiskConfig:
     """Parameter der Risikoberechnung."""
 
-    atr_multiplier: float = 1.5
+    atr_multiplier: float = 1.8
     min_risk_reward_ratio: float = 2.0
     max_risk_percent: float = 1.0
     min_stop_distance_percent: float = 0.3

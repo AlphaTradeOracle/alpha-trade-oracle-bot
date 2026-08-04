@@ -173,7 +173,9 @@ class TestConfigDefaults:
         assert settings.regime_filter_enabled is True
         assert settings.signal_rsi_short_min == 33.0
         assert settings.signal_short_min_score == 18.0
-        assert settings.paper_retest_zone_near == 0.55
+        assert settings.paper_retest_zone_near == 0.40
+        assert settings.paper_retest_zone_far == 1.15
+        assert settings.atr_multiplier == 1.8
         assert settings.paper_retest_pending_multiplier == 6
         assert settings.paper_retest_min_bars_in_zone == 1
         assert settings.paper_early_scratch_hours == 12

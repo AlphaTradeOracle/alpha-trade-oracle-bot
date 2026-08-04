@@ -77,7 +77,7 @@ class StrategyVersion(Base, TimestampMixin):
 
     min_score: Mapped[float] = mapped_column(SCORE, nullable=False, default=65.0)
     min_risk_reward_ratio: Mapped[float] = mapped_column(RATIO, nullable=False, default=2.0)
-    atr_multiplier: Mapped[float] = mapped_column(RATIO, nullable=False, default=1.5)
+    atr_multiplier: Mapped[float] = mapped_column(RATIO, nullable=False, default=1.8)
 
     strategy: Mapped[Strategy] = relationship(back_populates="versions")
 

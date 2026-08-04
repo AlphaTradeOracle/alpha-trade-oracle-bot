@@ -67,7 +67,7 @@ class StrategyRepository:
         name: str = DEFAULT_STRATEGY_NAME,
         min_score: float = 65.0,
         min_risk_reward_ratio: float = 2.0,
-        atr_multiplier: float = 1.5,
+        atr_multiplier: float = 1.8,
         activate: bool = False,
         notes: str | None = None,
     ) -> StrategyVersion:

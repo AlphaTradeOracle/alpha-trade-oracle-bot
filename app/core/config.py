@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     #: Soft ADX floor for high-conviction scores (long ≥ min_score / short ≤ short_max).
     #: Lets strong setups through mild chop without disabling the hard ADX gate entirely.
     signal_min_adx_soft: float = 20.0
-    atr_multiplier: float = 1.5
+    atr_multiplier: float = 1.8
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
     #: true = Setups jenseits von ``max_stop_distance_percent`` werden verworfen.
@@ -237,8 +237,8 @@ class Settings(BaseSettings):
     paper_digest_interval_minutes: int = 60
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
     paper_retest_entry_enabled: bool = True
-    paper_retest_zone_near: float = 0.55
-    paper_retest_zone_far: float = 1.0
+    paper_retest_zone_near: float = 0.40
+    paper_retest_zone_far: float = 1.15
     paper_retest_pending_multiplier: int = 6
     #: Mindestanzahl aufeinanderfolgender Kerzen in der Retest-Zone vor Fill.
     paper_retest_min_bars_in_zone: int = 1
