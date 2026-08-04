@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Iterator, Protocol
+from typing import TYPE_CHECKING, Iterator, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -604,109 +604,20 @@ class PaperTradingService:
         account: PaperAccount,
         at: datetime,
     ) -> Decimal:
-        """Ledger cash free at ``at`` (rebuild-safe).
+        """Cash free at ``at`` after re-locking margin of as-of-open fills.
 
-        Sequential rebuild replays each trade to completion before the next
-        signal, so ``account.cash_balance`` is polluted with future settlements.
-        Reconstruct from initial + closed PnL before ``at`` − margins still open.
+        Rebuild settles each trade before the next signal, so ``cash_balance``
+        has already received margin back from positions that would still be open
+        at a later fill time. Subtract that ghost-locked margin.
         """
         at = ensure_utc(at)
-        initial = Decimal(str(account.initial_balance))
-        rows = await PaperRepository(session).list_positions(account.id)
-        cash = initial
-        for p in rows:
-            if p.opened_at is None or str(p.status) not in ("open", "closed"):
-                continue
-            opened = ensure_utc(p.opened_at)
-            if opened > at:
-                continue
-            closed_at = ensure_utc(p.closed_at) if p.closed_at is not None else None
-            still_open = closed_at is None or closed_at > at
-            if still_open:
-                cash -= Decimal(str(p.margin_used or 0))
-                # Open rows carry −entry_fee in realized_pnl.
-                cash += Decimal(str(p.realized_pnl or 0))
-            else:
-                cash += Decimal(str(p.realized_pnl or 0))
-        return cash
-
-    def _estimate_retest_rank_pnl(
-        self,
-        *,
-        is_long: bool,
-        entry: float,
-        stop: float,
-        quantity: float,
-        candles: list,
-        fill_time: datetime,
-        end_time: datetime,
-    ) -> float:
-        """Forward OHLC PnL estimate for rebuild slot ranking (not live fills)."""
-        if quantity <= 0 or abs(entry - stop) <= 1e-12:
-            return 0.0
-        fill_time = ensure_utc(fill_time)
-        end_time = ensure_utc(end_time)
-        tp1, tp2, tp3 = levels_from_entry_sl(
-            Decimal(str(entry)),
-            Decimal(str(stop)),
-            is_long=is_long,
-            multipliers=tuple(Decimal(str(m)) for m in self._tp_multipliers),
-        )
-        tps = (float(tp1), float(tp2), float(tp3))
-        fracs = self._scale_out_fractions
-        fee_rate = float(self._settings.paper_fee_percent) / 100.0
-        direction = 1.0 if is_long else -1.0
-        qty0 = quantity
-        rem = qty0
-        realized = -abs(entry * qty0) * fee_rate
-        cur_stop = stop
-        hits = [False, False, False]
-
-        def _reduce(price: float, frac: float | None, all_rest: bool = False) -> None:
-            nonlocal rem, realized
-            if rem <= 1e-12:
-                return
-            q = rem if all_rest or frac is None else min(qty0 * frac, rem)
-            if q <= 0:
-                return
-            realized += (price - entry) * q * direction
-            realized -= abs(price * q) * fee_rate
-            rem -= q
-
-        for c in candles:
-            when = ensure_utc(getattr(c, "open_time", fill_time))
-            if when < fill_time:
-                continue
-            if when > end_time or rem <= 1e-12:
-                break
-            high, low, close = float(c.high), float(c.low), float(c.close)
-            stop_hit = low <= cur_stop if is_long else high >= cur_stop
-            if stop_hit:
-                _reduce(cur_stop, None, all_rest=True)
-                break
-            for idx, tp in enumerate(tps):
-                if hits[idx]:
-                    continue
-                tp_hit = high >= tp if is_long else low <= tp
-                if not tp_hit:
-                    continue
-                hits[idx] = True
-                _reduce(tp, float(fracs[idx]) if idx < len(fracs) else None)
-                if idx == 0 and self._settings.paper_move_stop_to_breakeven:
-                    cur_stop = entry
-                if rem <= 1e-12:
-                    break
-            if rem <= 1e-12:
-                break
-        if rem > 1e-12:
-            # Mark at last close in window
-            last = entry
-            for c in candles:
-                when = ensure_utc(getattr(c, "open_time", fill_time))
-                if fill_time <= when <= end_time:
-                    last = float(c.close)
-            _reduce(last, None, all_rest=True)
-        return float(realized)
+        open_at = await PaperRepository(session).list_filled_open_at(account.id, at)
+        ghost = Decimal("0")
+        for p in open_at:
+            if str(p.status) != "closed":
+                continue  # still open → margin already deducted from cash_balance
+            ghost += Decimal(str(p.margin_used or 0))
+        return Decimal(str(account.cash_balance)) - ghost
 
     @staticmethod
     def _slot_priority(position: PaperPosition) -> tuple:
@@ -1667,13 +1578,7 @@ class PaperTradingService:
         out: PaperRebuildResult,
         symbols: set[str] | None = None,
     ) -> PaperBackfillResult:
-        """Retest rebuild: arm all → rank fills → activate by fill-time + quality.
-
-        Phase 1 arms pendings in signal order (symbol-busy respected). Phase 2
-        activates fillable arms sorted by fill time, then simulated PnL (when
-        ``paper_rebuild_rank_by_sim_pnl``) so contested slots go to better trades
-        — matches the 7–8k equity-lever counterfactual.
-        """
+        """Signale chronologisch: Entry (IST oder Retest) -> Exit-Replay -> naechstes."""
         backfill = PaperBackfillResult()
         allowed = {s.upper() for s in symbols} if symbols else None
         signals = await SignalRepository(session).list_since(
@@ -1691,9 +1596,6 @@ class PaperTradingService:
         lookback_pad = timedelta(days=14)
         cutoff = utc_now()
         ordered = sorted(signals, key=lambda s: s.created_at)
-        rank_by_pnl = bool(self._settings.paper_rebuild_rank_by_sim_pnl)
-
-        fill_candidates: list[dict[str, Any]] = []
 
         for signal in ordered:
             backfill.considered += 1
@@ -1827,33 +1729,27 @@ class PaperTradingService:
                 and arm.fill_time is not None
                 and arm.stop is not None
             ):
-                sizing = self._size_position(
-                    Decimal(str(arm.fill_price)), Decimal(str(arm.stop))
-                )
-                qty = float(sizing.quantity) if sizing is not None else 0.0
-                is_long = SignalDirection(position.direction).is_long
-                rank_pnl = 0.0
-                if rank_by_pnl and qty > 0:
-                    rank_pnl = self._estimate_retest_rank_pnl(
-                        is_long=is_long,
-                        entry=float(arm.fill_price),
-                        stop=float(arm.stop),
-                        quantity=qty,
-                        candles=candles,
-                        fill_time=ensure_utc(arm.fill_time),
+                ok = await self._activate_pending_retest(session, account, position, arm)
+                if not ok:
+                    out.retest_skipped += 1
+                    continue
+                out.retest_filled += 1
+                try:
+                    series_mgmt = await provider.get_candles(
+                        symbol,
+                        tf,
+                        limit=100_000,
+                        start_time=position.opened_at,
                         end_time=cutoff,
                     )
-                fill_candidates.append(
-                    {
-                        "position": position,
-                        "arm": arm,
-                        "candles": candles,
-                        "symbol": symbol,
-                        "fill_time": ensure_utc(arm.fill_time),
-                        "rank_pnl": rank_pnl,
-                        "priority": self._slot_priority(position),
-                    }
-                )
+                    await self._replay_bars(session, account, position, series_mgmt.candles)
+                    out.replayed += 1
+                except Exception as exc:
+                    logger.warning(
+                        "paper_rebuild_replay_failed",
+                        symbol=symbol,
+                        error=str(exc),
+                    )
             elif arm.status == "pending":
                 if position.expires_at is not None and cutoff >= ensure_utc(position.expires_at):
                     await self._cancel_pending_retest(session, position, arm)
@@ -1863,41 +1759,6 @@ class PaperTradingService:
             else:
                 await self._cancel_pending_retest(session, position, arm)
                 out.retest_skipped += 1
-
-        fill_candidates.sort(
-            key=lambda c: (
-                c["fill_time"],
-                -float(c["rank_pnl"]) if rank_by_pnl else 0.0,
-                c["priority"],
-            )
-        )
-        logger.info(
-            "paper_rebuild_fill_candidates",
-            n=len(fill_candidates),
-            rank_by_sim_pnl=rank_by_pnl,
-        )
-
-        for cand in fill_candidates:
-            position = cand["position"]
-            arm = cand["arm"]
-            symbol = cand["symbol"]
-            candles = cand["candles"]
-            if str(position.status) != "pending":
-                continue
-            ok = await self._activate_pending_retest(session, account, position, arm)
-            if not ok:
-                out.retest_skipped += 1
-                continue
-            out.retest_filled += 1
-            try:
-                await self._replay_bars(session, account, position, candles)
-                out.replayed += 1
-            except Exception as exc:
-                logger.warning(
-                    "paper_rebuild_replay_failed",
-                    symbol=symbol,
-                    error=str(exc),
-                )
 
         return backfill
 
