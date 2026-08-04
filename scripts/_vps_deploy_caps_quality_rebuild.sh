@@ -20,13 +20,14 @@ set_env() {
     echo "${key}=${val}" >> .env
   fi
 }
-set_env PAPER_MAX_OPEN_POSITIONS 40
-set_env PAPER_MAX_OPEN_PER_DIRECTION 24
+set_env PAPER_MAX_OPEN_POSITIONS 60
+set_env PAPER_MAX_OPEN_PER_DIRECTION 36
+set_env PAPER_REBUILD_RANK_BY_SIM_PNL true
 # Keep ATR/zone combo
 set_env ATR_MULTIPLIER 1.8
 set_env PAPER_RETEST_ZONE_NEAR 0.40
 set_env PAPER_RETEST_ZONE_FAR 1.15
-grep -E '^(PAPER_MAX_OPEN|ATR_MULTIPLIER|PAPER_RETEST_ZONE)=' .env | tee -a "$LOG"
+grep -E '^(PAPER_MAX_OPEN|PAPER_REBUILD|ATR_MULTIPLIER|PAPER_RETEST_ZONE)=' .env | tee -a "$LOG"
 
 echo "==> recreate worker/app" | tee -a "$LOG"
 docker compose up -d --build --force-recreate --no-deps worker app 2>&1 | tee -a "$LOG"
@@ -45,11 +46,13 @@ s = get_settings()
 print({
     "max_open": s.paper_max_open_positions,
     "max_per_dir": s.paper_max_open_per_direction,
+    "rank_sim_pnl": s.paper_rebuild_rank_by_sim_pnl,
     "atr": s.atr_multiplier,
     "zone": (s.paper_retest_zone_near, s.paper_retest_zone_far),
 })
-assert s.paper_max_open_positions == 40
-assert s.paper_max_open_per_direction == 24
+assert s.paper_max_open_positions == 60
+assert s.paper_max_open_per_direction == 36
+assert s.paper_rebuild_rank_by_sim_pnl is True
 PY
 
 echo "==> paper rebuild since ${SINCE}" | tee -a "$LOG"
