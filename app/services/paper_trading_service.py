@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -243,6 +244,8 @@ class PaperTradingService:
         self._notify_enabled = True
         self._last_skip_reason: str | None = None
         self._regime_engine = MarketRegimeEngine(self._settings)
+        # In-process serialize for scan_concurrency; DB FOR UPDATE covers app+worker.
+        self._ledger_lock = asyncio.Lock()
 
     @property
     def _scale_out_fractions(self) -> tuple[Decimal, Decimal, Decimal]:
@@ -693,14 +696,19 @@ class PaperTradingService:
         extremity = score if is_long else (100.0 - score)
         return (-extremity, -rr, int(position.id or 0))
 
-    async def get_or_create_account(self, session: AsyncSession) -> PaperAccount:
+    async def get_or_create_account(
+        self, session: AsyncSession, *, for_update: bool = False
+    ) -> PaperAccount:
         repo = PaperRepository(session)
-        return await repo.get_or_create_account(
+        account = await repo.get_or_create_account(
             name="default",
             initial_balance=Decimal(str(self._settings.paper_initial_balance)),
             margin_per_trade=Decimal(str(self._settings.paper_margin_per_trade)),
             leverage=self._settings.paper_leverage,
         )
+        if for_update:
+            account = await repo.lock_account(account.id)
+        return account
 
     async def open_from_signal(
         self,
@@ -717,7 +725,29 @@ class PaperTradingService:
         if not result.direction.is_actionable or result.risk is None:
             return None
 
-        account = await self.get_or_create_account(session)
+        await self._ledger_lock.acquire()
+        try:
+            return await self._open_from_signal_locked(
+                session,
+                outcome,
+                opened_at=opened_at,
+                regime_snapshot=regime_snapshot,
+            )
+        finally:
+            self._ledger_lock.release()
+
+    async def _open_from_signal_locked(
+        self,
+        session: AsyncSession,
+        outcome: AnalysisOutcome,
+        *,
+        opened_at: datetime | None = None,
+        regime_snapshot: RegimeSnapshot | None = None,
+    ) -> PaperPosition | None:
+        result = outcome.result
+        assert result.risk is not None
+
+        account = await self.get_or_create_account(session, for_update=True)
         repo = PaperRepository(session)
 
         existing = await repo.get_active_by_symbol(account.id, result.symbol)
@@ -1074,14 +1104,23 @@ class PaperTradingService:
                 int(job[1].id or 0),
             )
         )
-        for _fill_time, position, arm in fill_jobs:
-            activated = await self._activate_pending_retest(
-                session, account, position, arm, regime_snapshot=regime_snapshot
-            )
-            if activated:
-                out.filled += 1
-            else:
-                out.skipped += 1
+        if not fill_jobs:
+            return out
+
+        # Lock only for cash/cap fills — not during candle I/O above.
+        await self._ledger_lock.acquire()
+        try:
+            account = await self.get_or_create_account(session, for_update=True)
+            for _fill_time, position, arm in fill_jobs:
+                activated = await self._activate_pending_retest(
+                    session, account, position, arm, regime_snapshot=regime_snapshot
+                )
+                if activated:
+                    out.filled += 1
+                else:
+                    out.skipped += 1
+        finally:
+            self._ledger_lock.release()
 
         return out
 
@@ -1095,6 +1134,8 @@ class PaperTradingService:
         regime_snapshot: RegimeSnapshot | None = None,
     ) -> bool:
         assert arm.fill_price is not None and arm.fill_time is not None and arm.stop is not None
+        # Refresh + row-lock so concurrent opens cannot race cash/caps at fill.
+        account = await PaperRepository(session).lock_account(account.id)
         direction = SignalDirection(position.direction)
         fill_time = ensure_utc(arm.fill_time)
         if self._entry_blackout_active(fill_time):
@@ -1854,6 +1895,8 @@ class PaperTradingService:
             n=len(fill_jobs),
             max_open=int(self._settings.paper_max_open_positions),
         )
+        if fill_jobs:
+            account = await self.get_or_create_account(session, for_update=True)
         for fill_time, position, arm, symbol in fill_jobs:
             await session.refresh(account)
             ok = await self._activate_pending_retest(
@@ -2069,7 +2112,23 @@ class PaperTradingService:
         if not self.enabled:
             return []
 
-        account = await self.get_or_create_account(session)
+        await self._ledger_lock.acquire()
+        try:
+            return await self._update_open_positions_locked(
+                session, prices, provider=provider, wick_timeframe=wick_timeframe
+            )
+        finally:
+            self._ledger_lock.release()
+
+    async def _update_open_positions_locked(
+        self,
+        session: AsyncSession,
+        prices: dict[str, float],
+        *,
+        provider=None,
+        wick_timeframe: str = "5m",
+    ) -> list[PaperPosition]:
+        account = await self.get_or_create_account(session, for_update=True)
         repo = PaperRepository(session)
         open_positions = await repo.list_open_positions(account.id)
         updated: list[PaperPosition] = []

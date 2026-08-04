@@ -83,6 +83,20 @@ class PaperRepository:
         )
         return result.scalar_one_or_none()
 
+    async def lock_account(self, account_id: int) -> PaperAccount:
+        """Row-lock paper account for the rest of the transaction.
+
+        Serializes cash/cap mutations across concurrent scan sessions
+        (``scan_concurrency`` > 1) so two opens cannot both pass the same
+        cash/cap check before either commits.
+        """
+        result = await self._session.execute(
+            select(PaperAccount)
+            .where(PaperAccount.id == account_id)
+            .with_for_update()
+        )
+        return result.scalar_one()
+
     async def list_open_positions(self, account_id: int) -> list[PaperPosition]:
         result = await self._session.execute(
             select(PaperPosition)
