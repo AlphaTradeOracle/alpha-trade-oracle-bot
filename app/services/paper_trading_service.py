@@ -555,13 +555,21 @@ class PaperTradingService:
         *,
         direction: str,
         risk_amount: Decimal,
+        at: datetime | None = None,
     ) -> str | None:
         """``skipped_*``-Grund, wenn der Entry ein Portfolio-Limit reissen wuerde.
 
         Pending Retest-Entries zaehlen nicht mit: sie binden weder Margin noch
         Risiko, geprueft wird erst beim Fill.
+
+        ``at`` = Fill-/Entry-Zeit fuer as-of Book (Rebuild replayed Trades bereits
+        auf ``closed``, obwohl ihr Open-Fenster den Fill noch ueberlappt).
         """
-        open_positions = await PaperRepository(session).list_open_positions(account.id)
+        repo = PaperRepository(session)
+        if at is not None:
+            open_positions = await repo.list_filled_open_at(account.id, ensure_utc(at))
+        else:
+            open_positions = await repo.list_open_positions(account.id)
 
         max_open = int(self._settings.paper_max_open_positions)
         if max_open > 0 and len(open_positions) >= max_open:
@@ -578,13 +586,63 @@ class PaperTradingService:
             if same_side >= per_direction:
                 return SKIP_DIRECTION_CAP
 
+        # Fixed-margin mode sets risk_amount := margin for R-accounting. Treating
+        # that as portfolio "risk %" double-counts the cash/margin constraint and
+        # would cap the book at ~equity*pct/margin (≈5 on $5k / 30% / $300).
+        risk_budget_mode = float(self._settings.paper_risk_per_trade_usd) > 0
         risk_pct = Decimal(str(self._settings.paper_max_portfolio_risk_pct))
-        if risk_pct > 0 and risk_amount > 0:
+        if risk_budget_mode and risk_pct > 0 and risk_amount > 0:
             budget = self._equity_base(account, open_positions) * risk_pct / Decimal("100")
             if self._open_risk_used(open_positions) + risk_amount > budget:
                 return SKIP_PORTFOLIO_RISK
 
         return None
+
+    async def _cash_available_at(
+        self,
+        session: AsyncSession,
+        account: PaperAccount,
+        at: datetime,
+    ) -> Decimal:
+        """Cash free at ``at`` after re-locking margin of as-of-open fills.
+
+        Rebuild settles each trade before the next signal, so ``cash_balance``
+        has already received margin back from positions that would still be open
+        at a later fill time. Subtract that ghost-locked margin.
+        """
+        at = ensure_utc(at)
+        open_at = await PaperRepository(session).list_filled_open_at(account.id, at)
+        ghost = Decimal("0")
+        for p in open_at:
+            if str(p.status) != "closed":
+                continue  # still open → margin already deducted from cash_balance
+            ghost += Decimal(str(p.margin_used or 0))
+        return Decimal(str(account.cash_balance)) - ghost
+
+    @staticmethod
+    def _slot_priority(position: PaperPosition) -> tuple:
+        """Higher-priority pending fills first when the book is contested.
+
+        Liveable proxy (not hindsight PnL): prefer higher stored RR, then more
+        extreme score (long high / short low).
+        """
+        rr = 0.0
+        try:
+            entry = float(position.entry_price or 0)
+            stop = float(position.stop_loss or 0)
+            tp2 = float(position.take_profit_2 or 0)
+            dist = abs(entry - stop)
+            if entry > 0 and dist > 0 and tp2 > 0:
+                rr = abs(tp2 - entry) / dist
+        except (TypeError, ValueError):
+            rr = 0.0
+        score = float(position.signal_score or 50.0)
+        try:
+            is_long = SignalDirection(position.direction).is_long
+        except ValueError:
+            is_long = True
+        extremity = score if is_long else (100.0 - score)
+        return (-rr, -extremity, int(position.id or 0))
 
     async def get_or_create_account(self, session: AsyncSession) -> PaperAccount:
         repo = PaperRepository(session)
@@ -668,6 +726,7 @@ class PaperTradingService:
             account,
             direction=result.direction.value,
             risk_amount=sizing.risk_amount,
+            at=opened_at,
         )
         if breach is not None:
             self._last_skip_reason = breach
@@ -686,12 +745,15 @@ class PaperTradingService:
         entry_fee = notional * fee_rate
         margin = sizing.margin
         cash_needed = margin + entry_fee
-        if account.cash_balance < cash_needed:
+        cash_free = await self._cash_available_at(session, account, opened_at)
+        if cash_free < cash_needed:
             self._last_skip_reason = "skipped_cash"
             logger.warning(
                 "paper_insufficient_cash",
                 cash=float(account.cash_balance),
+                cash_as_of=float(cash_free),
                 needed=float(cash_needed),
+                at=opened_at.isoformat(),
             )
             return None
 
@@ -869,6 +931,8 @@ class PaperTradingService:
         pending = await repo.list_pending_positions(account.id)
         if not pending:
             return out
+        # Best slots first when several pendings resolve in one pass.
+        pending = sorted(pending, key=self._slot_priority)
 
         cfg = self._retest_config()
         cutoff = ensure_utc(end_time or utc_now())
@@ -1032,6 +1096,7 @@ class PaperTradingService:
             account,
             direction=position.direction,
             risk_amount=sizing.risk_amount,
+            at=fill_time,
         )
         if breach is not None:
             self._last_skip_reason = breach
@@ -1041,6 +1106,7 @@ class PaperTradingService:
                 direction=position.direction,
                 reason=breach,
                 risk_amount=float(sizing.risk_amount),
+                at=fill_time.isoformat(),
             )
             await self._cancel_pending_retest(
                 session,
@@ -1061,12 +1127,15 @@ class PaperTradingService:
         entry_fee = notional * fee_rate
         margin = sizing.margin
         cash_needed = margin + entry_fee
-        if account.cash_balance < cash_needed:
+        cash_free = await self._cash_available_at(session, account, fill_time)
+        if cash_free < cash_needed:
             logger.warning(
                 "paper_retest_activate_insufficient_cash",
                 symbol=position.symbol,
                 cash=float(account.cash_balance),
+                cash_as_of=float(cash_free),
                 needed=float(cash_needed),
+                at=fill_time.isoformat(),
             )
             await self._cancel_pending_retest(
                 session,

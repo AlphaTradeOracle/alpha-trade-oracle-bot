@@ -222,10 +222,11 @@ class Settings(BaseSettings):
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
     paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
-    paper_max_open_positions: int = 20
-    #: Obergrenze je Richtung. Altcoin-Shorts korrelieren mit ~0.85, neun davon
-    #: in einer Stunde sind effektiv eine Wette in neunfacher Groesse.
-    paper_max_open_per_direction: int = 12
+    #: Cash/Margin kann enger binden als dieses Cap (z.B. $300 Margin auf $5k).
+    paper_max_open_positions: int = 40
+    #: Obergrenze je Richtung. Altcoin-Shorts korrelieren stark — Cap verhindert
+    #: Ein-Richtungs-Cluster, darf aber Retest-Fills nicht komplett abwuergen.
+    paper_max_open_per_direction: int = 24
     #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
     #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
     paper_fee_percent: float = 0.05

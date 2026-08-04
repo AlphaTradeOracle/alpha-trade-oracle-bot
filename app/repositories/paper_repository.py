@@ -95,6 +95,36 @@ class PaperRepository:
         )
         return list(result.scalars())
 
+    async def list_filled_open_at(
+        self, account_id: int, at: datetime
+    ) -> list[PaperPosition]:
+        """Filled positions whose open window covers ``at`` (as-of book).
+
+        Includes ``status=open`` and already-``closed`` rows that were still live
+        at ``at``. Pending/cancelled never-filled rows are excluded. Needed for
+        rebuild: trades are replayed to completion before the next signal, so a
+        plain ``status==open`` query under-counts concurrency at historical fills.
+        """
+        result = await self._session.execute(
+            select(PaperPosition)
+            .where(
+                PaperPosition.account_id == account_id,
+                PaperPosition.opened_at.is_not(None),
+                PaperPosition.opened_at <= at,
+                or_(
+                    PaperPosition.status == "open",
+                    and_(
+                        PaperPosition.status == "closed",
+                        PaperPosition.closed_at.is_not(None),
+                        PaperPosition.closed_at > at,
+                    ),
+                ),
+            )
+            .options(selectinload(PaperPosition.fills))
+            .order_by(PaperPosition.opened_at.asc())
+        )
+        return list(result.scalars())
+
     async def list_pending_positions(self, account_id: int) -> list[PaperPosition]:
         result = await self._session.execute(
             select(PaperPosition)
