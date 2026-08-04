@@ -20,9 +20,9 @@ set_env() {
     echo "${key}=${val}" >> .env
   fi
 }
-set_env PAPER_MAX_OPEN_POSITIONS 60
-set_env PAPER_MAX_OPEN_PER_DIRECTION 36
-set_env PAPER_REBUILD_RANK_BY_SIM_PNL true
+set_env PAPER_MAX_OPEN_POSITIONS 40
+set_env PAPER_MAX_OPEN_PER_DIRECTION 24
+set_env PAPER_REBUILD_RANK_BY_SIM_PNL false
 # Keep ATR/zone combo
 set_env ATR_MULTIPLIER 1.8
 set_env PAPER_RETEST_ZONE_NEAR 0.40
@@ -50,9 +50,9 @@ print({
     "atr": s.atr_multiplier,
     "zone": (s.paper_retest_zone_near, s.paper_retest_zone_far),
 })
-assert s.paper_max_open_positions == 60
-assert s.paper_max_open_per_direction == 36
-assert s.paper_rebuild_rank_by_sim_pnl is True
+assert s.paper_max_open_positions == 40
+assert s.paper_max_open_per_direction == 24
+assert s.paper_rebuild_rank_by_sim_pnl is False
 PY
 
 echo "==> paper rebuild since ${SINCE}" | tee -a "$LOG"

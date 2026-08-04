@@ -223,13 +223,13 @@ class Settings(BaseSettings):
     paper_max_portfolio_risk_pct: float = 30.0
     #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
     #: Cash/Margin kann enger binden als dieses Cap (z.B. $300 Margin auf $5k).
-    paper_max_open_positions: int = 60
+    paper_max_open_positions: int = 40
     #: Obergrenze je Richtung. Altcoin-Shorts korrelieren stark — Cap verhindert
     #: Ein-Richtungs-Cluster, darf aber Retest-Fills nicht komplett abwuergen.
-    paper_max_open_per_direction: int = 36
-    #: Rebuild: unter Cap-Konflikt Fills mit hoeherem simuliertem PnL zuerst
-    #: (Counterfactual-Selektion — trifft den 7–8k Hebel-Sim-Pfad).
-    paper_rebuild_rank_by_sim_pnl: bool = True
+    paper_max_open_per_direction: int = 24
+    #: Rebuild: sim-PnL Slot-Ranking. Default aus — Schaetzung war falsch kalibriert
+    #: und hat das Ledger zerlegt; FIFO + as-of Caps bleibt der sichere Pfad.
+    paper_rebuild_rank_by_sim_pnl: bool = False
     #: Taker-Gebuehr je Seite in Prozent. Perpetual-Taker liegt bei 0.045-0.05%;
     #: 0.1% waere ein Spot-Satz und wuerde die Kosten verdoppeln.
     paper_fee_percent: float = 0.05
