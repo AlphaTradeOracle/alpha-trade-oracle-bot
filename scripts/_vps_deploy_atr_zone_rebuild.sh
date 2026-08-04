@@ -8,10 +8,11 @@ SINCE="${SINCE:-2026-07-31T16:32:35+00:00}"
 
 echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) deploy ATR/zone + paper rebuild =====" | tee -a "$LOG"
 
-echo "==> git pull" | tee -a "$LOG"
+echo "==> git sync" | tee -a "$LOG"
 git fetch origin
 git checkout main
-git pull --ff-only origin main | tee -a "$LOG"
+# Drop local drift that blocks ff-only pulls on the VPS worktree.
+git reset --hard origin/main | tee -a "$LOG"
 git rev-parse --short HEAD | tee -a "$LOG"
 
 echo "==> .env ATR / retest zone" | tee -a "$LOG"
