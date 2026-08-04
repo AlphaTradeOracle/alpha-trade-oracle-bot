@@ -26,10 +26,12 @@ from tests.test_dedup import make_result
 NOW = datetime(2024, 6, 1, 12, tzinfo=UTC)
 
 # Existing unit tests assert exact fill/cash math; disable live-realism knobs unless
-# a test explicitly opts in.
+# a test explicitly opts in. Fail-closed regime needs a real BTC feed — stubs
+# would otherwise skip every retest fill.
 _PAPER_TEST_DEFAULTS: dict[str, object] = {
     "paper_slippage_percent": 0.0,
     "paper_funding_enabled": False,
+    "market_regime_fail_closed": False,
 }
 
 
@@ -1058,6 +1060,21 @@ class TestPaperLiveRealism:
         assert (
             service._skip_pre_fill_bar(after, opened_at=opened, bar_minutes=5) is False
         )
+
+    def test_fill_bar_uses_close_only_ohlc(self) -> None:
+        service = PaperTradingService(self._open_settings())
+        opened = datetime(2024, 6, 1, 12, 2, tzinfo=UTC)
+        fill_bar = Candle(
+            open_time=datetime(2024, 6, 1, 12, 0, tzinfo=UTC),
+            close_time=datetime(2024, 6, 1, 12, 5, tzinfo=UTC),
+            open=100.0,
+            high=105.0,
+            low=90.0,  # pre-fill wick must not stop the trade
+            close=98.0,
+            volume=1.0,
+        )
+        ohlc = service._replay_bar_ohlc(fill_bar, opened_at=opened, bar_minutes=5)
+        assert ohlc == (98.0, 98.0, 98.0)
 
     @pytest.mark.asyncio
     async def test_entry_applies_slippage(self, session: AsyncSession) -> None:

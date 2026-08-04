@@ -11,6 +11,7 @@ from app.market_regime.types import MarketBias, MarketRegimeSnapshot
 
 class NoTradeGate(StrEnum):
     REGIME_AGAINST = "regime_strongly_against"
+    REGIME_UNAVAILABLE = "regime_unavailable"
     TRADE_SCORE_BELOW = "trade_score_below_threshold"
     CONFIDENCE_BELOW = "confidence_below_threshold"
     DATA_QUALITY_BELOW = "data_quality_below_threshold"
@@ -51,6 +52,7 @@ class NoTradeContext:
     expected_value: float | None = None
     market_regime: MarketRegimeSnapshot | None = None
     regime_hard_veto: bool = True
+    regime_fail_closed: bool = True
     exchange_data_ok: bool = True
     critical_data_ok: bool = True
     macro_high_impact: bool = False
@@ -94,14 +96,22 @@ def evaluate_no_trade_gates(ctx: NoTradeContext) -> NoTradeVerdict:
         gates.append(NoTradeGate.LIQUIDITY_INSUFFICIENT)
         reasons.append("Liquidity insufficient for institutional entry")
 
-    if ctx.regime_hard_veto and ctx.market_regime is not None and ctx.market_regime.available:
-        bias = ctx.market_regime.bias
-        if bias is MarketBias.STRONG_BULLISH and ctx.direction.is_short:
-            gates.append(NoTradeGate.REGIME_AGAINST)
-            reasons.append(f"Global regime {bias.label} strongly against short setup")
-        elif bias is MarketBias.STRONG_BEARISH and ctx.direction.is_long:
-            gates.append(NoTradeGate.REGIME_AGAINST)
-            reasons.append(f"Global regime {bias.label} strongly against long setup")
+    if ctx.regime_hard_veto:
+        if (
+            ctx.regime_fail_closed
+            and (ctx.market_regime is None or not ctx.market_regime.available)
+            and ctx.direction.is_actionable
+        ):
+            gates.append(NoTradeGate.REGIME_UNAVAILABLE)
+            reasons.append("Market regime unavailable — entries blocked (fail-closed)")
+        elif ctx.market_regime is not None and ctx.market_regime.available:
+            bias = ctx.market_regime.bias
+            if bias is MarketBias.STRONG_BULLISH and ctx.direction.is_short:
+                gates.append(NoTradeGate.REGIME_AGAINST)
+                reasons.append(f"Global regime {bias.label} strongly against short setup")
+            elif bias is MarketBias.STRONG_BEARISH and ctx.direction.is_long:
+                gates.append(NoTradeGate.REGIME_AGAINST)
+                reasons.append(f"Global regime {bias.label} strongly against long setup")
 
     if ctx.direction.is_actionable and ctx.trade_score < ctx.min_trade_score:
         # For shorts the engine uses low scores — skip this gate for shorts here;

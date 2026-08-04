@@ -362,10 +362,14 @@ class PaperTradingService:
             return False
         if not self._settings.market_regime_hard_veto:
             return False
-        if regime_snapshot is None or not regime_snapshot.available:
-            if regime_snapshot is not None and regime_snapshot.detail:
-                log_regime_degraded(regime_snapshot.detail)
+        # None = caller skipped regime (e.g. historical rebuild) — not a feed fault.
+        if regime_snapshot is None:
             return False
+        if not regime_snapshot.available:
+            detail = regime_snapshot.detail or "regime_unavailable"
+            log_regime_degraded(detail)
+            # Fail-closed: do not open/activate while the veto feed is down.
+            return bool(self._settings.market_regime_fail_closed)
         if direction_allowed_by_regime(regime_snapshot.regime, direction):
             return False
         return True
@@ -1967,7 +1971,7 @@ class PaperTradingService:
         return ensure_utc(open_time) + timedelta(minutes=bar_minutes) <= now
 
     def _skip_pre_fill_bar(self, candle, *, opened_at: datetime, bar_minutes: int) -> bool:
-        """Skip OHLC that printed entirely or partially before the fill."""
+        """Skip bars that closed entirely before the fill."""
         bar_open = ensure_utc(candle.open_time)
         close_time = getattr(candle, "close_time", None)
         bar_close = (
@@ -1975,12 +1979,36 @@ class PaperTradingService:
             if close_time is not None
             else bar_open + timedelta(minutes=max(1, bar_minutes))
         )
-        if bar_close <= opened_at:
-            return True
-        # Ambiguous fill bar: open before fill, close after — path unknown.
+        return bar_close <= opened_at
+
+    def _replay_bar_ohlc(
+        self, candle, *, opened_at: datetime | None, bar_minutes: int
+    ) -> tuple[float, float, float] | None:
+        """OHLC for wick replay; fill bar uses close-only (no pre-fill wick).
+
+        Returns ``None`` to skip the bar. Ambiguous fill bars (open before fill,
+        close after) cannot path OHLC safely — use close as the only known
+        post-fill print so same-bar stops/TPs at the close are still caught.
+        """
+        if opened_at is not None and self._skip_pre_fill_bar(
+            candle, opened_at=opened_at, bar_minutes=bar_minutes
+        ):
+            return None
+        high = float(candle.high)
+        low = float(candle.low)
+        close = float(candle.close)
+        if opened_at is None:
+            return high, low, close
+        bar_open = ensure_utc(candle.open_time)
+        close_time = getattr(candle, "close_time", None)
+        bar_close = (
+            ensure_utc(close_time)
+            if close_time is not None
+            else bar_open + timedelta(minutes=max(1, bar_minutes))
+        )
         if bar_open < opened_at < bar_close:
-            return True
-        return False
+            return close, close, close
+        return high, low, close
 
     async def _fetch_wick_bars(
         self,
@@ -2034,17 +2062,23 @@ class PaperTradingService:
         for candle in bars:
             if position.status != "open":
                 break
-            if opened_at is not None and self._skip_pre_fill_bar(
+            ohlc = self._replay_bar_ohlc(
                 candle, opened_at=opened_at, bar_minutes=bar_minutes
-            ):
+            )
+            if ohlc is None:
                 continue
+            high, low, close = ohlc
             when = getattr(candle, "open_time", None) or getattr(candle, "timestamp", None)
             if when is None:
                 when = utc_now()
             when = ensure_utc(when)
-            high = float(candle.high)
-            low = float(candle.low)
-            close = float(candle.close)
+            # Fill-bar close-only: stamp event at fill time, not bar open.
+            if (
+                opened_at is not None
+                and ensure_utc(candle.open_time) < opened_at
+                and high == low == close
+            ):
+                when = opened_at
             is_long = SignalDirection(position.direction).is_long
             stop = float(position.current_stop)
 

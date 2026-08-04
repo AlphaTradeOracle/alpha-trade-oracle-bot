@@ -155,6 +155,9 @@ class InstitutionalIntelligenceOrchestrator:
                 expected_value=probability.expected_value if require_ev else None,
                 market_regime=ctx.market_regime,
                 regime_hard_veto=bool(self._settings.market_regime_hard_veto),
+                regime_fail_closed=bool(
+                    getattr(self._settings, "market_regime_fail_closed", True)
+                ),
                 exchange_data_ok=True,
                 critical_data_ok=not (
                     ctx.data_quality.trade_restricted if ctx.data_quality else False

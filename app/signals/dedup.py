@@ -87,6 +87,9 @@ class SignalDeduplicator:
         short_min_score: float = 18.0,
         market_regime: MarketRegime | None = None,
         regime_filter_enabled: bool = True,
+        regime_available: bool = True,
+        regime_hard_veto: bool = True,
+        regime_fail_closed: bool = True,
         now: datetime | None = None,
     ) -> DedupDecision:
         """Alle Versandbedingungen pruefen."""
@@ -137,16 +140,21 @@ class SignalDeduplicator:
                 f"(Minimum {short_min_score:.0f})",
             )
 
-        if (
-            regime_filter_enabled
-            and market_regime is not None
-            and not direction_allowed_by_regime(market_regime, result.direction)
-        ):
-            return DedupDecision(
-                False,
-                SuppressionReason.REGIME_FILTER,
-                f"Regime {market_regime.value} blockiert {result.direction.value}",
-            )
+        if regime_filter_enabled and regime_hard_veto:
+            if not regime_available and regime_fail_closed:
+                return DedupDecision(
+                    False,
+                    SuppressionReason.REGIME_FILTER,
+                    "Market regime unavailable — entries blocked (fail-closed)",
+                )
+            if market_regime is not None and not direction_allowed_by_regime(
+                market_regime, result.direction
+            ):
+                return DedupDecision(
+                    False,
+                    SuppressionReason.REGIME_FILTER,
+                    f"Regime {market_regime.value} blockiert {result.direction.value}",
+                )
 
         if result.data_quality < min_data_quality:
             return DedupDecision(

@@ -140,6 +140,9 @@ class Settings(BaseSettings):
     #: Global Market Regime Filter (MTF BTC + aux modules + score blend).
     market_regime_enabled: bool = True
     market_regime_hard_veto: bool = True
+    #: When hard veto is on and regime feed is unavailable, block all new entries
+    #: (fail-closed) instead of allowing counter-trend trades.
+    market_regime_fail_closed: bool = True
     market_regime_btc_timeframes: str = "1h,4h,1d,1w"
     market_regime_eth_enabled: bool = True
     market_regime_eth_symbol: str = "ETHUSDT"
@@ -159,10 +162,9 @@ class Settings(BaseSettings):
     liquidation_api_url: str = ""
 
     # --- Institutional Knowledge Base (Parts 1–9) ---------------------------
-    #: Explainability + market intel always on; hard no-trade mutations off by default
-    #: (soft blend = regime score blend + SIGNAL_SHORT_MAX_SCORE).
+    #: Explainability + market intel always on; hard no-trade gates enforced by default.
     institutional_kb_enabled: bool = True
-    institutional_enforce_gates: bool = False
+    institutional_enforce_gates: bool = True
     institutional_min_confidence_pct: float = 55.0
     institutional_min_data_quality: float = 70.0
     institutional_require_positive_ev: bool = False

@@ -112,6 +112,15 @@ async def paper_update(
     paper: PaperTradingDep,
     price_provider: PaperPriceProviderDep,
 ) -> PaperUpdateResponse:
+    """Manual paper refresh — same path as worker ``paper_update`` job.
+
+    Ledger mutations are serialized via account ``FOR UPDATE`` + process lock,
+    so this can run alongside the scheduler without over-booking cash/caps.
+    """
+    # Match worker: resolve pending retests before marking open positions.
+    if paper.retest_enabled:
+        await paper.resolve_pending_retest(session, price_provider)
+
     account = await paper.get_or_create_account(session)
     open_positions = await PaperRepository(session).list_open_positions(account.id)
     symbols = [p.symbol for p in open_positions]

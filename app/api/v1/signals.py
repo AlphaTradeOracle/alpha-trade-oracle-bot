@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
-from app.api.deps import AnalysisServiceDep, SessionDep
+from app.api.deps import AdminGuard, AnalysisServiceDep, SessionDep
 from app.core.enums import SignalDirection
 from app.core.errors import AlphaTradeOracleError, SymbolNotFoundError
 from app.core.logging import get_logger, set_correlation_id
@@ -72,6 +72,7 @@ async def get_signal(session: SessionDep, signal_id: Annotated[int, Path(ge=1)])
     response_model=AnalysisResponse,
     summary="Ad-hoc-Analyse ausfuehren",
     status_code=status.HTTP_200_OK,
+    dependencies=[AdminGuard],
 )
 async def create_analysis(
     payload: AnalysisRequest,

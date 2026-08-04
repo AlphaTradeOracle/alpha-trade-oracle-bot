@@ -294,6 +294,9 @@ class ScanService:
             require_strong=self._settings.signal_require_strong,
             market_regime=regime_snapshot.regime if regime_snapshot else None,
             regime_filter_enabled=self._settings.regime_filter_enabled,
+            regime_available=bool(regime_snapshot.available) if regime_snapshot else False,
+            regime_hard_veto=self._settings.market_regime_hard_veto,
+            regime_fail_closed=self._settings.market_regime_fail_closed,
         )
 
         signals = SignalRepository(session)

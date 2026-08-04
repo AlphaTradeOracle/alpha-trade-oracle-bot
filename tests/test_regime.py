@@ -166,11 +166,35 @@ class TestDedupShortExhaustion:
         assert decision.should_send is False
         assert decision.reason is SuppressionReason.REGIME_FILTER
 
+    @pytest.mark.asyncio
+    async def test_regime_unavailable_fail_closed(self) -> None:
+        decision = await SignalDeduplicator().evaluate(
+            make_result(
+                direction=SignalDirection.STRONG_LONG,
+                score=80.0,
+                fingerprint="long-regime-down",
+            ),
+            min_score=75.0,
+            short_max_score=30.0,
+            short_min_score=18.0,
+            min_risk_reward_ratio=2.0,
+            require_strong=True,
+            market_regime=None,
+            regime_filter_enabled=True,
+            regime_available=False,
+            regime_hard_veto=True,
+            regime_fail_closed=True,
+            now=NOW,
+        )
+        assert decision.should_send is False
+        assert decision.reason is SuppressionReason.REGIME_FILTER
+
 
 class TestConfigDefaults:
     def test_new_strategy_defaults(self) -> None:
         settings = Settings()
         assert settings.regime_filter_enabled is True
+        assert settings.market_regime_fail_closed is True
         assert settings.signal_rsi_short_min == 33.0
         assert settings.signal_short_min_score == 18.0
         assert settings.paper_retest_zone_near == 0.55

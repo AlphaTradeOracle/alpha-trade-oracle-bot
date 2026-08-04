@@ -329,6 +329,20 @@ class AnalysisService:
         else:
             result.market_context = result.market_context or {}
 
+        if (
+            self._settings.regime_filter_enabled
+            and self._settings.market_regime_hard_veto
+            and self._settings.market_regime_fail_closed
+            and not regime_snapshot.available
+            and result.direction.is_actionable
+        ):
+            detail = regime_snapshot.detail or "regime_unavailable"
+            block = f"Market regime unavailable — entries blocked ({detail})"
+            result.direction = SignalDirection.NO_TRADE
+            result.no_trade_reason = block
+            result.reasons.append(block)
+            log_regime_degraded(detail)
+
         explain = self._intel.finalize_trade(result, intel)
         result.confidence_pct = explain.confidence_pct
         result.explainability = explain.to_dict()
