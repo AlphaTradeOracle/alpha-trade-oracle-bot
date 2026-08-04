@@ -11,8 +11,10 @@ dc() { docker compose -f "$APP/docker-compose.yml" --env-file "$APP/.env" "$@"; 
 
 echo "===== $(date -u +%Y-%m-%dT%H:%M:%SZ) rebuild runtime =====" | tee -a "$LOG"
 
-# Sync critical sources from deploy bundle (already git-pushed; ensure host tree is current).
-if [[ -d "$SRC" ]]; then
+# Optional scp bundle — only when explicitly newer than git tree.
+# Never blindly overwrite git-checked files with a stale /tmp bundle (caused
+# live builds to miss market_regime_fail_closed after git reset --hard).
+if [[ "${REBUILD_USE_SRC_BUNDLE:-0}" == "1" && -d "$SRC" ]]; then
   [[ -f "$SRC/paper_repository.py" ]] && cp "$SRC/paper_repository.py" "$APP/app/repositories/paper_repository.py"
   [[ -f "$SRC/paper_trading_service.py" ]] && cp "$SRC/paper_trading_service.py" "$APP/app/services/paper_trading_service.py"
   [[ -f "$SRC/config.py" ]] && cp "$SRC/config.py" "$APP/app/core/config.py"
@@ -83,12 +85,16 @@ assert float(s.min_risk_reward_ratio) == 2.0
 assert float(s.atr_multiplier) == 1.5
 assert float(s.paper_retest_zone_near) == 0.55
 assert float(s.paper_retest_zone_far) == 1.0
+assert s.market_regime_fail_closed is True
+assert s.institutional_enforce_gates is True
 print("RUNTIME_OK")
 print({
     "slip": s.paper_slippage_percent,
     "funding": s.paper_funding_enabled,
     "neutral": s.paper_max_open_per_direction_neutral,
     "max_open": s.paper_max_open_positions,
+    "fail_closed": s.market_regime_fail_closed,
+    "enforce_gates": s.institutional_enforce_gates,
     "lock": True,
 })
 PY
