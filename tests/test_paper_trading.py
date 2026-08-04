@@ -18,6 +18,7 @@ from app.repositories.paper_repository import PaperRepository
 from app.services.analysis_service import AnalysisOutcome
 from app.services.paper_trading_service import PaperTradingService
 from app.signals.dedup import SignalDeduplicator
+from app.signals.regime import MarketRegime, RegimeSnapshot
 from app.signals.retest_entry import arm_retest_entry
 from app.signals.types import RiskParameters
 from tests.test_dedup import make_result
@@ -436,6 +437,172 @@ class TestPortfolioRiskLimits:
             service, session, "EEEUSDT", direction=SignalDirection.STRONG_SHORT
         )
         assert short is not None
+
+    def test_slot_priority_prefers_best_score(self) -> None:
+        """Contested slots: higher score extremity wins before RR."""
+        from types import SimpleNamespace
+
+        long_hi = SimpleNamespace(
+            id=1,
+            direction=SignalDirection.STRONG_LONG.value,
+            signal_score=92.0,
+            entry_price=100.0,
+            stop_loss=95.0,
+            take_profit_2=110.0,
+        )
+        long_lo = SimpleNamespace(
+            id=2,
+            direction=SignalDirection.STRONG_LONG.value,
+            signal_score=78.0,
+            entry_price=100.0,
+            stop_loss=95.0,
+            take_profit_2=130.0,  # better RR, worse score
+        )
+        short_hi = SimpleNamespace(
+            id=3,
+            direction=SignalDirection.STRONG_SHORT.value,
+            signal_score=12.0,  # extremity 88
+            entry_price=100.0,
+            stop_loss=105.0,
+            take_profit_2=90.0,
+        )
+        short_lo = SimpleNamespace(
+            id=4,
+            direction=SignalDirection.STRONG_SHORT.value,
+            signal_score=22.0,  # extremity 78
+            entry_price=100.0,
+            stop_loss=105.0,
+            take_profit_2=70.0,
+        )
+        ordered = sorted(
+            [long_lo, short_lo, long_hi, short_hi],
+            key=PaperTradingService._slot_priority,
+        )
+        assert [p.id for p in ordered] == [1, 3, 2, 4]
+
+    def test_per_direction_cap_follows_regime(self) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_open_per_direction=16,
+                paper_max_open_per_direction_neutral=8,
+            )
+        )
+        assert service._per_direction_cap(None) == 16
+        assert (
+            service._per_direction_cap(RegimeSnapshot(None, "unavailable", False)) == 16
+        )
+        assert (
+            service._per_direction_cap(
+                RegimeSnapshot(MarketRegime.NEUTRAL, "chop", True)
+            )
+            == 8
+        )
+        assert (
+            service._per_direction_cap(
+                RegimeSnapshot(MarketRegime.BULLISH, "bull", True)
+            )
+            == 16
+        )
+        assert (
+            service._per_direction_cap(
+                RegimeSnapshot(MarketRegime.BEARISH, "bear", True)
+            )
+            == 16
+        )
+
+    @pytest.mark.asyncio
+    async def test_neutral_regime_caps_each_side_at_eight(
+        self, session: AsyncSession
+    ) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=0.0,
+                paper_max_open_positions=16,
+                paper_max_open_per_direction=16,
+                paper_max_open_per_direction_neutral=8,
+                paper_risk_per_trade_usd=0.0,
+                paper_margin_per_trade=50.0,
+                paper_initial_balance=5000.0,
+                paper_fee_percent=0.0,
+                regime_filter_enabled=True,
+                market_regime_hard_veto=True,
+                signal_short_max_score=25.0,
+            )
+        )
+        neutral = RegimeSnapshot(MarketRegime.NEUTRAL, "test-neutral", True)
+        for index in range(8):
+            result = make_result(
+                direction=SignalDirection.STRONG_LONG,
+                score=80.0,
+                entry_mid=100.0,
+                fingerprint=f"neu-long-{index}",
+                expires_at=datetime.now(UTC) + timedelta(days=30),
+            )
+            result.symbol = f"NLONG{index}USDT"
+            result.risk = _tight_long_risk(100.0)
+            pos = await service.open_from_signal(
+                session,
+                AnalysisOutcome(result=result, price_precision=2),
+                regime_snapshot=neutral,
+            )
+            assert pos is not None
+
+        blocked = make_result(
+            direction=SignalDirection.STRONG_LONG,
+            score=80.0,
+            entry_mid=100.0,
+            fingerprint="neu-long-block",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        blocked.symbol = "NLONGXUSDT"
+        blocked.risk = _tight_long_risk(100.0)
+        assert (
+            await service.open_from_signal(
+                session,
+                AnalysisOutcome(result=blocked, price_precision=2),
+                regime_snapshot=neutral,
+            )
+            is None
+        )
+        assert service.last_skip_reason == "skipped_direction_cap"
+
+        # Short side still has room under 8+8.
+        short = make_result(
+            direction=SignalDirection.STRONG_SHORT,
+            score=18.0,
+            entry_mid=100.0,
+            fingerprint="neu-short-ok",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        short.symbol = "NSHORT0USDT"
+        short.risk = _short_risk(100.0)
+        assert (
+            await service.open_from_signal(
+                session,
+                AnalysisOutcome(result=short, price_precision=2),
+                regime_snapshot=neutral,
+            )
+            is not None
+        )
+
+    @pytest.mark.asyncio
+    async def test_requires_full_margin_cash(
+        self, session: AsyncSession
+    ) -> None:
+        service = PaperTradingService(
+            self._settings(
+                paper_max_portfolio_risk_pct=0.0,
+                paper_max_open_positions=16,
+                paper_max_open_per_direction=16,
+                paper_risk_per_trade_usd=0.0,
+                paper_margin_per_trade=300.0,
+                paper_initial_balance=250.0,
+                paper_fee_percent=0.0,
+            )
+        )
+        blocked = await self._open(service, session, "CASHUSDT")
+        assert blocked is None
+        assert service.last_skip_reason == "skipped_cash"
 
     @pytest.mark.asyncio
     async def test_pending_retest_does_not_consume_risk_budget(

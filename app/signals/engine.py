@@ -66,7 +66,7 @@ class SignalEngineConfig:
     min_adx_soft: float = 20.0
     #: Dispatch-band thresholds — high-conviction setups use soft ADX/range gates.
     min_score: float = 75.0
-    short_max_score: float = 25.0
+    short_max_score: float = 30.0
     rsi_long_max: float = 75.0
     rsi_short_min: float = 33.0
     short_min_score: float = 18.0

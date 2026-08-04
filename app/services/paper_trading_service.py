@@ -23,7 +23,13 @@ from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome
 from app.indicators.engine import IndicatorEngine
 from app.market_regime import MarketRegimeEngine, to_legacy_regime_snapshot
-from app.signals.regime import RegimeSnapshot, direction_allowed_by_regime, log_regime_degraded, regime_from_indicators
+from app.signals.regime import (
+    MarketRegime,
+    RegimeSnapshot,
+    direction_allowed_by_regime,
+    log_regime_degraded,
+    regime_from_indicators,
+)
 from app.signals.retest_entry import (
     RetestArmResult,
     RetestEntryConfig,
@@ -548,6 +554,20 @@ class PaperTradingService:
             (Decimal(str(p.margin_used)) for p in positions), Decimal("0")
         )
 
+    def _per_direction_cap(self, regime_snapshot: RegimeSnapshot | None) -> int:
+        """Direction cap: 8/8 in neutral, aligned-side cap in bull/bear.
+
+        Unknown/unavailable regime falls back to the aligned-side cap; global
+        ``paper_max_open_positions`` still binds the book.
+        """
+        aligned = int(self._settings.paper_max_open_per_direction)
+        neutral = int(self._settings.paper_max_open_per_direction_neutral)
+        if regime_snapshot is None or not regime_snapshot.available:
+            return aligned
+        if regime_snapshot.regime is MarketRegime.NEUTRAL:
+            return neutral
+        return aligned
+
     async def _portfolio_limit_breach(
         self,
         session: AsyncSession,
@@ -556,6 +576,7 @@ class PaperTradingService:
         direction: str,
         risk_amount: Decimal,
         at: datetime | None = None,
+        regime_snapshot: RegimeSnapshot | None = None,
     ) -> str | None:
         """``skipped_*``-Grund, wenn der Entry ein Portfolio-Limit reissen wuerde.
 
@@ -565,6 +586,8 @@ class PaperTradingService:
         ``at`` = Fill-/Entry-Zeit fuer as-of Book (Rebuild replayed Trades bereits
         auf ``closed``, obwohl ihr Open-Fenster den Fill noch ueberlappt).
         """
+        # Flush so same-batch / same-timestamp fills see each other in as-of queries.
+        await session.flush()
         repo = PaperRepository(session)
         if at is not None:
             open_positions = await repo.list_filled_open_at(account.id, ensure_utc(at))
@@ -575,7 +598,7 @@ class PaperTradingService:
         if max_open > 0 and len(open_positions) >= max_open:
             return SKIP_MAX_POSITIONS
 
-        per_direction = int(self._settings.paper_max_open_per_direction)
+        per_direction = self._per_direction_cap(regime_snapshot)
         if per_direction > 0:
             is_long = SignalDirection(direction).is_long
             same_side = sum(
@@ -591,7 +614,8 @@ class PaperTradingService:
         # would cap the book at ~equity*pct/margin (≈5 on $5k / 30% / $300).
         risk_budget_mode = float(self._settings.paper_risk_per_trade_usd) > 0
         risk_pct = Decimal(str(self._settings.paper_max_portfolio_risk_pct))
-        if risk_budget_mode and risk_pct > 0 and risk_amount > 0:
+        # >=100% = full book allowed; cash/margin + max_open remain the hard caps.
+        if risk_budget_mode and 0 < risk_pct < 100 and risk_amount > 0:
             budget = self._equity_base(account, open_positions) * risk_pct / Decimal("100")
             if self._open_risk_used(open_positions) + risk_amount > budget:
                 return SKIP_PORTFOLIO_RISK
@@ -611,6 +635,7 @@ class PaperTradingService:
         at a later fill time. Subtract that ghost-locked margin.
         """
         at = ensure_utc(at)
+        await session.flush()
         open_at = await PaperRepository(session).list_filled_open_at(account.id, at)
         ghost = Decimal("0")
         for p in open_at:
@@ -621,10 +646,11 @@ class PaperTradingService:
 
     @staticmethod
     def _slot_priority(position: PaperPosition) -> tuple:
-        """Higher-priority pending fills first when the book is contested.
+        """Higher-priority fills first when the book is contested.
 
-        Liveable proxy (not hindsight PnL): prefer higher stored RR, then more
-        extreme score (long high / short low).
+        When more qualified fills compete than cash/caps allow: best score
+        first (long high / short low), then RR as tiebreaker. Chronology
+        (fill_time) is applied by the caller before this key.
         """
         rr = 0.0
         try:
@@ -642,7 +668,7 @@ class PaperTradingService:
         except ValueError:
             is_long = True
         extremity = score if is_long else (100.0 - score)
-        return (-rr, -extremity, int(position.id or 0))
+        return (-extremity, -rr, int(position.id or 0))
 
     async def get_or_create_account(self, session: AsyncSession) -> PaperAccount:
         repo = PaperRepository(session)
@@ -727,6 +753,7 @@ class PaperTradingService:
             direction=result.direction.value,
             risk_amount=sizing.risk_amount,
             at=opened_at,
+            regime_snapshot=regime_snapshot,
         )
         if breach is not None:
             self._last_skip_reason = breach
@@ -744,15 +771,18 @@ class PaperTradingService:
         fee_rate = Decimal(str(self._settings.paper_fee_percent)) / Decimal("100")
         entry_fee = notional * fee_rate
         margin = sizing.margin
+        # Harte Regel: ohne volle Trade-Margin ($300) + Fee kein Fill.
         cash_needed = margin + entry_fee
         cash_free = await self._cash_available_at(session, account, opened_at)
-        if cash_free < cash_needed:
+        min_margin = Decimal(str(self._settings.paper_margin_per_trade))
+        if cash_free < min_margin or cash_free < cash_needed:
             self._last_skip_reason = "skipped_cash"
             logger.warning(
                 "paper_insufficient_cash",
                 cash=float(account.cash_balance),
                 cash_as_of=float(cash_free),
                 needed=float(cash_needed),
+                min_margin=float(min_margin),
                 at=opened_at.isoformat(),
             )
             return None
@@ -931,8 +961,6 @@ class PaperTradingService:
         pending = await repo.list_pending_positions(account.id)
         if not pending:
             return out
-        # Best slots first when several pendings resolve in one pass.
-        pending = sorted(pending, key=self._slot_priority)
 
         cfg = self._retest_config()
         cutoff = ensure_utc(end_time or utc_now())
@@ -942,6 +970,8 @@ class PaperTradingService:
         )
         # ATR braucht Warmup; etwas Historie vor Armed-Zeit laden.
         lookback_pad = timedelta(days=14)
+        # Arm first, activate later: fill_time order, then best score within a bar.
+        fill_jobs: list[tuple[datetime, PaperPosition, RetestArmResult]] = []
 
         for position in pending:
             tf = position.timeframe or "1h"
@@ -998,17 +1028,27 @@ class PaperTradingService:
                 and arm.fill_time is not None
                 and arm.stop is not None
             ):
-                activated = await self._activate_pending_retest(
-                    session, account, position, arm, regime_snapshot=regime_snapshot
-                )
-                if activated:
-                    out.filled += 1
-                else:
-                    out.skipped += 1
+                fill_jobs.append((ensure_utc(arm.fill_time), position, arm))
             elif arm.status == "pending":
                 out.still_pending += 1
             else:
                 await self._cancel_pending_retest(session, position, arm)
+                out.skipped += 1
+
+        fill_jobs.sort(
+            key=lambda job: (
+                job[0],
+                self._slot_priority(job[1]),
+                int(job[1].id or 0),
+            )
+        )
+        for _fill_time, position, arm in fill_jobs:
+            activated = await self._activate_pending_retest(
+                session, account, position, arm, regime_snapshot=regime_snapshot
+            )
+            if activated:
+                out.filled += 1
+            else:
                 out.skipped += 1
 
         return out
@@ -1097,6 +1137,7 @@ class PaperTradingService:
             direction=position.direction,
             risk_amount=sizing.risk_amount,
             at=fill_time,
+            regime_snapshot=regime_snapshot,
         )
         if breach is not None:
             self._last_skip_reason = breach
@@ -1128,13 +1169,15 @@ class PaperTradingService:
         margin = sizing.margin
         cash_needed = margin + entry_fee
         cash_free = await self._cash_available_at(session, account, fill_time)
-        if cash_free < cash_needed:
+        min_margin = Decimal(str(self._settings.paper_margin_per_trade))
+        if cash_free < min_margin or cash_free < cash_needed:
             logger.warning(
                 "paper_retest_activate_insufficient_cash",
                 symbol=position.symbol,
                 cash=float(account.cash_balance),
                 cash_as_of=float(cash_free),
                 needed=float(cash_needed),
+                min_margin=float(min_margin),
                 at=fill_time.isoformat(),
             )
             await self._cancel_pending_retest(
@@ -1578,7 +1621,11 @@ class PaperTradingService:
         out: PaperRebuildResult,
         symbols: set[str] | None = None,
     ) -> PaperBackfillResult:
-        """Signale chronologisch: Entry (IST oder Retest) -> Exit-Replay -> naechstes."""
+        """Arm signals in created_at order; activate retest fills in fill_time order.
+
+        Caps/cash must follow wall-clock fill order (live-realistic). Signal-order
+        activate+replay under-counts concurrency when a later signal fills earlier.
+        """
         backfill = PaperBackfillResult()
         allowed = {s.upper() for s in symbols} if symbols else None
         signals = await SignalRepository(session).list_since(
@@ -1596,6 +1643,8 @@ class PaperTradingService:
         lookback_pad = timedelta(days=14)
         cutoff = utc_now()
         ordered = sorted(signals, key=lambda s: s.created_at)
+        # (fill_time, position, arm, mgmt_candles_start_hint)
+        fill_jobs: list[tuple[datetime, PaperPosition, RetestArmResult, str]] = []
 
         for signal in ordered:
             backfill.considered += 1
@@ -1729,27 +1778,7 @@ class PaperTradingService:
                 and arm.fill_time is not None
                 and arm.stop is not None
             ):
-                ok = await self._activate_pending_retest(session, account, position, arm)
-                if not ok:
-                    out.retest_skipped += 1
-                    continue
-                out.retest_filled += 1
-                try:
-                    series_mgmt = await provider.get_candles(
-                        symbol,
-                        tf,
-                        limit=100_000,
-                        start_time=position.opened_at,
-                        end_time=cutoff,
-                    )
-                    await self._replay_bars(session, account, position, series_mgmt.candles)
-                    out.replayed += 1
-                except Exception as exc:
-                    logger.warning(
-                        "paper_rebuild_replay_failed",
-                        symbol=symbol,
-                        error=str(exc),
-                    )
+                fill_jobs.append((ensure_utc(arm.fill_time), position, arm, symbol))
             elif arm.status == "pending":
                 if position.expires_at is not None and cutoff >= ensure_utc(position.expires_at):
                     await self._cancel_pending_retest(session, position, arm)
@@ -1759,6 +1788,46 @@ class PaperTradingService:
             else:
                 await self._cancel_pending_retest(session, position, arm)
                 out.retest_skipped += 1
+
+        fill_jobs.sort(
+            key=lambda job: (
+                job[0],
+                self._slot_priority(job[1]),
+                int(job[1].id or 0),
+            )
+        )
+        logger.info(
+            "paper_rebuild_fill_candidates",
+            n=len(fill_jobs),
+            max_open=int(self._settings.paper_max_open_positions),
+        )
+        for fill_time, position, arm, symbol in fill_jobs:
+            await session.refresh(account)
+            ok = await self._activate_pending_retest(
+                session, account, position, arm, regime_snapshot=None
+            )
+            if not ok:
+                out.retest_skipped += 1
+                continue
+            out.retest_filled += 1
+            await session.flush()
+            try:
+                series_mgmt = await provider.get_candles(
+                    symbol,
+                    position.timeframe or "1h",
+                    limit=100_000,
+                    start_time=position.opened_at,
+                    end_time=cutoff,
+                )
+                await self._replay_bars(session, account, position, series_mgmt.candles)
+                await session.flush()
+                out.replayed += 1
+            except Exception as exc:
+                logger.warning(
+                    "paper_rebuild_replay_failed",
+                    symbol=symbol,
+                    error=str(exc),
+                )
 
         return backfill
 

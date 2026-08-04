@@ -225,7 +225,7 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 |---|---|
 | Richtung | actionable (`LONG`/`SHORT`/`STRONG_*`; bei `SIGNAL_REQUIRE_STRONG=true` nur STRONG) |
 | Long-Score | ≥ `SIGNAL_MIN_SCORE` (75) |
-| Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (25) und > `SIGNAL_SHORT_MIN_SCORE` (18, exkl.) |
+| Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (30) und > `SIGNAL_SHORT_MIN_SCORE` (18, exkl.) |
 | Short-Erschöpfung | Score ≤ `SIGNAL_SHORT_MIN_SCORE` (18) |
 | Regime | BTC 4h — kein Short in Bull, kein Long in Bear (`skipped_regime`) |
 | Datenqualität | ≥ 60 |

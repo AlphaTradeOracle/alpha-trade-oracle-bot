@@ -9,7 +9,7 @@ from app.core.config import get_settings
 s = get_settings()
 assert s.market_regime_enabled is True
 assert s.institutional_enforce_gates is False
-assert s.signal_short_max_score == 25.0
+assert s.signal_short_max_score == 30.0
 print("OK soft-blend live")
 print("enforce_gates", s.institutional_enforce_gates)
 print("regime", s.market_regime_enabled, "hard_veto", s.market_regime_hard_veto)

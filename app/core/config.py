@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     #: Soft ADX floor for high-conviction scores (long ≥ min_score / short ≤ short_max).
     #: Lets strong setups through mild chop without disabling the hard ADX gate entirely.
     signal_min_adx_soft: float = 20.0
-    atr_multiplier: float = 1.8
+    atr_multiplier: float = 1.5
     min_stop_distance_percent: float = 0.3
     max_stop_distance_percent: float = 8.0
     #: true = Setups jenseits von ``max_stop_distance_percent`` werden verworfen.
@@ -220,13 +220,16 @@ class Settings(BaseSettings):
     #: erzeugen (0 = keine Grenze). Bei fixer Margin meist margin*leverage.
     paper_max_notional_usd: float = 3_000.0
     #: Portfolio-Cap: Summe des offenen Restrisikos in Prozent des Equity.
-    paper_max_portfolio_risk_pct: float = 30.0
-    #: Harte Obergrenze fuer gleichzeitig offene Positionen (0 = keine Grenze).
-    #: Cash/Margin kann enger binden als dieses Cap (z.B. $300 Margin auf $5k).
-    paper_max_open_positions: int = 40
-    #: Obergrenze je Richtung. Altcoin-Shorts korrelieren stark — Cap verhindert
-    #: Ein-Richtungs-Cluster, darf aber Retest-Fills nicht komplett abwuergen.
-    paper_max_open_per_direction: int = 24
+    #: 100 = volles Equity-Budget (Cash/Margin + max_open bleiben die harten Caps).
+    paper_max_portfolio_risk_pct: float = 100.0
+    #: Harte Obergrenze fuer gleichzeitig offene (filled) Positionen (0 = keine Grenze).
+    #: Cash/Margin kann enger binden ($300 Margin → max ~16 auf $5k).
+    paper_max_open_positions: int = 16
+    #: Max je Richtung in Bull/Bear (aligned side). Gegenrichtung wird per Regime-Veto
+    #: geblockt — effektiv bis zu 16 Longs im Bull bzw. 16 Shorts im Bear.
+    paper_max_open_per_direction: int = 16
+    #: Max je Richtung in der Neutral-Zone (beide Seiten erlaubt → 8+8 ≤ max_open).
+    paper_max_open_per_direction_neutral: int = 8
     #: Rebuild: sim-PnL Slot-Ranking. Default aus — Schaetzung war falsch kalibriert
     #: und hat das Ledger zerlegt; FIFO + as-of Caps bleibt der sichere Pfad.
     paper_rebuild_rank_by_sim_pnl: bool = False
@@ -241,8 +244,8 @@ class Settings(BaseSettings):
     paper_digest_interval_minutes: int = 60
     #: Retest/Pullback-Entry (Arm B): Fill erst in ATR-Zone, sonst Skip.
     paper_retest_entry_enabled: bool = True
-    paper_retest_zone_near: float = 0.40
-    paper_retest_zone_far: float = 1.15
+    paper_retest_zone_near: float = 0.55
+    paper_retest_zone_far: float = 1.0
     paper_retest_pending_multiplier: int = 6
     #: Mindestanzahl aufeinanderfolgender Kerzen in der Retest-Zone vor Fill.
     paper_retest_min_bars_in_zone: int = 1

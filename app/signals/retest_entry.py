@@ -1,7 +1,7 @@
 """Retest / pullback entry thesis (canonical arm B).
 
 Arm at signal time; fill only if price revisits the ATR pullback zone
-(0.40–1.15 × ATR from the signal reference entry by default) before pending expiry
+(0.55–1.0 × ATR from the signal reference entry by default) before pending expiry
 (``pending_multiplier × primary_timeframe``). Skip if the original stop is
 touched first or the window expires without a fill. The fill uses the least
 favourable price the candle actually traded inside the zone, not the midpoint.
@@ -26,8 +26,8 @@ from app.indicators.trendlines import (
 from app.market_data.types import Candle
 from app.signals.risk import DEFAULT_TP_MULTIPLIERS
 
-ZONE_NEAR = Decimal("0.40")
-ZONE_FAR = Decimal("1.15")
+ZONE_NEAR = Decimal("0.55")
+ZONE_FAR = Decimal("1.0")
 ATR_PERIOD = 14
 DEFAULT_PENDING_MULTIPLIER = 6
 DEFAULT_MIN_BARS_IN_ZONE = 1

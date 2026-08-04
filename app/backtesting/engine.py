@@ -68,7 +68,7 @@ class BacktestConfig:
     #: Optional: reject shorts with score at/below this (live SIGNAL_SHORT_MIN_SCORE).
     short_min_score: float | None = None
     min_risk_reward_ratio: float = 2.0
-    atr_multiplier: float = 1.8
+    atr_multiplier: float = 1.5
     max_atr_percent: float = 12.0
     expiry_multiplier: int = 4
     timeframes: tuple[str, ...] = ("15m", "1h", "4h", "1d")
