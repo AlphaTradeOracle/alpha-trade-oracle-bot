@@ -126,7 +126,7 @@ class ScheduledJobRepository:
         return list(result.scalars())
 
     async def disable_job_types(self, job_types: set[str], *, reason: str) -> list[str]:
-        """Deaktiviert alle Jobs der genannten Typen (z. B. abgeschaffte Digests)."""
+        """Deaktiviert alle Jobs der genannten Typen."""
         if not job_types:
             return []
         result = await self._session.execute(
@@ -141,6 +141,19 @@ class ScheduledJobRepository:
             job.last_error = reason[:2000]
             disabled.append(job.job_key)
         return disabled
+
+    async def delete_job_types(self, job_types: set[str]) -> list[str]:
+        """Entfernt abgeschaffte Job-Zeilen dauerhaft aus ``scheduled_jobs``."""
+        if not job_types:
+            return []
+        result = await self._session.execute(
+            select(ScheduledJob).where(ScheduledJob.job_type.in_(job_types))
+        )
+        deleted: list[str] = []
+        for job in result.scalars():
+            deleted.append(job.job_key)
+            await self._session.delete(job)
+        return deleted
 
     async def clear_stale_running(self) -> list[str]:
         """Reset jobs left as ``running`` after a worker kill/restart."""

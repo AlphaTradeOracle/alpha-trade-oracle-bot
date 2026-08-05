@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.bot.notifier import TelegramNotifier
 from app.core.enums import EventSeverity
 from app.core.logging import get_logger, set_correlation_id
 from app.database.session import session_scope
@@ -219,79 +218,6 @@ async def run_paper_update(
                     "updated": len(updated),
                     **{f"retest_{k}": v for k, v in pending_summary.items()},
                 }
-        success = True
-        error: str | None = None
-    except Exception as exc:
-        success = False
-        error = str(exc)
-        summary = {}
-        logger.error("job_failed", job_key=job_key, error=error, exc_info=True)
-
-    async with session_scope() as session:
-        await ScheduledJobRepository(session).complete(job_key, success=success, error=error)
-        if not success:
-            await EventRepository(session).record(
-                "scheduled_job_failed",
-                f"Job {job_key} ist fehlgeschlagen: {error}",
-                severity=EventSeverity.ERROR,
-            )
-
-    if success:
-        logger.info("job_completed", job_key=job_key, **summary)
-
-
-def paper_digest_job(interval_minutes: int) -> JobDefinition:
-    return JobDefinition(
-        key=f"paper_digest:{interval_minutes}m",
-        job_type="paper_digest",
-        interval_seconds=interval_minutes * 60,
-        description=f"Paper-Performance-Digest alle {interval_minutes} Minuten",
-    )
-
-
-async def run_paper_digest(
-    paper: PaperTradingService,
-    provider: MarketDataProvider,
-    notifier: TelegramNotifier,
-    job_key: str,
-    *,
-    providers: dict[str, MarketDataProvider] | None = None,
-    price_provider: MarketDataProvider | None = None,
-) -> None:
-    """Stuendlichen Paper-Digest an Telegram senden."""
-    set_correlation_id()
-    fill_provider = price_provider or provider
-    price_fallbacks = None if price_provider is not None else providers
-
-    async with session_scope() as session:
-        claimed = await ScheduledJobRepository(session).claim(job_key)
-
-    if not claimed:
-        logger.debug("job_skipped_not_due", job_key=job_key)
-        return
-
-    logger.info("job_started", job_key=job_key)
-
-    try:
-        async with session_scope() as session:
-            account = await paper.get_or_create_account(session)
-            open_positions = await PaperRepository(session).list_open_positions(account.id)
-            symbols = [position.symbol for position in open_positions]
-            prices = (
-                await _collect_prices(
-                    fill_provider, symbols, providers=price_fallbacks
-                )
-                if symbols
-                else {}
-            )
-            snapshot = await paper.build_digest(session, prices)
-        sent = await notifier.notify_paper_digest(snapshot)
-        summary = {
-            "chats_sent": sent,
-            "open_positions": snapshot.summary.open_positions,
-            "hour_closed": snapshot.hour_closed_count,
-            "equity": round(snapshot.summary.equity, 2),
-        }
         success = True
         error: str | None = None
     except Exception as exc:

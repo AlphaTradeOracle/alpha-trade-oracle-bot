@@ -21,10 +21,8 @@ from app.repositories.event_repository import ScheduledJobRepository
 from app.scheduler.jobs import (
     JobDefinition,
     market_scan_job,
-    paper_digest_job,
     paper_update_job,
     run_market_scan,
-    run_paper_digest,
     run_paper_update,
     run_universe_refresh,
     universe_refresh_job,
@@ -92,7 +90,6 @@ class SchedulerRunner:
             definitions.append(universe_refresh_job(self._settings.universe_refresh_hours))
 
         paper_definition = None
-        digest_definition = None
         if (
             self._paper is not None
             and self._provider is not None
@@ -100,14 +97,6 @@ class SchedulerRunner:
         ):
             paper_definition = paper_update_job(self._settings.paper_update_interval_minutes)
             definitions.append(paper_definition)
-            if (
-                self._notifier is not None
-                and self._settings.paper_hourly_digest_enabled
-            ):
-                digest_definition = paper_digest_job(
-                    self._settings.paper_digest_interval_minutes
-                )
-                definitions.append(digest_definition)
 
         next_runs: dict[str, datetime] = {}
         async with session_scope() as session:
@@ -121,13 +110,10 @@ class SchedulerRunner:
                 )
                 next_runs[definition.key] = _next_run_time(row.next_run_at)
 
-            if not self._settings.paper_hourly_digest_enabled:
-                disabled = await jobs.disable_job_types(
-                    {"paper_digest"},
-                    reason="disabled: desk website is the status surface",
-                )
-                if disabled:
-                    logger.info("scheduler_jobs_disabled", job_keys=disabled)
+            # Legacy hourly Telegram digest removed — desk website is the surface.
+            removed = await jobs.delete_job_types({"paper_digest"})
+            if removed:
+                logger.info("scheduler_jobs_deleted", job_keys=removed)
 
         # Grace covers a full scan overrun so the next 15m tick still fires
         # immediately after the running instance finishes (max_instances=1).
@@ -167,27 +153,6 @@ class SchedulerRunner:
                 },
                 next_run_time=next_runs[paper_definition.key],
                 misfire_grace_time=120,
-            )
-
-        if (
-            digest_definition is not None
-            and self._paper is not None
-            and self._provider is not None
-            and self._notifier is not None
-        ):
-            self._add_interval_job(
-                run_paper_digest,
-                digest_definition,
-                kwargs={
-                    "paper": self._paper,
-                    "provider": self._provider,
-                    "notifier": self._notifier,
-                    "job_key": digest_definition.key,
-                    "price_provider": self._price_provider,
-                    "providers": self._providers,
-                },
-                next_run_time=next_runs[digest_definition.key],
-                misfire_grace_time=300,
             )
 
         self._scheduler.start()

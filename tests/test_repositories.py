@@ -568,18 +568,30 @@ class TestScheduledJobRepository:
     @pytest.mark.asyncio
     async def test_disable_job_types(self, session: AsyncSession) -> None:
         repository = ScheduledJobRepository(session)
-        await repository.register("paper_digest:60m", "paper_digest", 3600)
+        await repository.register("legacy_job:60m", "legacy_job", 3600)
         await repository.register("market_scan:15m", "market_scan", 900)
 
         disabled = await repository.disable_job_types(
-            {"paper_digest"}, reason="disabled by test"
+            {"legacy_job"}, reason="disabled by test"
         )
-        assert disabled == ["paper_digest:60m"]
+        assert disabled == ["legacy_job:60m"]
 
-        digest = await repository.get("paper_digest:60m")
+        legacy = await repository.get("legacy_job:60m")
         scan = await repository.get("market_scan:15m")
-        assert digest is not None and digest.is_enabled is False
-        assert digest.last_status == "disabled"
+        assert legacy is not None and legacy.is_enabled is False
+        assert legacy.last_status == "disabled"
+        assert scan is not None and scan.is_enabled is True
+
+    @pytest.mark.asyncio
+    async def test_delete_job_types(self, session: AsyncSession) -> None:
+        repository = ScheduledJobRepository(session)
+        await repository.register("paper_digest:60m", "paper_digest", 3600)
+        await repository.register("market_scan:15m", "market_scan", 900)
+
+        deleted = await repository.delete_job_types({"paper_digest"})
+        assert deleted == ["paper_digest:60m"]
+        assert await repository.get("paper_digest:60m") is None
+        scan = await repository.get("market_scan:15m")
         assert scan is not None and scan.is_enabled is True
 
 
