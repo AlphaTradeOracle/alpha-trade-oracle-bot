@@ -263,6 +263,8 @@ def test_open_after_scale_out_uses_original_stop_and_remaining_size() -> None:
     assert trade.initialNotional == pytest.approx(2500.0)
     assert trade.realized == pytest.approx(28.6)
     assert trade.r is not None
+    assert trade.notes == "Open · TF 1h"
+    assert "Retest" not in (trade.notes or "")
 
 
 def test_exit_fill_price_picks_last_non_entry() -> None:

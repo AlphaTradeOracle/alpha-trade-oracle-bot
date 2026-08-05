@@ -11,10 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.enums import ExitReason, SignalDirection, SuppressionReason
 from app.core.time import ensure_utc
-from app.market_data.types import Candle, CandleSeries
+from app.market_data.types import Candle, CandleSeries, SymbolInfo
 from app.models.paper import PaperPosition
 from app.repositories.asset_repository import AssetRepository
 from app.repositories.paper_repository import PaperRepository
+from app.repositories.signal_repository import SignalRepository
 from app.services.analysis_service import AnalysisOutcome
 from app.services.paper_trading_service import PaperTradingService
 from app.signals.dedup import SignalDeduplicator
@@ -206,10 +207,25 @@ class TestRetestFill:
             created_at=armed_at,
         )
         result.risk = _tight_long_risk(100.0)
-        outcome = AnalysisOutcome(result=result, price_precision=2)
+        asset = await AssetRepository(session).get_or_create(
+            SymbolInfo(
+                symbol=result.symbol,
+                base_asset="BTC",
+                quote_asset="USDT",
+                price_precision=2,
+                quantity_precision=6,
+                is_active=True,
+            )
+        )
+        signal = await SignalRepository(session).create(result, asset.id)
+        arm_ref = float(signal.reference_price)
+        outcome = AnalysisOutcome(
+            result=result, price_precision=2, signal_id=signal.id, asset_id=asset.id
+        )
 
         position = await service.open_from_signal(session, outcome, opened_at=armed_at)
         assert position is not None and position.status == "pending"
+        assert position.signal_id == signal.id
         # Retest reference is zone-edge (entry_low), not mid.
         assert float(position.entry_price) == pytest.approx(99.0)
 
@@ -248,6 +264,19 @@ class TestRetestFill:
         assert position.status == "open"
         assert ensure_utc(position.opened_at) == pullback_time
         assert ensure_utc(position.expires_at) == pullback_time + timedelta(hours=24)
+
+        await session.flush()
+        await session.refresh(signal)
+        assert position.signal_id == signal.id
+        assert float(signal.reference_price) == pytest.approx(float(position.entry_price))
+        assert float(signal.entry_low) == pytest.approx(float(position.entry_price))
+        assert float(signal.entry_high) == pytest.approx(float(position.entry_price))
+        assert float(signal.stop_loss) == pytest.approx(float(position.stop_loss))
+        assert float(signal.take_profit_1) == pytest.approx(float(position.take_profit_1))
+        assert float(signal.take_profit_2) == pytest.approx(float(position.take_profit_2))
+        assert float(signal.take_profit_3) == pytest.approx(float(position.take_profit_3))
+        assert float(signal.reference_price) != pytest.approx(arm_ref)
+        assert signal.is_dispatched is True
 
     @pytest.mark.asyncio
     async def test_fill_uses_worst_reachable_price_in_zone(
@@ -880,9 +909,7 @@ class TestPaperTrading:
         events: list[tuple[str, str]] = []
 
         class RecordingNotifier:
-            async def notify_open(
-                self, position, *, retest_fill: bool = False, reasons=None
-            ) -> None:
+            async def notify_open(self, position, *, reasons=None) -> None:
                 events.append(("open", position.symbol))
 
             async def notify_close(self, position) -> None:

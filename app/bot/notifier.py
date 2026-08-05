@@ -320,7 +320,6 @@ class PaperTradeNotifier(Protocol):
         self,
         position: PaperPosition,
         *,
-        retest_fill: bool = False,
         reasons: list[str] | None = None,
     ) -> None: ...
 
@@ -344,7 +343,6 @@ class TelegramPaperTradeNotifier:
         self,
         position: PaperPosition,
         *,
-        retest_fill: bool = False,
         reasons: list[str] | None = None,
     ) -> None:
         chat_ids = sorted(self._settings.allowed_chat_ids)
@@ -357,7 +355,6 @@ class TelegramPaperTradeNotifier:
             position,
             price_precision=price_precision,
             display_timezone=self._settings.display_timezone,
-            retest_fill=retest_fill,
             reasons=reasons,
         )
 
@@ -393,7 +390,6 @@ class TelegramPaperTradeNotifier:
                     "paper_trade_open_notified",
                     chat_id=chat_id,
                     symbol=position.symbol,
-                    retest_fill=retest_fill,
                     chart_timeframe=chart_tf,
                     chart_sent=chart is not None,
                 )

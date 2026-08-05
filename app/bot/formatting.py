@@ -343,19 +343,17 @@ def format_paper_trade_open_message(
     *,
     price_precision: int = 2,
     display_timezone: str = "Europe/Berlin",
-    retest_fill: bool = False,
     reasons: list[str] | None = None,
 ) -> str:
-    """Paper-Trade-Eroeffnung (IST oder Retest-Fill)."""
+    """Paper-Trade-Eroeffnung (IST oder nach Retest-Fill — Header nur Symbol)."""
     try:
         direction = _DIRECTION_LABELS[SignalDirection(position.direction)]
     except ValueError:
         direction = position.direction
     symbol_label = _pretty_symbol(position.symbol)
     quote = _quote_asset(position.symbol)
-    entry_kind = "Retest Fill" if retest_fill else "Paper Trade"
     lines: list[str] = [
-        f"📄 *{escape_markdown_v2(entry_kind)}* · *{escape_markdown_v2(symbol_label)}*",
+        f"📄 *{escape_markdown_v2(symbol_label)}*",
         f"*{escape_markdown_v2(direction)}*",
     ]
     if position.signal_score is not None:

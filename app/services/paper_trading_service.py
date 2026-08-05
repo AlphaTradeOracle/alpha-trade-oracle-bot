@@ -313,15 +313,12 @@ class PaperTradingService:
         self,
         position: PaperPosition,
         *,
-        retest_fill: bool = False,
         reasons: list[str] | None = None,
     ) -> None:
         if not self._notify_enabled or self._notifier is None:
             return
         try:
-            await self._notifier.notify_open(
-                position, retest_fill=retest_fill, reasons=reasons
-            )
+            await self._notifier.notify_open(position, reasons=reasons)
         except Exception as exc:
             logger.warning(
                 "paper_trade_open_notify_error",
@@ -1337,9 +1334,22 @@ class PaperTradingService:
         reasons: list[str] | None = None
         if position.signal_id is not None:
             signal = await SignalRepository(session).get_by_id(position.signal_id)
-            if signal is not None and signal.reasons:
-                reasons = list(signal.reasons)
-        await self._notify_open(position, retest_fill=True, reasons=reasons)
+            if signal is not None:
+                # Present as a normal signal at the real fill levels (not arm ref).
+                signal.reference_price = entry
+                signal.entry_low = entry
+                signal.entry_high = entry
+                signal.stop_loss = stop
+                signal.take_profit_1 = tp1
+                signal.take_profit_2 = tp2
+                signal.take_profit_3 = tp3
+                risk = abs(float(entry) - float(stop))
+                if risk > 0:
+                    signal.risk_reward_ratio = abs(float(tp2) - float(entry)) / risk
+                if signal.reasons:
+                    reasons = list(signal.reasons)
+                await session.flush()
+        await self._notify_open(position, reasons=reasons)
         if position.signal_id is not None:
             await SignalRepository(session).mark_dispatched(position.signal_id)
         await self._record_dispatch_for_position(position, reasons=reasons)

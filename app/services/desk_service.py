@@ -190,8 +190,6 @@ def _notes_for(position: PaperPosition | dict[str, Any], desk_status: str) -> st
     if desk_status == "PENDING":
         return f"Waiting for retest · TF {timeframe}"
     if desk_status == "OPEN":
-        if raw_notes and "retest_filled" in str(raw_notes):
-            return f"Retest filled · TF {timeframe}"
         return f"Open · TF {timeframe}"
     notes = str(raw_notes or "")
     if "broke_falling_resistance" in notes:

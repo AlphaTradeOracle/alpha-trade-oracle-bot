@@ -277,11 +277,14 @@ class TestPaperTradeFormatting:
         message = format_paper_trade_open_message(_sample_paper_position())
         assert DISCLAIMER in message.replace("\\", "")
 
-    def test_open_message_labels_retest_fill(self) -> None:
-        message = format_paper_trade_open_message(
-            _sample_paper_position(), retest_fill=True
-        )
-        assert "Retest" in message.replace("\\", "")
+    def test_open_message_header_is_symbol_only(self) -> None:
+        message = format_paper_trade_open_message(_sample_paper_position())
+        plain = message.replace("\\", "")
+        first_line = plain.splitlines()[0]
+        assert first_line.startswith("📄")
+        assert "BTC/USDT" in first_line or "BTCUSDT" in first_line.replace("/", "")
+        assert "Paper Trade" not in first_line
+        assert "Retest" not in first_line
 
     def test_open_message_includes_reasons(self) -> None:
         message = format_paper_trade_open_message(
