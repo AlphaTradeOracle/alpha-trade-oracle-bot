@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     enable_universe_scan: bool = True
 
     # --- Signal- und Risikoparameter --------------------------------------
-    signal_min_score: float = 75.0
+    signal_min_score: float = 70.0
     #: false = LONG/SHORT ab Score-Schwelle erlaubt (Frequenz-Test 2026-07; ADX/Score bleiben).
     signal_require_strong: bool = False
     #: Fuer Shorts: Score darf maximal so hoch sein (Spiegel zu min_score).
