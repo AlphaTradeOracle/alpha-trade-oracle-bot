@@ -106,7 +106,7 @@ def _fetch_candles_df(
         )
     df = pd.DataFrame(rows)
     df = df.drop_duplicates(subset=["open_time"]).sort_values("open_time")
-    df = df.set_index("open_time", drop=False)
+    df = df.set_index("open_time", drop=True)
     df.index = pd.DatetimeIndex(df.index, name="open_time")
     return df
 
