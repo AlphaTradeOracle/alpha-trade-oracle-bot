@@ -224,7 +224,7 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 | Gate | Standard |
 |---|---|
 | Richtung | actionable (`LONG`/`SHORT`/`STRONG_*`; bei `SIGNAL_REQUIRE_STRONG=true` nur STRONG) |
-| Long-Score | ≥ `SIGNAL_MIN_SCORE` (75) |
+| Long-Score | ≥ `SIGNAL_MIN_SCORE` (70) |
 | Short-Score | ≤ `SIGNAL_SHORT_MAX_SCORE` (30) und > `SIGNAL_SHORT_MIN_SCORE` (18, exkl.) |
 | Short-Erschöpfung | Score ≤ `SIGNAL_SHORT_MIN_SCORE` (18) |
 | Regime | BTC 4h — kein Short in Bull, kein Long in Bear (`skipped_regime`) |
@@ -232,7 +232,7 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 | Chance-Risiko (TP2) | ≥ `MIN_RISK_REWARD_RATIO` (2.0) |
 | Levels | SL + TP1/2/3 gesetzt |
 
-ADX (`SIGNAL_MIN_ADX=30`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
+ADX (`SIGNAL_MIN_ADX=25`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
 
 **Verhaltens-Guards (Paper/Scan):**
 
