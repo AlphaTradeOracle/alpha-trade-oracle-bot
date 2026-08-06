@@ -131,6 +131,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--top", type=int, default=400)
     parser.add_argument("--days", type=float, default=2.0)
+    parser.add_argument(
+        "--since",
+        type=str,
+        default="",
+        help="ISO start UTC; with --until fixes the window for A/B runs",
+    )
+    parser.add_argument(
+        "--until",
+        type=str,
+        default="",
+        help="ISO end UTC; defaults to now when omitted",
+    )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--fetch-workers", type=int, default=12)
     parser.add_argument("--capital", type=float, default=0.0)
@@ -138,6 +150,7 @@ def main() -> int:
     parser.add_argument("--slippage", type=float, default=0.0)
     parser.add_argument("--btc-weights", type=str, default="current", choices=("current", "old", "new"))
     parser.add_argument("--out", type=str, default="exports/top400_48h_api.json")
+    parser.add_argument("--label", type=str, default="")
     args = parser.parse_args()
 
     configure_logging()
@@ -145,8 +158,22 @@ def main() -> int:
     settings = get_settings()
     capital = float(args.capital or settings.paper_initial_balance or 5000.0)
     fee = float(settings.paper_fee_percent if args.fee < 0 else args.fee)
-    end = utc_now()
-    start = end - timedelta(days=float(args.days))
+    if str(args.until).strip():
+        end = datetime.fromisoformat(str(args.until).replace("Z", "+00:00"))
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        else:
+            end = end.astimezone(timezone.utc)
+    else:
+        end = utc_now()
+    if str(args.since).strip():
+        start = datetime.fromisoformat(str(args.since).replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        else:
+            start = start.astimezone(timezone.utc)
+    else:
+        start = end - timedelta(days=float(args.days))
     btc_tf_weights = BTC_WEIGHT_PRESETS.get(str(args.btc_weights))
     base_kwargs = _serialize_kwargs(
         _paper_config_kwargs(settings, capital=capital, fee=fee, slip=float(args.slippage))
@@ -296,15 +323,8 @@ def main() -> int:
                 except Exception as exc:  # noqa: BLE001
                     _consume({"symbol": futs[fut], "market_cap_rank": 0, "error": str(exc)})
 
-    accepted, skipped, curve = _apply_paper_portfolio(
-        all_trades,
-        start_equity=capital,
-        max_open=int(settings.paper_max_open_positions),
-        max_per_direction=int(settings.paper_max_open_per_direction),
-    )
     # Safety: drop any fill before the requested window (warmup alignment drift).
     start_iso = start.astimezone(timezone.utc).isoformat()
-    accepted = [t for t in accepted if str(t.get("entry_at") or "") >= start_iso]
     all_trades_window = [t for t in all_trades if str(t.get("entry_at") or "") >= start_iso]
     accepted, skipped, curve = _apply_paper_portfolio(
         all_trades_window,
@@ -321,7 +341,12 @@ def main() -> int:
 
     payload = {
         "generated_at": utc_now().isoformat(),
-        "label": "top400_48h_api_long70_adx25_rsi27",
+        "label": str(args.label).strip()
+        or (
+            f"top400_48h_api_score{settings.signal_min_score:g}"
+            f"_adx{settings.signal_min_adx:g}"
+            f"_rsiS{settings.signal_rsi_short_min:g}"
+        ),
         "runtime_seconds": round(time.time() - t0, 1),
         "window": {
             "days": round((end - start).total_seconds() / 86400.0, 2),
