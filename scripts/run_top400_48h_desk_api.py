@@ -75,6 +75,19 @@ def _load_universe(top: int) -> list[tuple[str, int]]:
     return [(str(r["symbol"]).upper(), int(r["market_cap_rank"])) for r in ordered]
 
 
+def _interval_delta(interval: str) -> timedelta:
+    mapping = {
+        "1h": timedelta(hours=1),
+        "4h": timedelta(hours=4),
+        "1d": timedelta(days=1),
+        "1w": timedelta(days=7),
+        "15m": timedelta(minutes=15),
+    }
+    if interval not in mapping:
+        raise ValueError(f"unsupported interval {interval}")
+    return mapping[interval]
+
+
 def _fetch_candles_df(
     symbol: str,
     interval: str,
@@ -82,10 +95,11 @@ def _fetch_candles_df(
     start: datetime,
     end: datetime,
 ) -> pd.DataFrame | None:
-    # Extra lookback for warmup / higher TFs
-    pad_days = 14 if interval == "1h" else 120 if interval in ("4h", "1d") else 400
-    fr = int((start - timedelta(days=pad_days)).timestamp())
-    to = int((end + timedelta(hours=2)).timestamp())
+    # Match DB loader: warmup_start = start - tf * WARMUP so bar[WARMUP] ≈ start.
+    step = _interval_delta(interval)
+    warmup_start = start - step * WARMUP_CANDLES
+    fr = int((warmup_start - step * 2).timestamp())
+    to = int((end + step * 2).timestamp())
     data = _get_json(
         f"{BASE}/desk/candles?symbol={symbol}&interval={interval}&from={fr}&to={to}&limit=1000"
     )
@@ -108,7 +122,9 @@ def _fetch_candles_df(
     df = df.drop_duplicates(subset=["open_time"]).sort_values("open_time")
     df = df.set_index("open_time", drop=True)
     df.index = pd.DatetimeIndex(df.index, name="open_time")
-    return df
+    # Keep only warmup→end so the engine's first tradeable bar is near ``start``.
+    df = df.loc[(df.index >= warmup_start - step) & (df.index <= end + step)]
+    return df if not df.empty else None
 
 
 def main() -> int:
@@ -286,8 +302,18 @@ def main() -> int:
         max_open=int(settings.paper_max_open_positions),
         max_per_direction=int(settings.paper_max_open_per_direction),
     )
+    # Safety: drop any fill before the requested window (warmup alignment drift).
+    start_iso = start.astimezone(timezone.utc).isoformat()
+    accepted = [t for t in accepted if str(t.get("entry_at") or "") >= start_iso]
+    all_trades_window = [t for t in all_trades if str(t.get("entry_at") or "") >= start_iso]
+    accepted, skipped, curve = _apply_paper_portfolio(
+        all_trades_window,
+        start_equity=capital,
+        max_open=int(settings.paper_max_open_positions),
+        max_per_direction=int(settings.paper_max_open_per_direction),
+    )
     kpi = _summarize(accepted, start_equity=capital, curve=curve)
-    uncapped_net = sum(float(t["net_pnl"]) for t in all_trades)
+    uncapped_net = sum(float(t["net_pnl"]) for t in all_trades_window)
     with_trades = [r for r in per_symbol if "error" not in r and int(r.get("trade_count", 0)) > 0]
     top_winners = sorted(with_trades, key=lambda r: float(r["net_profit"]), reverse=True)[:15]
     top_losers = sorted(with_trades, key=lambda r: float(r["net_profit"]))[:15]
