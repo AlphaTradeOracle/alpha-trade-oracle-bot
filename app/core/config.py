@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     #: Shorts mit Score <= diesem Wert gelten als ueberverkauft/Erschoepfung (NO_TRADE).
     signal_short_min_score: float = 18.0
     signal_block_range_market: bool = True
-    signal_min_adx: float = 30.0
+    signal_min_adx: float = 25.0
     #: Soft ADX floor for high-conviction scores (long ≥ min_score / short ≤ short_max).
     #: Lets strong setups through mild chop without disabling the hard ADX gate entirely.
     signal_min_adx_soft: float = 20.0

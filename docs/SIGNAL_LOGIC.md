@@ -232,7 +232,7 @@ Telegram das Signal zugestellt hat. Zusätzlich: kein aktives Paper pro Symbol,
 | Chance-Risiko (TP2) | ≥ `MIN_RISK_REWARD_RATIO` (2.0) |
 | Levels | SL + TP1/2/3 gesetzt |
 
-ADX (`SIGNAL_MIN_ADX=30`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
+ADX (`SIGNAL_MIN_ADX=25`) wird bei der Signal-Generierung geprüft, nicht erneut im Paper-Gate.
 
 **Verhaltens-Guards (Paper/Scan):**
 
