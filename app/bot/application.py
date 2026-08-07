@@ -34,6 +34,8 @@ def build_bot_application(
             detail="Token via @BotFather erzeugen und in die .env eintragen",
         )
 
+    # get_updates_* timeouts are separate from send timeouts — long-poll
+    # against api.telegram.org is where Bad Gateway spikes show up.
     application = (
         ApplicationBuilder()
         .token(token)
@@ -41,6 +43,10 @@ def build_bot_application(
         .read_timeout(30)
         .write_timeout(30)
         .connect_timeout(15)
+        .pool_timeout(15)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(40)
+        .get_updates_pool_timeout(15)
         .build()
     )
 

@@ -395,9 +395,6 @@ def _process_asset(
             indicator_sets=indicator_sets,
             primary_timeframe=primary,
         )
-        if data_quality == 0.0 and qualities:
-            base_quality = sum(qualities) / len(qualities)
-            data_quality = round(min(base_quality, 59.99), 2)
 
         timestamp = _from_ns(int(ts_ns)).to_pydatetime()
         result = signal_engine.generate(

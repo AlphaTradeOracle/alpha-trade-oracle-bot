@@ -36,13 +36,13 @@ def compute_analysis_data_quality(
     """Mittel der verfuegbaren TF-Qualitaeten ohne Strafe fuer fehlende TFs.
 
     Fehlende Timeframes (z. B. bei jungen Listings ohne 1d-Historie) senken
-    die Qualitaet nicht mehr proportional zur Anzahl angefragter TFs. Stattdessen
-    gilt die Mindest-Abdeckung: Setup-TF plus mindestens ein hoeherer TF.
+    die Qualitaet nicht proportional zur Anzahl angefragter TFs. Ohne Setup-TF
+    bleibt die Qualitaet 0. Fehlender hoeherer TF ist kein Hard-Fail mehr —
+    frueher wurde die Qualitaet kuenstlich auf 59.99 gedrueckt und erzeugte
+    widerspruechliche NO_TRADEs („Data quality 60 is below the minimum of 60“).
     """
     if not qualities or not indicator_sets:
         return 0.0
-    if not has_required_timeframe_coverage(
-        indicator_sets, primary_timeframe=primary_timeframe
-    ):
+    if primary_timeframe not in indicator_sets:
         return 0.0
     return round(sum(qualities) / len(qualities), 2)

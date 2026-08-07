@@ -1,10 +1,17 @@
 name: alpha-trade-oracle
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: alpha-trade-oracle-postgres
     restart: unless-stopped
+    logging: *default-logging
     # VACUUM/ANALYZE on ~600MB candle tables needs more than Docker's 64MB default.
     shm_size: 256mb
     environment:
@@ -29,6 +36,7 @@ services:
     image: redis:7-alpine
     container_name: alpha-trade-oracle-redis
     restart: unless-stopped
+    logging: *default-logging
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis_data:/data
@@ -64,6 +72,7 @@ services:
       target: runtime
     container_name: alpha-trade-oracle-app
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
@@ -94,6 +103,7 @@ services:
       target: runtime
     container_name: alpha-trade-oracle-worker
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       POSTGRES_HOST: postgres

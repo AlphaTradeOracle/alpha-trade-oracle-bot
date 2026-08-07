@@ -440,15 +440,11 @@ class AnalysisService:
                 continue
             qualities.append(series.data_quality(min_candles=self._settings.min_candles_required))
 
-        base_quality = sum(qualities) / len(qualities) if qualities else 0.0
         data_quality = compute_analysis_data_quality(
             qualities,
             indicator_sets=indicator_sets,
             primary_timeframe=self._settings.primary_timeframe,
         )
-        if data_quality == 0.0 and indicator_sets and base_quality > 0:
-            # Setup-TF vorhanden, aber kein hoeherer TF — explizit niedrig halten.
-            data_quality = round(min(base_quality, 59.99), 2)
 
         return indicator_sets, skipped, data_quality
 

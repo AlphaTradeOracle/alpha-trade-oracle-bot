@@ -365,8 +365,8 @@ class SignalEngine:
 
         if data_quality < MIN_DATA_QUALITY:
             return (
-                f"Data quality {data_quality:.0f} is below the minimum "
-                f"of {MIN_DATA_QUALITY:.0f}"
+                f"Data quality {data_quality:.2f} is below the minimum "
+                f"of {MIN_DATA_QUALITY:.2f}"
             )
 
         high_conviction = self._is_high_conviction(direction, score)

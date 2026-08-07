@@ -334,7 +334,22 @@ async def _run_worker() -> None:
     await application.start()
     if application.updater is None:
         raise RuntimeError("Telegram-Updater ist nicht verfuegbar.")
-    await application.updater.start_polling(drop_pending_updates=True)
+
+    def _polling_error(exc: BaseException) -> None:
+        # PTB continues polling after the callback; avoid traceback spam on
+        # transient Telegram 502/network blips (common, self-healing).
+        from telegram.error import NetworkError, TimedOut
+
+        if isinstance(exc, (NetworkError, TimedOut)):
+            logger.warning("telegram_polling_transient", error=str(exc))
+            return
+        logger.error("telegram_polling_error", error=str(exc), exc_info=True)
+
+    await application.updater.start_polling(
+        drop_pending_updates=True,
+        error_callback=_polling_error,
+        bootstrap_retries=-1,
+    )
     await scheduler.start()
 
     bot_info = await application.bot.get_me()

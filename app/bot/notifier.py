@@ -9,7 +9,7 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import Bot
 from telegram.constants import ParseMode
-from telegram.error import RetryAfter, TelegramError
+from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
 from app.bot.formatting import (
     format_paper_digest_message,
@@ -37,6 +37,9 @@ SEND_INTERVAL_SECONDS = 0.05
 
 #: Maximale Wartezeit, die ein RetryAfter-Hinweis auslösen darf.
 MAX_RETRY_AFTER_SECONDS = 30.0
+
+#: Kurze Backoffs bei transienten Telegram-Netzfehlern (502 / timeout).
+_NETWORK_RETRY_PAUSE_SECONDS = (1.0, 3.0, 8.0)
 
 
 class TelegramNotifier:
@@ -183,17 +186,28 @@ class TelegramNotifier:
         unformatierte Nachricht ist besser als keine.
         """
         async with self._lock:
-            for attempt in (1, 2):
+            network_attempt = 0
+            rate_limit_attempt = 0
+            use_markdown = True
+            while True:
                 try:
-                    message = await self._bot.send_message(
-                        chat_id=chat_id,
-                        text=text,
-                        parse_mode=ParseMode.MARKDOWN_V2,
-                        disable_web_page_preview=True,
-                    )
+                    if use_markdown:
+                        message = await self._bot.send_message(
+                            chat_id=chat_id,
+                            text=text,
+                            parse_mode=ParseMode.MARKDOWN_V2,
+                            disable_web_page_preview=True,
+                        )
+                    else:
+                        message = await self._bot.send_message(
+                            chat_id=chat_id,
+                            text=_strip_markdown(text),
+                            disable_web_page_preview=True,
+                        )
                     await asyncio.sleep(SEND_INTERVAL_SECONDS)
                     return message.message_id
                 except RetryAfter as exc:
+                    rate_limit_attempt += 1
                     retry_after = exc.retry_after
                     wait_seconds = (
                         float(retry_after.total_seconds())
@@ -202,20 +216,29 @@ class TelegramNotifier:
                     )
                     wait_for = min(wait_seconds + 0.5, MAX_RETRY_AFTER_SECONDS)
                     logger.warning("telegram_rate_limited", chat_id=chat_id, wait_seconds=wait_for)
-                    if attempt == 2:
+                    if rate_limit_attempt >= 2:
                         raise
                     await asyncio.sleep(wait_for)
+                except (NetworkError, TimedOut) as exc:
+                    if network_attempt >= len(_NETWORK_RETRY_PAUSE_SECONDS):
+                        raise
+                    pause = _NETWORK_RETRY_PAUSE_SECONDS[network_attempt]
+                    network_attempt += 1
+                    logger.warning(
+                        "telegram_send_transient",
+                        chat_id=chat_id,
+                        error=str(exc),
+                        retry_in=pause,
+                        attempt=network_attempt,
+                    )
+                    await asyncio.sleep(pause)
                 except TelegramError as exc:
-                    if attempt == 1 and "can't parse entities" in str(exc).lower():
+                    if use_markdown and "can't parse entities" in str(exc).lower():
                         logger.warning(
                             "telegram_markdown_fallback", chat_id=chat_id, error=str(exc)
                         )
-                        plain = _strip_markdown(text)
-                        message = await self._bot.send_message(
-                            chat_id=chat_id, text=plain, disable_web_page_preview=True
-                        )
-                        await asyncio.sleep(SEND_INTERVAL_SECONDS)
-                        return message.message_id
+                        use_markdown = False
+                        continue
                     raise
         return None
 

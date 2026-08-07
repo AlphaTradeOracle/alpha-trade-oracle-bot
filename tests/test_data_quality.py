@@ -15,13 +15,22 @@ class TestDataQualityCoverage:
         )
         assert quality == 87.5
 
-    def test_requires_primary_and_higher_tf(self) -> None:
+    def test_primary_only_keeps_mean_quality(self) -> None:
+        """Fehlender HTF blockiert nicht mehr via kuenstlichem 59.99-Cap."""
         indicator_sets = {"1h": object()}
         assert not has_required_timeframe_coverage(
             indicator_sets, primary_timeframe="1h"
         )
         assert compute_analysis_data_quality(
             [95.0],
+            indicator_sets=indicator_sets,
+            primary_timeframe="1h",
+        ) == 95.0
+
+    def test_missing_primary_returns_zero(self) -> None:
+        indicator_sets = {"4h": object()}
+        assert compute_analysis_data_quality(
+            [90.0],
             indicator_sets=indicator_sets,
             primary_timeframe="1h",
         ) == 0.0
