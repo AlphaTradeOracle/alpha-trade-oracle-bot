@@ -195,7 +195,7 @@ class TestConfigDefaults:
         settings = Settings()
         assert settings.regime_filter_enabled is True
         assert settings.market_regime_fail_closed is True
-        assert settings.signal_rsi_short_min == 33.0
+        assert settings.signal_rsi_short_min == 27.0
         assert settings.signal_short_min_score == 18.0
         assert settings.paper_retest_zone_near == 0.55
         assert settings.paper_retest_zone_far == 1.0
