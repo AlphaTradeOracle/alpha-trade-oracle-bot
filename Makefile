@@ -61,12 +61,14 @@ analyze: ## Analyse ausfuehren: make analyze s=BTCUSDT
 scan: ## Marktscan ohne Versand ausfuehren
 	$(BIN)/python -m app.cli scan
 
-backtest: ## Backtest ausfuehren: make backtest s=BTCUSDT tf=1h from=2024-01-01 to=2025-01-01
+backtest: ## DB-Backtest: make backtest s=BTCUSDT tf=1h from=2026-02-01 to=2026-07-31
 	$(BIN)/python -m app.cli backtest \
 		--symbol $(or $(s),BTCUSDT) \
 		--timeframe $(or $(tf),1h) \
-		--start $(or $(from),2024-01-01) \
-		--end $(or $(to),2025-01-01)
+		--start $(or $(from),2026-02-01) \
+		--end $(or $(to),2026-07-31) \
+		--prefer-db \
+		--no-persist
 
 docker-up: ## Alle Container bauen und starten
 	docker compose up --build -d

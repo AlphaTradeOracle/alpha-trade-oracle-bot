@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Alpha Trade Oracle" shape-rendering="geometricPrecision">
+  <defs>
+    <linearGradient id="atoGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E3C169"/>
+      <stop offset="55%" stop-color="#C9A24D"/>
+      <stop offset="100%" stop-color="#A5822F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer hexagon frame -->
+  <polygon
+    points="256,48 438,154 438,358 256,464 74,358 74,154"
+    fill="none"
+    stroke="url(#atoGold)"
+    stroke-width="14"
+    stroke-linejoin="round"
+  />
+
+  <!-- Chevron / A -->
+  <path
+    d="M256 108 L360 360 H322 L256 192 L190 360 H152 Z"
+    fill="url(#atoGold)"
+  />
+
+  <!-- Tech brackets -->
+  <g stroke="#7A8BA3" stroke-width="7" fill="none" stroke-linecap="square">
+    <path d="M138 178 v140"/>
+    <path d="M138 178 l28 -28"/>
+    <path d="M374 178 v140"/>
+    <path d="M374 178 l-28 -28"/>
+  </g>
+
+  <!-- Eye with rays -->
+  <g transform="translate(256 236)">
+    <g stroke="#7A8BA3" stroke-width="5" stroke-linecap="round">
+      <path d="M0 -48 v-24"/>
+      <path d="M-24 -42 l-10 -22"/>
+      <path d="M24 -42 l10 -22"/>
+    </g>
+    <g stroke="url(#atoGold)" stroke-width="5" stroke-linecap="round">
+      <path d="M-12 -46 l-5 -22"/>
+      <path d="M12 -46 l5 -22"/>
+    </g>
+    <path
+      d="M-50 0 Q0 -36 50 0 Q0 36 -50 0 Z"
+      fill="none"
+      stroke="url(#atoGold)"
+      stroke-width="7"
+      stroke-linejoin="round"
+    />
+    <circle cx="0" cy="0" r="14" fill="none" stroke="url(#atoGold)" stroke-width="7"/>
+  </g>
+
+  <!-- Candlesticks -->
+  <g transform="translate(256 328)">
+    <g fill="#7A8BA3">
+      <rect x="-66" y="-8" width="14" height="44" rx="2"/>
+      <rect x="-61.5" y="-24" width="5" height="74" rx="2"/>
+      <rect x="52" y="-2" width="14" height="40" rx="2"/>
+      <rect x="56.5" y="-18" width="5" height="70" rx="2"/>
+      <rect x="-36" y="4" width="13" height="36" rx="2"/>
+      <rect x="-32" y="-10" width="5" height="62" rx="2"/>
+      <rect x="23" y="-2" width="13" height="38" rx="2"/>
+      <rect x="27" y="-16" width="5" height="64" rx="2"/>
+    </g>
+    <g fill="url(#atoGold)">
+      <rect x="-12" y="-26" width="24" height="76" rx="2"/>
+      <rect x="-2.5" y="-48" width="5" height="118" rx="2"/>
+    </g>
+  </g>
+</svg>

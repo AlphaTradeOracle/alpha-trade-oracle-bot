@@ -197,9 +197,20 @@ def backtest(
     slippage: Annotated[float, typer.Option("--slippage", help="Slippage in Prozent")] = 0.05,
     capital: Annotated[float, typer.Option("--capital", help="Startkapital")] = 10_000.0,
     persist: Annotated[bool, typer.Option("--persist/--no-persist")] = True,
+    prefer_db: Annotated[
+        bool,
+        typer.Option(
+            "--prefer-db/--from-exchange",
+            help="Kerzen aus market_candles (DB) statt Exchange-API laden",
+        ),
+    ] = True,
 ) -> None:
     """Backtest ausfuehren und Kennzahlen ausgeben."""
-    asyncio.run(_run_backtest(symbol, timeframe, start, end, fee, slippage, capital, persist))
+    asyncio.run(
+        _run_backtest(
+            symbol, timeframe, start, end, fee, slippage, capital, persist, prefer_db
+        )
+    )
 
 
 @cli.command()
@@ -771,6 +782,7 @@ async def _run_backtest(
     slippage: float,
     capital: float,
     persist: bool,
+    prefer_db: bool = True,
 ) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=False)
@@ -780,8 +792,11 @@ async def _run_backtest(
 
     container = build_container(settings)
 
+    # DB-first braucht immer eine Session (Kerzen + optional Persistenz).
+    needs_session = prefer_db or persist
+
     try:
-        if persist:
+        if needs_session:
             async with session_scope() as session:
                 report = await container.backtest_service.run(
                     symbol,
@@ -792,6 +807,8 @@ async def _run_backtest(
                     fee_percent=fee,
                     slippage_percent=slippage,
                     initial_capital=capital,
+                    persist=persist,
+                    prefer_db=prefer_db,
                 )
         else:
             report = await container.backtest_service.run(
@@ -803,6 +820,7 @@ async def _run_backtest(
                 slippage_percent=slippage,
                 initial_capital=capital,
                 persist=False,
+                prefer_db=False,
             )
     except AlphaTradeOracleError as exc:
         typer.secho(f"Backtest fehlgeschlagen: {exc}", fg=typer.colors.RED)
@@ -812,6 +830,7 @@ async def _run_backtest(
     typer.echo("")
     typer.secho(f"=== Backtest {symbol.upper()} {timeframe} ===", fg=typer.colors.CYAN, bold=True)
     typer.echo(f"Zeitraum:        {start_dt.date()} bis {end_dt.date()}")
+    typer.echo(f"Kerzenquelle:    {'market_candles (DB)' if prefer_db else 'Exchange-API'}")
     typer.echo(f"Kerzen geladen:  {report.candles_loaded}")
     typer.echo(f"Signale:         {report.outcome.signals_generated}")
     if report.run_id is not None:

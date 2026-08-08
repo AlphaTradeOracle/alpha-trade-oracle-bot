@@ -39,3 +39,7 @@ scripts/_vps_cleanup*.sh
 # Cursor VPS deploy key (never commit)
 .cursor/vps_deploy_key
 .cursor/vps_deploy_key.pub
+
+# Allow frontend mock data (root data/ remains ignored)
+!trading-dashboard/src/data/
+!trading-dashboard/src/data/**
