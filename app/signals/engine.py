@@ -62,7 +62,7 @@ class SignalEngineConfig:
     expiry_multiplier: int = 4
     enable_sentiment: bool = False
     block_range_market: bool = True
-    min_adx: float = 30.0
+    min_adx: float = 28.0
     min_adx_soft: float = 20.0
     #: Dispatch-band thresholds — high-conviction setups use soft ADX/range gates.
     min_score: float = 75.0
