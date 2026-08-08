@@ -101,11 +101,11 @@ class Settings(BaseSettings):
     signal_cooldown_minutes: int = 120
     signal_expiry_multiplier: int = 24
     signal_rsi_long_max: float = 75.0
-    signal_rsi_short_min: float = 33.0
+    signal_rsi_short_min: float = 27.0
     #: Shorts mit Score <= diesem Wert gelten als ueberverkauft/Erschoepfung (NO_TRADE).
     signal_short_min_score: float = 18.0
     signal_block_range_market: bool = True
-    signal_min_adx: float = 30.0
+    signal_min_adx: float = 25.0
     #: Soft ADX floor for high-conviction scores (long ≥ min_score / short ≤ short_max).
     #: Lets strong setups through mild chop without disabling the hard ADX gate entirely.
     signal_min_adx_soft: float = 20.0
